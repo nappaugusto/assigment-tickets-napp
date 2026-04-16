@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import { type Ticket } from '@/lib/api'
 import { getSlaStatus, getTimeUntilSla, formatDate } from '@/lib/date-utils'
 import { useAuth } from '@/contexts/auth-context'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { TicketActions } from '@/components/ticket-actions'
+import { KanbanCardMenu } from '@/components/kanban-card-menu'
+import { TicketNoteDrawer } from '@/components/ticket-note-drawer'
 import { type SortKey, type SortDir } from '@/hooks/use-ticket-filters'
 import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -52,50 +54,60 @@ function TicketRow({ ticket, agentOptions, onAssign, onUnassign, isLoading, curr
   isLoading?: boolean
   currentUser: string
 }) {
+  const [noteOpen, setNoteOpen] = useState(false)
   const sla = getSlaStatus(ticket.slaSolutionDate, ticket.slaSolutionDateIsPaused)
   const slaLabel = getTimeUntilSla(ticket.slaSolutionDate)
   const isMyTicket = currentUser && ticket.responsavel &&
     ticket.responsavel.toLowerCase() === currentUser.toLowerCase()
 
   return (
-    <TableRow className={isMyTicket ? 'bg-primary/5' : undefined}>
-      <TableCell className="font-mono text-xs w-16">
-        <a
-          href={`https://support.movidesk.com/Ticket/Edit/${ticket.id}`}
-          target="_blank"
-          rel="noreferrer"
-          className="text-primary hover:underline"
-        >
-          #{ticket.id}
-        </a>
-      </TableCell>
-      <TableCell className="max-w-xs">
-        <span className="line-clamp-2 text-sm">{ticket.subject || '—'}</span>
-      </TableCell>
-      <TableCell className="w-36">
-        <Badge variant={SLA_BADGE_VARIANT[sla]} className="text-xs gap-1 whitespace-nowrap">
-          {sla === 'paused' ? 'Pausado' : sla === 'none' ? '—' : slaLabel}
-        </Badge>
-      </TableCell>
-      <TableCell className="w-36 text-sm">
-        {ticket.responsavel ? (
-          <span className={isMyTicket ? 'text-primary font-medium' : undefined}>
-            {isMyTicket ? 'Seu chamado' : ticket.responsavel}
-          </span>
-        ) : (
-          <span className="text-muted-foreground italic">Não atribuído</span>
-        )}
-      </TableCell>
-      <TableCell className="w-64">
-        <TicketActions
-          ticket={ticket}
-          agentOptions={agentOptions}
-          onAssign={onAssign}
-          onUnassign={onUnassign}
-          isLoading={isLoading}
-        />
-      </TableCell>
-    </TableRow>
+    <>
+      <TableRow className={isMyTicket ? 'bg-primary/5' : undefined}>
+        <TableCell className="font-mono text-xs w-16">
+          <a
+            href={`https://support.movidesk.com/Ticket/Edit/${ticket.id}`}
+            target="_blank"
+            rel="noreferrer"
+            className="text-primary hover:underline"
+          >
+            #{ticket.id}
+          </a>
+        </TableCell>
+        <TableCell className="max-w-xs">
+          <span className="line-clamp-2 text-sm">{ticket.subject || '—'}</span>
+        </TableCell>
+        <TableCell className="w-36">
+          <Badge variant={SLA_BADGE_VARIANT[sla]} className="text-xs gap-1 whitespace-nowrap">
+            {sla === 'paused' ? 'Pausado' : sla === 'none' ? '—' : slaLabel}
+          </Badge>
+        </TableCell>
+        <TableCell className="w-36 text-sm">
+          {ticket.responsavel ? (
+            <span className={isMyTicket ? 'text-primary font-medium' : undefined}>
+              {isMyTicket ? 'Seu chamado' : ticket.responsavel}
+            </span>
+          ) : (
+            <span className="text-muted-foreground italic">Não atribuído</span>
+          )}
+        </TableCell>
+        <TableCell className="w-12 text-center">
+          <KanbanCardMenu
+            ticket={ticket}
+            agentOptions={agentOptions}
+            onAssign={onAssign}
+            onUnassign={onUnassign}
+            isLoading={isLoading}
+            onOpenNotes={() => setNoteOpen(true)}
+          />
+        </TableCell>
+      </TableRow>
+
+      <TicketNoteDrawer
+        ticket={noteOpen ? ticket : null}
+        open={noteOpen}
+        onClose={() => setNoteOpen(false)}
+      />
+    </>
   )
 }
 
@@ -144,7 +156,7 @@ function Section({
               <TableHead className="w-36">
                 <SortButton label="Responsável" sortK="responsavel" active={sortKey} dir={sortDir} onSort={onSort} />
               </TableHead>
-              <TableHead className="w-64">Ações</TableHead>
+              <TableHead className="w-12" />
             </TableRow>
           </TableHeader>
           <TableBody>
