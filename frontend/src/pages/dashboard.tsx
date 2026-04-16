@@ -11,7 +11,7 @@ import { SummaryCards, computeSummary } from '@/components/summary-cards'
 import { QuickFilters } from '@/components/quick-filters'
 import { Toolbar } from '@/components/toolbar'
 import { TicketTable } from '@/components/ticket-table'
-import { KanbanView } from '@/components/kanban-view'
+import { KanbanBoard } from '@/components/kanban-board'
 import { formatDate } from '@/lib/date-utils'
 
 export function DashboardPage() {
@@ -115,7 +115,7 @@ export function DashboardPage() {
               onSort={filters.toggleSort}
             />
           ) : (
-            <KanbanView
+            <KanbanBoard
               tickets={filters.filteredTickets}
               newTickets={filters.filteredNewTickets}
               agentOptions={filters.agentOptions}
