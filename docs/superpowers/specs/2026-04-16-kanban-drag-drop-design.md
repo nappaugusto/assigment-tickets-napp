@@ -54,6 +54,8 @@ CREATE TABLE kanban_board (
 
 Tickets sem entrada no mapa são implicitamente na coluna Entrada. Tickets que somem do sync são ignorados na renderização (posição fica no mapa mas não renderiza).
 
+O mapa rastreia **apenas a coluna** de cada ticket, não a ordem dentro dela. Tickets dentro de uma coluna são ordenados por SLA (menor tempo primeiro), igual ao comportamento atual.
+
 ---
 
 ## API (Backend — NestJS)
@@ -93,7 +95,7 @@ KanbanBoard                  ← DndContext, carrega/salva estado
 - Passa `allTickets = [...tickets, ...newTickets]` para as colunas filtrarem por posição
 
 ### `KanbanColumn`
-- Header: título editável (clique duplo) + badge com contagem + botão deletar (ícone lixeira)
+- Header: título (texto estático) + badge com contagem + botão deletar (ícone lixeira)
 - Deletar: confirmação inline no botão (primeiro clique muda ícone para "confirmar", segundo clique executa)
 - Ao deletar: todos os `positions[ticketId] === columnId` são remapeados para a coluna Entrada
 - Coluna Entrada não exibe botão deletar
