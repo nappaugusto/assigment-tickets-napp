@@ -2,13 +2,14 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import type { Request as ExpressRequest, Response as ExpressResponse } from 'express';
+import Database from 'better-sqlite3';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const session = require('express-session');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const passport = require('passport');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const SQLiteStore = require('connect-sqlite3')(session);
+const BetterSqliteStore = require('better-sqlite3-session-store')(session);
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -32,7 +33,7 @@ async function bootstrap() {
         httpOnly: true,
         sameSite: 'lax',
       },
-      store: new SQLiteStore({ db: dbPath, dir: '.' }),
+      store: new BetterSqliteStore({ client: new Database(dbPath) }),
     }),
   );
 
