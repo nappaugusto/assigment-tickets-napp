@@ -86,3 +86,21 @@ export const ticketsApi = {
     ),
   appVersion: () => get<{ version: string }>('/app-version'),
 }
+
+// Kanban Board
+export interface KanbanColumn {
+  id: string
+  title: string
+  isDefault: boolean
+}
+
+export interface KanbanBoard {
+  columns: KanbanColumn[]
+  positions: Record<string, string>
+}
+
+export const kanbanApi = {
+  getBoard: () => get<KanbanBoard>('/kanban/board'),
+  saveBoard: (board: KanbanBoard) =>
+    http.put<{ success: boolean }>('/kanban/board', board).then((r) => r.data),
+}
