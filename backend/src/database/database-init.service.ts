@@ -44,6 +44,14 @@ export class DatabaseInitService implements OnModuleInit {
         expires_at TEXT    NOT NULL,
         created_at TEXT    DEFAULT (datetime('now'))
       );
+
+      CREATE TABLE IF NOT EXISTS kanban_board (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id    INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+        columns    TEXT NOT NULL DEFAULT '[]',
+        positions  TEXT NOT NULL DEFAULT '{}',
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
     `);
     this.logger.log('Database schema initialized');
   }
