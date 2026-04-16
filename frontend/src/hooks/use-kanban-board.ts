@@ -42,5 +42,5 @@ export function useKanbanBoard() {
     [qc, saveDebounced],
   )
 
-  return { board: query.data, isLoading: query.isLoading, updateBoard }
+  return { board: query.data, isLoading: query.isLoading, isError: query.isError, updateBoard }
 }

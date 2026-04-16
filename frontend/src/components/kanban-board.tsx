@@ -35,7 +35,7 @@ export function KanbanBoard({
 }: KanbanBoardProps) {
   const { user } = useAuth()
   const currentUser = user?.name ?? ''
-  const { board, isLoading: boardLoading, updateBoard } = useKanbanBoard()
+  const { board, isLoading: boardLoading, isError: boardError, updateBoard } = useKanbanBoard()
 
   const [activeTicket, setActiveTicket] = useState<Ticket | null>(null)
   const [addingColumn, setAddingColumn] = useState(false)
@@ -186,12 +186,20 @@ export function KanbanBoard({
     setNewColumnTitle('')
   }
 
-  if (boardLoading || !board || !Array.isArray(board.columns)) {
+  if (boardLoading) {
     return (
       <div className="flex gap-4 overflow-x-auto pb-4">
         {[1, 2, 3].map((i) => (
           <div key={i} className="w-[280px] shrink-0 h-64 rounded-lg bg-muted/30 animate-pulse" />
         ))}
+      </div>
+    )
+  }
+
+  if (boardError || !board || !Array.isArray(board.columns)) {
+    return (
+      <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
+        Erro ao carregar o board. Recarregue a página.
       </div>
     )
   }
