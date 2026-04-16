@@ -6,6 +6,7 @@ interface SummaryCardsProps {
   emAndamento: number
   venceHoje: number
   semResponsavel: number
+  compact?: boolean
 }
 
 interface CardItem {
@@ -14,7 +15,7 @@ interface CardItem {
   className: string
 }
 
-export function SummaryCards({ visible, novos, emAndamento, venceHoje, semResponsavel }: SummaryCardsProps) {
+export function SummaryCards({ visible, novos, emAndamento, venceHoje, semResponsavel, compact }: SummaryCardsProps) {
   const cards: CardItem[] = [
     { label: 'Visíveis', value: visible, className: 'border-primary/30 bg-primary/5' },
     { label: 'Novos', value: novos, className: 'border-blue-500/30 bg-blue-500/5' },
@@ -24,7 +25,7 @@ export function SummaryCards({ visible, novos, emAndamento, venceHoje, semRespon
   ]
 
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+    <div className={`grid gap-2 ${compact ? 'grid-cols-1' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'}`}>
       {cards.map((c) => (
         <article
           key={c.label}

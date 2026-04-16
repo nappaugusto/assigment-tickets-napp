@@ -71,7 +71,7 @@ export function DashboardPage() {
             <h2 className="font-semibold text-sm leading-tight">Priorize com contexto</h2>
           </div>
 
-          <SummaryCards {...summary} />
+          <SummaryCards {...summary} compact />
 
           <div className="flex flex-col gap-2">
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Filtros rápidos</span>

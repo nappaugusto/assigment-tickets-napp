@@ -60,9 +60,14 @@ function TicketRow({ ticket, agentOptions, onAssign, onUnassign, isLoading, curr
   const isMyTicket = currentUser && ticket.responsavel &&
     ticket.responsavel.toLowerCase() === currentUser.toLowerCase()
 
+  const rowColor =
+    sla === 'expired' ? 'bg-destructive/10 hover:bg-destructive/15' :
+    sla === 'warning' ? 'bg-orange-500/10 hover:bg-orange-500/15' :
+    isMyTicket ? 'bg-primary/5' : undefined
+
   return (
     <>
-      <TableRow className={isMyTicket ? 'bg-primary/5' : undefined}>
+      <TableRow className={rowColor}>
         <TableCell className="font-mono text-xs w-16">
           <a
             href={`https://support.movidesk.com/Ticket/Edit/${ticket.id}`}
