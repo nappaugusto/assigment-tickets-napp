@@ -10,6 +10,7 @@ import { PeopleModule } from './people/people.module';
 import { EmailModule } from './email/email.module';
 import { PasswordResetModule } from './password-reset/password-reset.module';
 import { KanbanModule } from './kanban/kanban.module';
+import { NotesModule } from './notes/notes.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { KanbanModule } from './kanban/kanban.module';
     EmailModule,
     PasswordResetModule,
     KanbanModule,
+    NotesModule,
   ],
   providers: [DatabaseInitService],
 })

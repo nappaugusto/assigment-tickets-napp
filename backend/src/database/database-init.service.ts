@@ -52,6 +52,15 @@ export class DatabaseInitService implements OnModuleInit {
         positions  TEXT NOT NULL DEFAULT '{}',
         updated_at TEXT DEFAULT (datetime('now'))
       );
+
+      CREATE TABLE IF NOT EXISTS ticket_notes (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        ticket_id  INTEGER NOT NULL,
+        content    TEXT NOT NULL DEFAULT '',
+        updated_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(user_id, ticket_id)
+      );
     `);
     this.logger.log('Database schema initialized');
   }
