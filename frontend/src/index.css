@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+/* ── Dark theme ─────────────────────────────── */
+:root {
+  --background: 215 28% 9%;
+  --foreground: 220 14% 91%;
+  --card: 225 25% 14%;
+  --card-foreground: 220 14% 91%;
+  --popover: 225 25% 14%;
+  --popover-foreground: 220 14% 91%;
+  --primary: 204 70% 53%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 225 22% 22%;
+  --secondary-foreground: 220 9% 69%;
+  --muted: 225 22% 22%;
+  --muted-foreground: 220 9% 69%;
+  --accent: 225 22% 22%;
+  --accent-foreground: 220 14% 91%;
+  --destructive: 6 78% 57%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 225 20% 22%;
+  --input: 225 20% 22%;
+  --ring: 204 70% 53%;
+  --radius: 0.5rem;
+}
+
+html { color-scheme: dark; }
+
+body {
+  margin: 0;
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+* { box-sizing: border-box; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: hsl(var(--background)); }
+::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: hsl(var(--primary)); }

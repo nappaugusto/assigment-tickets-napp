@@ -1,0 +1,26 @@
+# Environment
+.env
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
+
+# Node
+node_modules/
+dist/
+.pnpm-store/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbx.db
+
+# Vite
+frontend/dist/
+frontend/.vite/
+
+# NestJS
+backend/dist/
