@@ -96,7 +96,7 @@ export interface KanbanColumn {
 
 export interface KanbanBoard {
   columns: KanbanColumn[]
-  positions: Record<string, string>
+  columnItems: Record<string, string[]>
 }
 
 export const kanbanApi = {

@@ -1,3 +1,5 @@
+import { IsArray, IsObject } from 'class-validator';
+
 export interface KanbanColumn {
   id: string;
   title: string;
@@ -6,15 +8,18 @@ export interface KanbanColumn {
 
 export interface KanbanBoardDto {
   columns: KanbanColumn[];
-  positions: Record<string, string>;
+  columnItems: Record<string, string[]>;
 }
 
 export class SaveBoardDto {
+  @IsArray()
   columns: KanbanColumn[];
-  positions: Record<string, string>;
+
+  @IsObject()
+  columnItems: Record<string, string[]>;
 }
 
 export const DEFAULT_BOARD: KanbanBoardDto = {
   columns: [{ id: 'entrada', title: 'Entrada', isDefault: true }],
-  positions: {},
+  columnItems: {},
 };

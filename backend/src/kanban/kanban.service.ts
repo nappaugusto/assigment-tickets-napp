@@ -20,11 +20,11 @@ export class KanbanService {
       .prepare('SELECT * FROM kanban_board WHERE user_id = ?')
       .get(userId) as KanbanBoardRow | undefined;
 
-    if (!row) return { columns: [...DEFAULT_BOARD.columns], positions: {} };
+    if (!row) return { columns: [...DEFAULT_BOARD.columns], columnItems: {} };
 
     return {
       columns: JSON.parse(row.columns),
-      positions: JSON.parse(row.positions),
+      columnItems: JSON.parse(row.positions),
     };
   }
 
@@ -43,6 +43,6 @@ export class KanbanService {
           positions = excluded.positions,
           updated_at = excluded.updated_at
       `)
-      .run(userId, JSON.stringify(dto.columns), JSON.stringify(dto.positions));
+      .run(userId, JSON.stringify(dto.columns), JSON.stringify(dto.columnItems));
   }
 }
