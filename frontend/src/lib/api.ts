@@ -104,3 +104,13 @@ export const kanbanApi = {
   saveBoard: (board: KanbanBoard) =>
     http.put<{ success: boolean }>('/kanban/board', board).then((r) => r.data),
 }
+
+// Ticket Notes
+export const notesApi = {
+  getNote: (ticketId: number) =>
+    get<{ content: string }>(`/notes/${ticketId}`),
+  saveNote: (ticketId: number, content: string) =>
+    http.put<{ success: boolean }>(`/notes/${ticketId}`, { content }).then((r) => r.data),
+  getTicketsWithNotes: () =>
+    get<{ ticketIds: number[] }>('/notes/tickets-with-notes'),
+}
