@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import rehypeRaw from 'rehype-raw'
 import { X, Eye, Pencil } from 'lucide-react'
 import { type Ticket } from '@/lib/api'
 import { useTicketNote } from '@/hooks/use-ticket-note'
+import { NoteToolbar } from '@/components/note-toolbar'
 
 interface TicketNoteDrawerProps {
   ticket: Ticket | null
@@ -16,8 +18,8 @@ export function TicketNoteDrawer({ ticket, open, onClose }: TicketNoteDrawerProp
   const [mode, setMode] = useState<'edit' | 'preview'>('edit')
   const { content, isLoading, saveDebounced, isSaving } = useTicketNote(ticket?.id ?? 0)
   const [localContent, setLocalContent] = useState('')
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // Sync local content when ticket changes or drawer opens
   useEffect(() => {
     if (open && !isLoading) {
       setLocalContent(content)
@@ -60,7 +62,7 @@ export function TicketNoteDrawer({ ticket, open, onClose }: TicketNoteDrawerProp
             </Dialog.Close>
           </div>
 
-          {/* Mode toggle */}
+          {/* Mode toggle + save indicator */}
           <div className="flex items-center gap-1 px-4 pt-3 shrink-0">
             <button
               onClick={() => setMode('edit')}
@@ -89,12 +91,20 @@ export function TicketNoteDrawer({ ticket, open, onClose }: TicketNoteDrawerProp
             )}
           </div>
 
+          {/* Toolbar (edit mode only) */}
+          {mode === 'edit' && !isLoading && (
+            <div className="px-4 pt-2 shrink-0">
+              <NoteToolbar textareaRef={textareaRef} onChange={handleChange} />
+            </div>
+          )}
+
           {/* Content */}
           <div className="flex-1 overflow-hidden p-4">
             {isLoading ? (
               <div className="h-full rounded-lg bg-muted/30 animate-pulse" />
             ) : mode === 'edit' ? (
               <textarea
+                ref={textareaRef}
                 value={localContent}
                 onChange={(e) => handleChange(e.target.value)}
                 placeholder="Escreva suas anotações em Markdown…"
@@ -121,7 +131,7 @@ export function TicketNoteDrawer({ ticket, open, onClose }: TicketNoteDrawerProp
                     [&_th]:border [&_th]:border-border/40 [&_th]:p-1.5 [&_th]:bg-muted/50 [&_th]:font-medium
                     [&_td]:border [&_td]:border-border/40 [&_td]:p-1.5
                   ">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
                       {localContent}
                     </ReactMarkdown>
                   </div>
