@@ -48,17 +48,18 @@ export function KanbanBoard({
 
   const allTickets = [...tickets, ...newTickets]
 
-  const getDefaultColId = () => board?.columns.find((c) => c.isDefault)?.id ?? 'entrada'
+  const getDefaultColId = () => board?.columns?.find((c) => c.isDefault)?.id ?? 'entrada'
 
   const getTicketsForColumn = (columnId: string): Ticket[] => {
-    if (!board) return []
+    if (!board || !Array.isArray(board.columns)) return []
     const defaultColId = getDefaultColId()
-    const explicitIds = board.columnItems[columnId] ?? []
+    const columnItems = board.columnItems ?? {}
+    const explicitIds = columnItems[columnId] ?? []
 
     let ids = explicitIds
     if (columnId === defaultColId) {
       // tickets not placed in any column implicitly belong to the default
-      const allPlaced = new Set(Object.values(board.columnItems).flat())
+      const allPlaced = new Set(Object.values(columnItems).flat())
       const unplacedIds = allTickets
         .map((t) => String(t.id))
         .filter((id) => !allPlaced.has(id))
@@ -72,7 +73,7 @@ export function KanbanBoard({
 
   const findColumnOfTicket = (ticketId: string): string => {
     if (!board) return getDefaultColId()
-    for (const [colId, ids] of Object.entries(board.columnItems)) {
+    for (const [colId, ids] of Object.entries(board.columnItems ?? {})) {
       if (ids.includes(ticketId)) return colId
     }
     return getDefaultColId()
@@ -185,7 +186,7 @@ export function KanbanBoard({
     setNewColumnTitle('')
   }
 
-  if (boardLoading || !board) {
+  if (boardLoading || !board || !Array.isArray(board.columns)) {
     return (
       <div className="flex gap-4 overflow-x-auto pb-4">
         {[1, 2, 3].map((i) => (

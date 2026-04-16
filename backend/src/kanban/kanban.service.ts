@@ -22,9 +22,11 @@ export class KanbanService {
 
     if (!row) return { columns: [...DEFAULT_BOARD.columns], columnItems: {} };
 
+    const parsedColumns = JSON.parse(row.columns);
+    const parsedItems = JSON.parse(row.positions);
     return {
-      columns: JSON.parse(row.columns),
-      columnItems: JSON.parse(row.positions),
+      columns: Array.isArray(parsedColumns) ? parsedColumns : [...DEFAULT_BOARD.columns],
+      columnItems: parsedItems && typeof parsedItems === 'object' ? parsedItems : {},
     };
   }
 
