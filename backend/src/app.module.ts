@@ -9,6 +9,7 @@ import { SyncModule } from './sync/sync.module';
 import { PeopleModule } from './people/people.module';
 import { EmailModule } from './email/email.module';
 import { PasswordResetModule } from './password-reset/password-reset.module';
+import { KanbanModule } from './kanban/kanban.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { PasswordResetModule } from './password-reset/password-reset.module';
     PeopleModule,
     EmailModule,
     PasswordResetModule,
+    KanbanModule,
   ],
   providers: [DatabaseInitService],
 })
