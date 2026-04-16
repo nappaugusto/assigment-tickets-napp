@@ -31,7 +31,7 @@ RUN pnpm run build
 # ─────────────────────────────────────────────
 FROM node:20-alpine AS production
 
-RUN apk add --no-cache nginx
+RUN apk add --no-cache nginx gettext
 
 # ── Backend runtime ──────────────────────────
 WORKDIR /app/backend
@@ -46,12 +46,12 @@ COPY --from=backend-builder /build/backend/dist ./dist
 COPY --from=frontend-builder /build/frontend/dist /usr/share/nginx/html
 
 # ── nginx config ─────────────────────────────
-COPY nginx.conf /etc/nginx/nginx.conf
+COPY nginx.conf /etc/nginx/nginx.conf.template
 
 # ── Startup script ───────────────────────────
 COPY docker-start.sh /app/docker-start.sh
 RUN chmod +x /app/docker-start.sh
 
-EXPOSE 80
+EXPOSE 8080
 
 CMD ["/app/docker-start.sh"]

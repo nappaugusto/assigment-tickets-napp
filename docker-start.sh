@@ -1,6 +1,10 @@
 #!/bin/sh
 set -e
 
+# Render nginx config with correct port (Railway injects $PORT)
+export NGINX_PORT=${PORT:-80}
+envsubst '${NGINX_PORT}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
+
 # Start NestJS backend in background
 echo "[docker] Starting NestJS backend on port 3001..."
 node /app/backend/dist/main.js &
