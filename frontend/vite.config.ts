@@ -12,11 +12,11 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/auth': { target: 'http://127.0.0.1:5000', changeOrigin: true },
-      '/tickets': { target: 'http://127.0.0.1:5000', changeOrigin: true },
-      '/atribuir': { target: 'http://127.0.0.1:5000', changeOrigin: true },
-      '/desatribuir': { target: 'http://127.0.0.1:5000', changeOrigin: true },
-      '/app-version': { target: 'http://127.0.0.1:5000', changeOrigin: true },
+      '/auth': { target: 'http://127.0.0.1:3001', changeOrigin: true },
+      '/tickets': { target: 'http://127.0.0.1:3001', changeOrigin: true },
+      '/atribuir': { target: 'http://127.0.0.1:3001', changeOrigin: true },
+      '/desatribuir': { target: 'http://127.0.0.1:3001', changeOrigin: true },
+      '/app-version': { target: 'http://127.0.0.1:3001', changeOrigin: true },
     },
   },
 })
