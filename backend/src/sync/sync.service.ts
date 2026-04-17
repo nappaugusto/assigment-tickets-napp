@@ -192,7 +192,7 @@ export class SyncService {
 
     const tickets = await this.fetchFromApi();
     if (tickets.length > 0) {
-      this.ticketsService.upsertMany(tickets as any);
+      await this.ticketsService.upsertMany(tickets as any);
       this.lastSyncAt = now;
       this.logger.log(`Sync complete: ${tickets.length} tickets upserted`);
     }

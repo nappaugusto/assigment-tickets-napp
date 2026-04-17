@@ -28,8 +28,8 @@ export class TicketsController {
     const force = manual === '1' || manual === 'true';
     await this.syncService.sync(force);
 
-    const tickets = this.ticketsService.getActive();
-    const newTickets = this.ticketsService.getNewToday();
+    const tickets = await this.ticketsService.getActive();
+    const newTickets = await this.ticketsService.getNewToday();
 
     return {
       now: new Date().toISOString(),
@@ -40,6 +40,13 @@ export class TicketsController {
     };
   }
 
+  @UseGuards(SessionGuard)
+  @Get('tickets/analytics/monthly')
+  async monthlyAnalytics(@Query('months') months?: string) {
+    const parsedMonths = Number(months ?? 6);
+    return this.ticketsService.getMonthlyAnalytics(parsedMonths);
+  }
+
   @Get('app-version')
   appVersion() {
     return { version: process.env.npm_package_version ?? '1.0.0' };
@@ -47,14 +54,14 @@ export class TicketsController {
 
   @UseGuards(SessionGuard)
   @Post('atribuir/:id')
-  assign(
+  async assign(
     @Param('id', ParseIntPipe) id: number,
     @Body('responsavel') responsavel: string,
   ) {
     if (!responsavel?.trim()) {
       return { success: false, message: 'Responsável é obrigatório.' };
     }
-    this.ticketsService.assign(id, responsavel.trim());
+    await this.ticketsService.assign(id, responsavel.trim());
     return {
       success: true,
       message: 'Ticket atribuído com sucesso.',
@@ -66,8 +73,8 @@ export class TicketsController {
 
   @UseGuards(SessionGuard)
   @Post('desatribuir/:id')
-  unassign(@Param('id', ParseIntPipe) id: number) {
-    this.ticketsService.unassign(id);
+  async unassign(@Param('id', ParseIntPipe) id: number) {
+    await this.ticketsService.unassign(id);
     return {
       success: true,
       message: 'Atribuição removida com sucesso.',

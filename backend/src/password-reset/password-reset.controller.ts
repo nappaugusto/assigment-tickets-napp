@@ -23,8 +23,8 @@ export class PasswordResetController {
   }
 
   @Get('reset-password/:token')
-  validateToken(@Param('token') token: string) {
-    const { valid } = this.passwordResetService.validateToken(token);
+  async validateToken(@Param('token') token: string) {
+    const { valid } = await this.passwordResetService.validateToken(token);
     return { valid };
   }
 

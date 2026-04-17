@@ -1,20 +1,22 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 import type { Request as ExpressRequest, Response as ExpressResponse } from 'express';
-import Database from 'better-sqlite3';
-import { mkdirSync } from 'fs';
-import { dirname } from 'path';
+import { Pool } from 'pg';
+import { DB_TOKEN } from './database/database.module';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const session = require('express-session');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const passport = require('passport');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const BetterSqliteStore = require('better-sqlite3-session-store')(session);
+const PgSession = require('connect-pg-simple')(session);
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const config = app.get(ConfigService);
+  const pool = app.get<Pool>(DB_TOKEN);
 
   const allowedOrigins = [
     'http://localhost:5173',
@@ -29,20 +31,23 @@ async function bootstrap() {
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
-  const dbPath = process.env.DATABASE_PATH ?? './data/tickets.db';
-  mkdirSync(dirname(dbPath), { recursive: true });
-
   app.use(
     session({
-      secret: process.env.SESSION_SECRET ?? 'changeme',
+      secret: config.get<string>('SESSION_SECRET') ?? 'changeme',
       resave: false,
       saveUninitialized: false,
       cookie: {
         maxAge: 30 * 24 * 60 * 60 * 1000,
         httpOnly: true,
         sameSite: 'lax',
+        secure: (config.get<string>('NODE_ENV') ?? 'development') === 'production',
       },
-      store: new BetterSqliteStore({ client: new Database(dbPath) }),
+      rolling: true,
+      store: new PgSession({
+        pool,
+        tableName: 'user_sessions',
+        createTableIfMissing: true,
+      }),
     }),
   );
 

@@ -5,10 +5,6 @@ set -e
 export NGINX_PORT=${PORT:-80}
 envsubst '${NGINX_PORT}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
 
-# Ensure persistent data directory exists before NestJS starts
-export DATABASE_PATH=${DATABASE_PATH:-/app/backend/data/tickets.db}
-mkdir -p "$(dirname "$DATABASE_PATH")"
-
 # Start NestJS on a fixed internal port (never conflicts with nginx)
 echo "[docker] Starting NestJS backend on port 3001..."
 PORT=3001 node /app/backend/dist/main.js > /tmp/nestjs.log 2>&1 &

@@ -1,7 +1,12 @@
 import { Injectable, Inject } from '@nestjs/common';
-import Database from 'better-sqlite3';
+import { Pool } from 'pg';
 import { DB_TOKEN } from '../database/database.module';
-import { Ticket, TicketDto } from './ticket.entity';
+import {
+  Ticket,
+  TicketDto,
+  TicketMonthlyAnalyticsDto,
+  TicketMonthlyAnalyticsItem,
+} from './ticket.entity';
 
 const FINAL_STATUSES = [
   'cancelado',
@@ -25,17 +30,23 @@ function isFinal(status: string | null): boolean {
 
 function toDto(t: Ticket): TicketDto {
   return {
-    id: t.id,
+    id: Number(t.id),
     subject: t.subject,
     status: t.status,
     ownerTeam: t.ownerTeam,
-    slaSolutionDate: t.slaSolutionDate,
+    slaSolutionDate: toIsoString(t.slaSolutionDate),
     slaSolutionDateIsPaused: !!t.slaSolutionDateIsPaused,
-    opened_at: t.opened_at,
-    closed_at: t.closed_at,
+    opened_at: toIsoString(t.opened_at),
+    closed_at: toIsoString(t.closed_at),
     responsavel: t.responsavel,
-    assigned_at: t.assigned_at,
+    assigned_at: toIsoString(t.assigned_at),
   };
+}
+
+function toIsoString(value: string | Date | null | undefined): string | null {
+  if (!value) return null;
+  const parsed = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
 function isToday(isoDate: string | null): boolean {
@@ -49,116 +60,235 @@ function isToday(isoDate: string | null): boolean {
   );
 }
 
+function startOfMonth(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function addMonths(date: Date, delta: number): Date {
+  return new Date(date.getFullYear(), date.getMonth() + delta, 1);
+}
+
+function monthKey(date: Date): string {
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  return `${date.getFullYear()}-${month}`;
+}
+
+function parseIsoDate(value: string | null): Date | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 @Injectable()
 export class TicketsService {
-  constructor(@Inject(DB_TOKEN) private readonly db: Database.Database) {}
+  constructor(@Inject(DB_TOKEN) private readonly db: Pool) {}
 
-  getAll(): TicketDto[] {
-    const rows = this.db
-      .prepare(`SELECT * FROM tickets ORDER BY id DESC`)
-      .all() as Ticket[];
+  async getAll(): Promise<TicketDto[]> {
+    const result = await this.db.query<Ticket>(`SELECT * FROM tickets ORDER BY id DESC`);
+    const rows = result.rows;
     return rows.map(toDto);
   }
 
-  getActive(): TicketDto[] {
-    const rows = this.db
-      .prepare(`SELECT * FROM tickets ORDER BY id DESC`)
-      .all() as Ticket[];
+  async getActive(): Promise<TicketDto[]> {
+    const result = await this.db.query<Ticket>(`SELECT * FROM tickets ORDER BY id DESC`);
+    const rows = result.rows;
     return rows
-      .filter((t) => !isFinal(t.status) && !isToday(t.opened_at))
+      .filter((t: Ticket) => !isFinal(t.status) && !isToday(toIsoString(t.opened_at)))
       .map(toDto);
   }
 
-  getNewToday(): TicketDto[] {
-    const rows = this.db
-      .prepare(`SELECT * FROM tickets ORDER BY id DESC`)
-      .all() as Ticket[];
-    return rows.filter((t) => !isFinal(t.status) && isToday(t.opened_at)).map(toDto);
+  async getNewToday(): Promise<TicketDto[]> {
+    const result = await this.db.query<Ticket>(`SELECT * FROM tickets ORDER BY id DESC`);
+    const rows = result.rows;
+    return rows
+      .filter((t: Ticket) => !isFinal(t.status) && isToday(toIsoString(t.opened_at)))
+      .map(toDto);
   }
 
-  findById(id: number): TicketDto | undefined {
-    const t = this.db
-      .prepare(`SELECT * FROM tickets WHERE id = ? LIMIT 1`)
-      .get(id) as Ticket | undefined;
+  async findById(id: number): Promise<TicketDto | undefined> {
+    const result = await this.db.query<Ticket>(
+      `SELECT * FROM tickets WHERE id = $1 LIMIT 1`,
+      [id],
+    );
+    const t = result.rows[0];
     return t ? toDto(t) : undefined;
   }
 
-  assign(id: number, responsavel: string): void {
-    this.db
-      .prepare(
-        `UPDATE tickets
-         SET responsavel = ?, assigned_at = datetime('now'), assignment_override = 'local_assigned', updated_at = datetime('now')
-         WHERE id = ?`,
-      )
-      .run(responsavel, id);
-  }
-
-  unassign(id: number): void {
-    this.db
-      .prepare(
-        `UPDATE tickets
-         SET responsavel = NULL, assigned_at = NULL, assignment_override = 'local_unassigned', updated_at = datetime('now')
-         WHERE id = ?`,
-      )
-      .run(id);
-  }
-
-  upsertMany(tickets: Partial<Ticket>[]): void {
-    const upsert = this.db.prepare(`
-      INSERT INTO tickets (id, subject, status, ownerTeam, slaSolutionDate, slaSolutionDateIsPaused, opened_at, closed_at, responsavel, assigned_at, updated_at)
-      VALUES (@id, @subject, @status, @ownerTeam, @slaSolutionDate, @slaSolutionDateIsPaused, @opened_at, @closed_at, @responsavel, @assigned_at, datetime('now'))
-      ON CONFLICT(id) DO UPDATE SET
-        subject = excluded.subject,
-        status = excluded.status,
-        ownerTeam = excluded.ownerTeam,
-        slaSolutionDate = excluded.slaSolutionDate,
-        slaSolutionDateIsPaused = excluded.slaSolutionDateIsPaused,
-        opened_at = excluded.opened_at,
-        closed_at = excluded.closed_at,
-        responsavel = CASE
-          WHEN assignment_override = 'local_assigned' THEN responsavel
-          WHEN assignment_override = 'local_unassigned' THEN NULL
-          ELSE excluded.responsavel
-        END,
-        assigned_at = CASE
-          WHEN assignment_override = 'local_assigned' THEN assigned_at
-          WHEN assignment_override = 'local_unassigned' THEN NULL
-          ELSE excluded.assigned_at
-        END,
-        updated_at = datetime('now')
-    `);
-
-    const deleteOld = this.db.prepare(
-      `DELETE FROM tickets WHERE id NOT IN (${tickets.map(() => '?').join(',')})`,
+  async assign(id: number, responsavel: string): Promise<void> {
+    await this.db.query(
+      `
+        UPDATE tickets
+        SET responsavel = $1,
+            assigned_at = NOW(),
+            assignment_override = 'local_assigned',
+            updated_at = NOW()
+        WHERE id = $2
+      `,
+      [responsavel, id],
     );
-
-    this.db.transaction(() => {
-      for (const t of tickets) {
-        upsert.run({
-          id: t.id,
-          subject: t.subject ?? null,
-          status: t.status ?? null,
-          ownerTeam: t.ownerTeam ?? null,
-          slaSolutionDate: t.slaSolutionDate ?? null,
-          slaSolutionDateIsPaused: t.slaSolutionDateIsPaused ? 1 : 0,
-          opened_at: t.opened_at ?? null,
-          closed_at: t.closed_at ?? null,
-          responsavel: t.responsavel ?? null,
-          assigned_at: t.assigned_at ?? null,
-        });
-      }
-      if (tickets.length > 0) {
-        deleteOld.run(...tickets.map((t) => t.id));
-      }
-    })();
   }
 
-  getAllResponsaveis(): string[] {
-    const rows = this.db
-      .prepare(
-        `SELECT DISTINCT responsavel FROM tickets WHERE responsavel IS NOT NULL ORDER BY responsavel`,
-      )
-      .all() as { responsavel: string }[];
-    return rows.map((r) => r.responsavel);
+  async unassign(id: number): Promise<void> {
+    await this.db.query(
+      `
+        UPDATE tickets
+        SET responsavel = NULL,
+            assigned_at = NULL,
+            assignment_override = 'local_unassigned',
+            updated_at = NOW()
+        WHERE id = $1
+      `,
+      [id],
+    );
+  }
+
+  async upsertMany(tickets: Partial<Ticket>[]): Promise<void> {
+    const client = await this.db.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      for (const t of tickets) {
+        await client.query(
+          `
+            INSERT INTO tickets (
+              id,
+              subject,
+              status,
+              "ownerTeam",
+              "slaSolutionDate",
+              "slaSolutionDateIsPaused",
+              opened_at,
+              closed_at,
+              responsavel,
+              assigned_at,
+              updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+            ON CONFLICT (id) DO UPDATE SET
+              subject = EXCLUDED.subject,
+              status = EXCLUDED.status,
+              "ownerTeam" = EXCLUDED."ownerTeam",
+              "slaSolutionDate" = EXCLUDED."slaSolutionDate",
+              "slaSolutionDateIsPaused" = EXCLUDED."slaSolutionDateIsPaused",
+              opened_at = EXCLUDED.opened_at,
+              closed_at = EXCLUDED.closed_at,
+              responsavel = CASE
+                WHEN tickets.assignment_override = 'local_assigned' THEN tickets.responsavel
+                WHEN tickets.assignment_override = 'local_unassigned' THEN NULL
+                ELSE EXCLUDED.responsavel
+              END,
+              assigned_at = CASE
+                WHEN tickets.assignment_override = 'local_assigned' THEN tickets.assigned_at
+                WHEN tickets.assignment_override = 'local_unassigned' THEN NULL
+                ELSE EXCLUDED.assigned_at
+              END,
+              updated_at = NOW()
+          `,
+          [
+            t.id,
+            t.subject ?? null,
+            t.status ?? null,
+            t.ownerTeam ?? null,
+            toIsoString(t.slaSolutionDate) ?? null,
+            !!t.slaSolutionDateIsPaused,
+            toIsoString(t.opened_at) ?? null,
+            toIsoString(t.closed_at) ?? null,
+            t.responsavel ?? null,
+            toIsoString(t.assigned_at) ?? null,
+          ],
+        );
+      }
+
+      if (tickets.length > 0) {
+        await client.query(`DELETE FROM tickets WHERE id <> ALL($1::bigint[])`, [
+          tickets.map((ticket) => Number(ticket.id)),
+        ]);
+      }
+
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getAllResponsaveis(): Promise<string[]> {
+    const result = await this.db.query<{ responsavel: string }>(
+      `
+        SELECT DISTINCT responsavel
+        FROM tickets
+        WHERE responsavel IS NOT NULL
+        ORDER BY responsavel
+      `,
+    );
+    return result.rows.map((r: { responsavel: string }) => r.responsavel);
+  }
+
+  async getMonthlyAnalytics(months = 6): Promise<TicketMonthlyAnalyticsDto> {
+    const totalMonths = Math.max(1, Math.min(months, 24));
+    const result = await this.db.query<Ticket>(`SELECT * FROM tickets ORDER BY id DESC`);
+    const rows = result.rows;
+
+    const now = new Date();
+    const firstMonth = startOfMonth(addMonths(now, -(totalMonths - 1)));
+    const monthMap = new Map<string, TicketMonthlyAnalyticsItem>();
+
+    for (let index = 0; index < totalMonths; index++) {
+      const current = addMonths(firstMonth, index);
+      const key = monthKey(current);
+      monthMap.set(key, {
+        month: key,
+        label: current.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }),
+        opened: 0,
+        breached: 0,
+        resolved_on_time: 0,
+        resolved_late: 0,
+      });
+    }
+
+    for (const ticket of rows) {
+      const openedAt = parseIsoDate(toIsoString(ticket.opened_at));
+      const closedAt = parseIsoDate(toIsoString(ticket.closed_at));
+      const slaAt = parseIsoDate(toIsoString(ticket.slaSolutionDate));
+
+      if (openedAt) {
+        const bucket = monthMap.get(monthKey(openedAt));
+        if (bucket) bucket.opened += 1;
+      }
+
+      if (closedAt && slaAt) {
+        const bucket = monthMap.get(monthKey(closedAt));
+        if (bucket) {
+          if (closedAt.getTime() <= slaAt.getTime()) {
+            bucket.resolved_on_time += 1;
+          } else {
+            bucket.resolved_late += 1;
+          }
+        }
+      }
+
+      if (slaAt) {
+        const bucket = monthMap.get(monthKey(slaAt));
+        const breached =
+          (!closedAt && slaAt.getTime() < now.getTime()) ||
+          (!!closedAt && closedAt.getTime() > slaAt.getTime());
+
+        if (bucket && breached) {
+          bucket.breached += 1;
+        }
+      }
+    }
+
+    const analyticsMonths = Array.from(monthMap.values());
+    const currentMonth = analyticsMonths[analyticsMonths.length - 1] ?? null;
+
+    return {
+      generated_at: new Date().toISOString(),
+      months: analyticsMonths,
+      current_month: currentMonth,
+    };
   }
 }

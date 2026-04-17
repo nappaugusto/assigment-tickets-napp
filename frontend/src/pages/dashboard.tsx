@@ -2,11 +2,12 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAuth } from '@/contexts/auth-context'
-import { useTickets, useSyncTickets } from '@/hooks/use-tickets'
+import { useTicketMonthlyAnalytics, useTickets, useSyncTickets } from '@/hooks/use-tickets'
 import { useTicketFilters } from '@/hooks/use-ticket-filters'
 import { useTicketActions } from '@/hooks/use-ticket-actions'
 import { useAppVersion } from '@/hooks/use-app-version'
 import { Header } from '@/components/header'
+import { MonthlyAnalytics } from '@/components/monthly-analytics'
 import { SummaryCards, computeSummary } from '@/components/summary-cards'
 import { QuickFilters } from '@/components/quick-filters'
 import { Toolbar } from '@/components/toolbar'
@@ -24,6 +25,7 @@ export function DashboardPage() {
   useAppVersion()
 
   const { data, isLoading } = useTickets()
+  const { data: monthlyAnalytics, isLoading: isMonthlyAnalyticsLoading } = useTicketMonthlyAnalytics(6)
   const syncMutation = useSyncTickets()
   const { assignTicket, unassignTicket, isAssigning, isUnassigning } = useTicketActions()
 
@@ -103,6 +105,11 @@ export function DashboardPage() {
             lastSync={lastSync}
             viewMode={viewMode}
             onViewMode={handleViewMode}
+          />
+
+          <MonthlyAnalytics
+            analytics={monthlyAnalytics}
+            isLoading={isMonthlyAnalyticsLoading}
           />
 
           {viewMode === 'table' ? (
