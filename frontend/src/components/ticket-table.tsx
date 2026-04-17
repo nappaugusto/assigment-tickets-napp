@@ -9,6 +9,7 @@ import { TicketNoteDrawer } from '@/components/ticket-note-drawer'
 import { type SortKey, type SortDir } from '@/hooks/use-ticket-filters'
 import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { getTicketUrl } from '@/lib/utils'
 
 const SLA_BADGE_VARIANT: Record<string, 'destructive' | 'warning' | 'secondary' | 'outline' | 'default'> = {
   expired: 'destructive',
@@ -70,7 +71,7 @@ function TicketRow({ ticket, agentOptions, onAssign, onUnassign, isLoading, curr
       <TableRow className={rowColor}>
         <TableCell className="font-mono text-xs w-16">
           <a
-            href={`https://support.movidesk.com/Ticket/Edit/${ticket.id}`}
+            href={getTicketUrl(ticket.id)}
             target="_blank"
             rel="noreferrer"
             className="text-primary hover:underline"
@@ -85,6 +86,9 @@ function TicketRow({ ticket, agentOptions, onAssign, onUnassign, isLoading, curr
           <Badge variant={SLA_BADGE_VARIANT[sla]} className="text-xs gap-1 whitespace-nowrap">
             {sla === 'paused' ? 'Pausado' : sla === 'none' ? '—' : slaLabel}
           </Badge>
+        </TableCell>
+        <TableCell className="w-40 text-sm text-muted-foreground">
+          {ticket.closed_at ? formatDate(ticket.closed_at) : '—'}
         </TableCell>
         <TableCell className="w-36 text-sm">
           {ticket.responsavel ? (
@@ -158,6 +162,9 @@ function Section({
               <TableHead className="w-36">
                 <SortButton label="Data SLA" sortK="slaSolutionDate" active={sortKey} dir={sortDir} onSort={onSort} />
               </TableHead>
+              <TableHead className="w-40">
+                <SortButton label="Fechamento" sortK="closed_at" active={sortKey} dir={sortDir} onSort={onSort} />
+              </TableHead>
               <TableHead className="w-36">
                 <SortButton label="Responsável" sortK="responsavel" active={sortKey} dir={sortDir} onSort={onSort} />
               </TableHead>
@@ -167,7 +174,7 @@ function Section({
           <TableBody>
             {tickets.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-8">
+                <TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-8">
                   Nenhum ticket encontrado
                 </TableCell>
               </TableRow>

@@ -7,6 +7,7 @@ import { X, Eye, Pencil } from 'lucide-react'
 import { type Ticket } from '@/lib/api'
 import { useTicketNote } from '@/hooks/use-ticket-note'
 import { NoteToolbar } from '@/components/note-toolbar'
+import { getTicketUrl } from '@/lib/utils'
 
 interface TicketNoteDrawerProps {
   ticket: Ticket | null
@@ -44,7 +45,7 @@ export function TicketNoteDrawer({ ticket, open, onClose }: TicketNoteDrawerProp
           <div className="flex items-start justify-between gap-3 p-4 border-b border-border/40 shrink-0">
             <div className="flex flex-col gap-0.5 min-w-0">
               <a
-                href={`https://support.movidesk.com/Ticket/Edit/${ticket.id}`}
+                href={getTicketUrl(ticket.id)}
                 target="_blank"
                 rel="noreferrer"
                 className="font-mono text-xs text-primary hover:underline"

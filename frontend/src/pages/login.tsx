@@ -9,17 +9,26 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 
+const REMEMBERED_USERNAME_KEY = 'rememberedUsername'
+
 export function LoginPage() {
   const navigate = useNavigate()
   const { login } = useAuth()
 
-  const [username, setUsername] = useState('')
+  const [username, setUsername] = useState(() => localStorage.getItem(REMEMBERED_USERNAME_KEY) ?? '')
   const [password, setPassword] = useState('')
-  const [rememberMe, setRememberMe] = useState(false)
+  const [rememberMe, setRememberMe] = useState(() => Boolean(localStorage.getItem(REMEMBERED_USERNAME_KEY)))
 
   const mutation = useMutation({
     mutationFn: () => login(username, password, rememberMe),
-    onSuccess: () => navigate('/', { replace: true }),
+    onSuccess: () => {
+      if (rememberMe) {
+        localStorage.setItem(REMEMBERED_USERNAME_KEY, username)
+      } else {
+        localStorage.removeItem(REMEMBERED_USERNAME_KEY)
+      }
+      navigate('/', { replace: true })
+    },
     onError: (err: Error) => toast.error(err.message || 'Usuário ou senha inválidos'),
   })
 

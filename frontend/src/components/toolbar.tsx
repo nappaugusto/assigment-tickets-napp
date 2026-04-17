@@ -33,26 +33,26 @@ export function Toolbar({
   onViewMode,
 }: ToolbarProps) {
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border/40 bg-card p-3">
+    <div className="flex flex-col gap-3 rounded-[1.35rem] border border-border/60 bg-card/80 p-4 shadow-[0_18px_60px_rgba(0,0,0,0.22)] backdrop-blur-sm">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <Input
           type="search"
           placeholder="Pesquisar por ID, assunto, responsável…"
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="flex-1 h-8 text-sm"
+          className="h-10 flex-1 rounded-xl border-border/70 bg-background/70 text-sm shadow-inner"
         />
         <Input
           type="date"
           value={dateFilter}
           onChange={(e) => onDateChange(e.target.value)}
-          className="w-full sm:w-36 h-8 text-sm"
+          className="h-10 w-full rounded-xl border-border/70 bg-background/70 text-sm shadow-inner sm:w-40"
           aria-label="Filtrar por data SLA"
         />
         <select
           value={agentFilter}
           onChange={(e) => onAgentChange(e.target.value)}
-          className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground w-full sm:w-44"
+          className="h-10 w-full rounded-xl border border-input bg-background/70 px-3 text-sm text-foreground shadow-inner sm:w-52"
           aria-label="Filtrar por agente"
         >
           <option value="">Todos os agentes</option>
@@ -63,13 +63,13 @@ export function Toolbar({
       </div>
 
       <div className="flex items-center justify-between gap-2">
-        <div className="flex gap-1">
+        <div className="flex gap-1 rounded-full border border-border/60 bg-background/60 p-1">
           {(['table', 'kanban'] as const).map((m) => (
             <Button
               key={m}
               variant={viewMode === m ? 'default' : 'outline'}
               size="sm"
-              className="h-7 px-3 text-xs capitalize"
+              className="h-8 rounded-full px-4 text-xs capitalize"
               onClick={() => onViewMode(m)}
             >
               {m === 'table' ? 'Tabela' : 'Kanban'}
@@ -79,11 +79,11 @@ export function Toolbar({
 
         <div className="flex items-center gap-2">
           {lastSync && (
-            <span className="text-xs text-muted-foreground hidden sm:block">
+            <span className="hidden rounded-full bg-background/60 px-3 py-1.5 text-xs text-muted-foreground sm:block">
               Última sync: <strong>{lastSync}</strong>
             </span>
           )}
-          <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={onSync} disabled={isSyncing}>
+          <Button size="sm" variant="outline" className="h-8 rounded-full gap-1.5 px-4 text-xs" onClick={onSync} disabled={isSyncing}>
             <RefreshCw className={`h-3 w-3 ${isSyncing ? 'animate-spin' : ''}`} />
             {isSyncing ? 'Sincronizando…' : 'Sincronizar'}
           </Button>

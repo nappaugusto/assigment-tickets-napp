@@ -45,11 +45,12 @@ Variáveis obrigatórias:
 |-----------------------------|------------------------------------------------------|
 | `SESSION_SECRET`            | Segredo para assinar cookies de sessão               |
 | `MOVIDESK_API_TOKEN`        | Token da API pública do Movidesk                     |
-| `MOVIDESK_API_QUERY_PARAMS` | Query de busca de tickets (com filtro de equipe)     |
+| `MOVIDESK_API_QUERY_PARAMS` | Query de busca de tickets, incluindo campos de SLA e fechamento |
 | `ASSIGNMENT_TEAM_NAMES`     | Nomes das equipes para o seletor de atribuição       |
 | `MAIL_SERVER`               | Servidor SMTP para recuperação de senha              |
 | `MAIL_USERNAME`             | Usuário SMTP                                         |
 | `MAIL_PASSWORD`             | Senha SMTP                                           |
+| `VITE_MOVIDESK_BASE_URL`    | URL base da instância do Movidesk para abrir tickets |
 
 ---
 

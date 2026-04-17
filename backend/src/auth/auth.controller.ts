@@ -34,11 +34,32 @@ export class AuthController {
     return { authenticated: false, user: null };
   }
 
+  private async saveSession(req: Request): Promise<void> {
+    const session = (req as any).session;
+    if (!session) return;
+
+    await new Promise<void>((resolve, reject) => {
+      session.save((err: unknown) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+
   @UseGuards(LocalAuthGuard)
   @Post('login')
   @HttpCode(200)
-  login(@Req() req: Request) {
+  async login(@Req() req: Request) {
     const user = (req as any).user as User;
+
+    await new Promise<void>((resolve, reject) => {
+      (req as any).logIn(user, (err: unknown) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+    await this.saveSession(req);
     return { success: true, user: this.authService.toPublic(user) };
   }
 
@@ -69,6 +90,8 @@ export class AuthController {
         else resolve();
       });
     });
+
+    await this.saveSession(req);
 
     return { success: true, user: { id: result.user.id, name: result.user.name } };
   }

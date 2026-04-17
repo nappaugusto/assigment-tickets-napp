@@ -3,11 +3,12 @@ import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Pencil } from 'lucide-react'
 import { type Ticket } from '@/lib/api'
-import { getSlaStatus, getTimeUntilSla } from '@/lib/date-utils'
+import { formatDate, getSlaStatus, getTimeUntilSla } from '@/lib/date-utils'
 import { Badge } from '@/components/ui/badge'
 import { TicketActions } from '@/components/ticket-actions'
 import { TicketNoteDrawer } from '@/components/ticket-note-drawer'
 import { useTicketsWithNotes } from '@/hooks/use-ticket-note'
+import { getTicketUrl } from '@/lib/utils'
 
 const SLA_BADGE_VARIANT: Record<string, 'destructive' | 'warning' | 'secondary' | 'outline' | 'default'> = {
   expired: 'destructive',
@@ -69,7 +70,7 @@ export function KanbanCardDraggable({
       >
         <div className="flex items-start justify-between gap-2">
           <a
-            href={`https://support.movidesk.com/Ticket/Edit/${ticket.id}`}
+            href={getTicketUrl(ticket.id)}
             target="_blank"
             rel="noreferrer"
             className="font-mono text-xs text-primary hover:underline"
@@ -82,18 +83,22 @@ export function KanbanCardDraggable({
           </Badge>
         </div>
         <p className="text-sm leading-snug line-clamp-3">{ticket.subject || '—'}</p>
-        <div className="text-xs text-muted-foreground">
-          {ticket.responsavel ? (
-            <span className={isMyTicket ? 'text-primary font-medium' : undefined}>
-              {isMyTicket ? 'Seu chamado' : ticket.responsavel}
-            </span>
-          ) : (
-            <span className="italic">Não atribuído</span>
-          )}
-        </div>
-        <div className="flex items-center justify-between gap-2">
-          <TicketActions
-            ticket={ticket}
+      <div className="text-xs text-muted-foreground">
+        {ticket.responsavel ? (
+          <span className={isMyTicket ? 'text-primary font-medium' : undefined}>
+            {isMyTicket ? 'Seu chamado' : ticket.responsavel}
+          </span>
+        ) : (
+          <span className="italic">Não atribuído</span>
+        )}
+      </div>
+      <div className="rounded-md bg-background/60 px-2.5 py-2 text-[11px] text-muted-foreground">
+        <span className="font-medium text-foreground/85">Fechamento:</span>{' '}
+        {ticket.closed_at ? formatDate(ticket.closed_at) : '—'}
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <TicketActions
+          ticket={ticket}
             agentOptions={agentOptions}
             onAssign={onAssign}
             onUnassign={onUnassign}

@@ -60,15 +60,18 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.08))]">
       <Header onLogout={handleLogout} />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <aside className="hidden lg:flex w-64 flex-col gap-4 border-r border-border/40 p-4 overflow-y-auto">
+        <aside className="hidden lg:flex w-72 flex-col gap-4 border-r border-border/40 bg-card/35 p-5 overflow-y-auto backdrop-blur-sm">
           <div>
-            <p className="text-xs text-muted-foreground mb-1 font-medium uppercase tracking-wide">Painel operacional</p>
-            <h2 className="font-semibold text-sm leading-tight">Priorize com contexto</h2>
+            <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.26em] text-primary/85">Painel operacional</p>
+            <h2 className="font-semibold text-lg leading-tight text-foreground">Priorize com contexto</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Enxergue urgência, dono e fechamento sem sair da fila.
+            </p>
           </div>
 
           <SummaryCards {...summary} compact />
@@ -80,7 +83,7 @@ export function DashboardPage() {
         </aside>
 
         {/* Main content */}
-        <main className="flex-1 flex flex-col gap-4 p-4 overflow-y-auto min-h-0">
+        <main className="flex-1 flex flex-col gap-4 p-4 overflow-y-auto min-h-0 md:p-6">
           {/* Mobile summary + quick filters */}
           <div className="lg:hidden flex flex-col gap-3">
             <SummaryCards {...summary} />

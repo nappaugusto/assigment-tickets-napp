@@ -6,6 +6,7 @@ export interface Ticket {
   slaSolutionDate: string | null;
   slaSolutionDateIsPaused: number;
   opened_at: string | null;
+  closed_at: string | null;
   responsavel: string | null;
   assigned_at: string | null;
   assignment_override: string | null;
@@ -21,6 +22,7 @@ export interface TicketDto {
   slaSolutionDate: string | null;
   slaSolutionDateIsPaused: boolean;
   opened_at: string | null;
+  closed_at: string | null;
   responsavel: string | null;
   assigned_at: string | null;
 }

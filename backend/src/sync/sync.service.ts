@@ -102,6 +102,18 @@ export class SyncService {
     const openedAt = (
       String(this.getNested(ticket, 'createdDate', 'createdDateTime', 'createdAt') ?? '')
     ).trim() || null;
+    const closedAt = (
+      String(
+        this.getNested(
+          ticket,
+          'closedDate',
+          'closedDateTime',
+          'resolvedDate',
+          'resolvedDateTime',
+          'lastUpdate',
+        ) ?? '',
+      )
+    ).trim() || null;
 
     const responsavelRaw = this.getNested(
       ticket,
@@ -121,6 +133,7 @@ export class SyncService {
       slaSolutionDate,
       slaSolutionDateIsPaused,
       opened_at: openedAt,
+      closed_at: closedAt,
       responsavel,
       assigned_at: null,
     };

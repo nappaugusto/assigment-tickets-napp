@@ -17,11 +17,11 @@ interface CardItem {
 
 export function SummaryCards({ visible, novos, emAndamento, venceHoje, semResponsavel, compact }: SummaryCardsProps) {
   const cards: CardItem[] = [
-    { label: 'Visíveis', value: visible, className: 'border-primary/30 bg-primary/5' },
-    { label: 'Novos', value: novos, className: 'border-blue-500/30 bg-blue-500/5' },
-    { label: 'Em andamento', value: emAndamento, className: 'border-green-500/30 bg-green-500/5' },
-    { label: 'Vence hoje', value: venceHoje, className: 'border-yellow-500/30 bg-yellow-500/5' },
-    { label: 'Sem responsável', value: semResponsavel, className: 'border-red-500/30 bg-red-500/5' },
+    { label: 'Visíveis', value: visible, className: 'border-primary/30 bg-gradient-to-br from-primary/18 to-primary/5 shadow-[0_14px_35px_rgba(10,94,94,0.25)]' },
+    { label: 'Novos', value: novos, className: 'border-cyan-400/25 bg-gradient-to-br from-cyan-400/16 to-cyan-400/4 shadow-[0_14px_35px_rgba(34,211,238,0.12)]' },
+    { label: 'Em andamento', value: emAndamento, className: 'border-emerald-400/25 bg-gradient-to-br from-emerald-400/16 to-emerald-400/4 shadow-[0_14px_35px_rgba(52,211,153,0.12)]' },
+    { label: 'Vence hoje', value: venceHoje, className: 'border-amber-400/25 bg-gradient-to-br from-amber-400/16 to-amber-400/4 shadow-[0_14px_35px_rgba(251,191,36,0.12)]' },
+    { label: 'Sem responsável', value: semResponsavel, className: 'border-rose-400/25 bg-gradient-to-br from-rose-400/16 to-rose-400/4 shadow-[0_14px_35px_rgba(251,113,133,0.12)]' },
   ]
 
   return (
@@ -29,10 +29,10 @@ export function SummaryCards({ visible, novos, emAndamento, venceHoje, semRespon
       {cards.map((c) => (
         <article
           key={c.label}
-          className={`rounded-lg border p-3 flex flex-col gap-0.5 ${c.className}`}
+          className={`rounded-2xl border p-3.5 flex flex-col gap-1 ${c.className}`}
         >
-          <span className="text-xs text-muted-foreground leading-none">{c.label}</span>
-          <strong className="text-2xl font-bold tabular-nums">{c.value}</strong>
+          <span className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground leading-none">{c.label}</span>
+          <strong className="text-3xl font-semibold tabular-nums text-foreground">{c.value}</strong>
         </article>
       ))}
     </div>

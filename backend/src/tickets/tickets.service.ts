@@ -32,6 +32,7 @@ function toDto(t: Ticket): TicketDto {
     slaSolutionDate: t.slaSolutionDate,
     slaSolutionDateIsPaused: !!t.slaSolutionDateIsPaused,
     opened_at: t.opened_at,
+    closed_at: t.closed_at,
     responsavel: t.responsavel,
     assigned_at: t.assigned_at,
   };
@@ -104,8 +105,8 @@ export class TicketsService {
 
   upsertMany(tickets: Partial<Ticket>[]): void {
     const upsert = this.db.prepare(`
-      INSERT INTO tickets (id, subject, status, ownerTeam, slaSolutionDate, slaSolutionDateIsPaused, opened_at, responsavel, assigned_at, updated_at)
-      VALUES (@id, @subject, @status, @ownerTeam, @slaSolutionDate, @slaSolutionDateIsPaused, @opened_at, @responsavel, @assigned_at, datetime('now'))
+      INSERT INTO tickets (id, subject, status, ownerTeam, slaSolutionDate, slaSolutionDateIsPaused, opened_at, closed_at, responsavel, assigned_at, updated_at)
+      VALUES (@id, @subject, @status, @ownerTeam, @slaSolutionDate, @slaSolutionDateIsPaused, @opened_at, @closed_at, @responsavel, @assigned_at, datetime('now'))
       ON CONFLICT(id) DO UPDATE SET
         subject = excluded.subject,
         status = excluded.status,
@@ -113,6 +114,7 @@ export class TicketsService {
         slaSolutionDate = excluded.slaSolutionDate,
         slaSolutionDateIsPaused = excluded.slaSolutionDateIsPaused,
         opened_at = excluded.opened_at,
+        closed_at = excluded.closed_at,
         responsavel = CASE
           WHEN assignment_override = 'local_assigned' THEN responsavel
           WHEN assignment_override = 'local_unassigned' THEN NULL
@@ -140,6 +142,7 @@ export class TicketsService {
           slaSolutionDate: t.slaSolutionDate ?? null,
           slaSolutionDateIsPaused: t.slaSolutionDateIsPaused ? 1 : 0,
           opened_at: t.opened_at ?? null,
+          closed_at: t.closed_at ?? null,
           responsavel: t.responsavel ?? null,
           assigned_at: t.assigned_at ?? null,
         });

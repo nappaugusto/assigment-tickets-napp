@@ -1,8 +1,9 @@
 import { type Ticket } from '@/lib/api'
-import { getSlaStatus, getTimeUntilSla } from '@/lib/date-utils'
+import { getSlaStatus, getTimeUntilSla, formatDate } from '@/lib/date-utils'
 import { useAuth } from '@/contexts/auth-context'
 import { Badge } from '@/components/ui/badge'
 import { TicketActions } from '@/components/ticket-actions'
+import { getTicketUrl } from '@/lib/utils'
 
 const SLA_BADGE_VARIANT: Record<string, 'destructive' | 'warning' | 'secondary' | 'outline' | 'default'> = {
   expired: 'destructive',
@@ -31,7 +32,7 @@ function KanbanCard({ ticket, agentOptions, onAssign, onUnassign, isLoading, cur
     <div className={`rounded-lg border p-3 flex flex-col gap-2 bg-card ${isMyTicket ? 'border-primary/40' : 'border-border/40'}`}>
       <div className="flex items-start justify-between gap-2">
         <a
-          href={`https://support.movidesk.com/Ticket/Edit/${ticket.id}`}
+          href={getTicketUrl(ticket.id)}
           target="_blank"
           rel="noreferrer"
           className="font-mono text-xs text-primary hover:underline"
@@ -51,6 +52,10 @@ function KanbanCard({ ticket, agentOptions, onAssign, onUnassign, isLoading, cur
         ) : (
           <span className="italic">Não atribuído</span>
         )}
+      </div>
+      <div className="rounded-md bg-background/60 px-2.5 py-2 text-[11px] text-muted-foreground">
+        <span className="font-medium text-foreground/85">Fechamento:</span>{' '}
+        {ticket.closed_at ? formatDate(ticket.closed_at) : '—'}
       </div>
       <TicketActions
         ticket={ticket}

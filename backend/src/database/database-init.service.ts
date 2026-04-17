@@ -30,6 +30,7 @@ export class DatabaseInitService implements OnModuleInit {
         slaSolutionDate         TEXT,
         slaSolutionDateIsPaused INTEGER DEFAULT 0,
         opened_at               TEXT,
+        closed_at               TEXT,
         responsavel             TEXT,
         assigned_at             TEXT,
         assignment_override     TEXT,
@@ -62,6 +63,15 @@ export class DatabaseInitService implements OnModuleInit {
         UNIQUE(user_id, ticket_id)
       );
     `);
+
+    const ticketColumns = this.db
+      .prepare(`PRAGMA table_info(tickets)`)
+      .all() as { name: string }[];
+
+    if (!ticketColumns.some((column) => column.name === 'closed_at')) {
+      this.db.exec(`ALTER TABLE tickets ADD COLUMN closed_at TEXT;`);
+    }
+
     this.logger.log('Database schema initialized');
   }
 }

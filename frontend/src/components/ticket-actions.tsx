@@ -13,6 +13,7 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command'
+import { getTicketUrl } from '@/lib/utils'
 
 interface TicketActionsProps {
   ticket: Ticket
@@ -27,7 +28,7 @@ export function TicketActions({ ticket, agentOptions, onAssign, onUnassign, isLo
   const [open, setOpen] = useState(false)
 
   const copyLink = () => {
-    const url = `https://support.movidesk.com/Ticket/Edit/${ticket.id}`
+    const url = getTicketUrl(ticket.id)
     navigator.clipboard.writeText(url).then(() => toast.success('Link copiado!'))
   }
 

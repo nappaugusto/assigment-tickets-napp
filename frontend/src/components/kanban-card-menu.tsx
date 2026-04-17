@@ -13,6 +13,7 @@ import {
 import { type Ticket } from '@/lib/api'
 import { useAuth } from '@/contexts/auth-context'
 import { useTicketsWithNotes } from '@/hooks/use-ticket-note'
+import { getTicketUrl } from '@/lib/utils'
 
 interface KanbanCardMenuProps {
   ticket: Ticket
@@ -45,7 +46,7 @@ export function KanbanCardMenu({
   }
 
   const copyLink = () => {
-    const url = `https://support.movidesk.com/Ticket/Edit/${ticket.id}`
+    const url = getTicketUrl(ticket.id)
     navigator.clipboard.writeText(url).then(() => toast.success('Link copiado!'))
     close()
   }

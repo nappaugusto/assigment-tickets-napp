@@ -11,7 +11,7 @@ export type QuickFilter =
   | 'due_today'
   | 'unassigned'
 
-export type SortKey = 'id' | 'slaSolutionDate' | 'responsavel' | ''
+export type SortKey = 'id' | 'slaSolutionDate' | 'closed_at' | 'responsavel' | ''
 export type SortDir = 'asc' | 'desc'
 
 const STATUS_ALIASES: Record<string, string[]> = {
@@ -106,6 +106,9 @@ export function useTicketFilters(
         } else if (sortKey === 'slaSolutionDate') {
           aVal = a.slaSolutionDate ?? ''
           bVal = b.slaSolutionDate ?? ''
+        } else if (sortKey === 'closed_at') {
+          aVal = a.closed_at ?? ''
+          bVal = b.closed_at ?? ''
         } else if (sortKey === 'responsavel') {
           aVal = normalizeText(a.responsavel ?? '')
           bVal = normalizeText(b.responsavel ?? '')
