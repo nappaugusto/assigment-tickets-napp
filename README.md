@@ -20,7 +20,7 @@ Sistema de atribuição e acompanhamento de tickets integrado com a API do Movid
 |-----------|--------------------------------------------------------|
 | Backend   | NestJS 11, Passport (sessão), better-sqlite3, bcrypt   |
 | Frontend  | React 19, Vite 8, TypeScript, Tailwind CSS v4, shadcn  |
-| Banco     | SQLite (WAL mode)                                      |
+| Banco     | SQLite (WAL mode, persistido em volume no Docker)      |
 | Auth      | Sessão por cookie (express-session)                    |
 | Infra     | Docker, nginx, docker-compose                          |
 | Pacotes   | pnpm                                                   |
@@ -44,6 +44,7 @@ Variáveis obrigatórias:
 | Variável                    | Descrição                                            |
 |-----------------------------|------------------------------------------------------|
 | `SESSION_SECRET`            | Segredo para assinar cookies de sessão               |
+| `DATABASE_PATH`             | Caminho do SQLite; em produção use diretório persistente |
 | `MOVIDESK_API_TOKEN`        | Token da API pública do Movidesk                     |
 | `MOVIDESK_API_QUERY_PARAMS` | Query de busca de tickets, incluindo campos de SLA e fechamento |
 | `ASSIGNMENT_TEAM_NAMES`     | Nomes das equipes para o seletor de atribuição       |
@@ -107,6 +108,7 @@ make docker-down  # para e remove
 ```
 
 A imagem Docker inclui nginx na porta 80 servindo o frontend e fazendo proxy das rotas de API para o NestJS interno.
+No fluxo Docker, o banco é salvo em `./data/tickets.db` no host e montado como volume persistente dentro do container.
 
 ### Outros targets
 
@@ -139,6 +141,7 @@ O `nginx.conf` faz:
 - Cache de 1 ano para assets estáticos (JS/CSS/fontes)
 
 O `docker-compose.yml` monta o volume `./data` para persistir o banco SQLite fora do container.
+O target `make docker-run` também cria e monta `./data`, evitando perda do banco mesmo sem `docker compose`.
 
 ---
 

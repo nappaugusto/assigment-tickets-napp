@@ -3,6 +3,8 @@ import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import type { Request as ExpressRequest, Response as ExpressResponse } from 'express';
 import Database from 'better-sqlite3';
+import { mkdirSync } from 'fs';
+import { dirname } from 'path';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const session = require('express-session');
@@ -27,7 +29,8 @@ async function bootstrap() {
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
-  const dbPath = process.env.DATABASE_PATH ?? './tickets.db';
+  const dbPath = process.env.DATABASE_PATH ?? './data/tickets.db';
+  mkdirSync(dirname(dbPath), { recursive: true });
 
   app.use(
     session({

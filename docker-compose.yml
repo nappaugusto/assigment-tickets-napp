@@ -5,6 +5,8 @@ services:
       - "80:80"
     env_file:
       - .env
+    environment:
+      DATABASE_PATH: /app/backend/data/tickets.db
     volumes:
       # Persist SQLite database outside the container
       - ./data:/app/backend/data
