@@ -55,8 +55,6 @@ RUN chmod +x /app/docker-start.sh
 
 ENV DATABASE_PATH=/app/backend/data/tickets.db
 
-VOLUME ["/app/backend/data"]
-
 EXPOSE 8080
 
 CMD ["/app/docker-start.sh"]
