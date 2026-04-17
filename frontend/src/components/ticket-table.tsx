@@ -88,7 +88,7 @@ function TicketRow({ ticket, agentOptions, onAssign, onUnassign, isLoading, curr
           </Badge>
         </TableCell>
         <TableCell className="w-40 text-sm text-muted-foreground">
-          {ticket.closed_at ? formatDate(ticket.closed_at) : '—'}
+          {ticket.slaSolutionDate ? formatDate(ticket.slaSolutionDate) : '—'}
         </TableCell>
         <TableCell className="w-36 text-sm">
           {ticket.responsavel ? (
@@ -163,7 +163,7 @@ function Section({
                 <SortButton label="Data SLA" sortK="slaSolutionDate" active={sortKey} dir={sortDir} onSort={onSort} />
               </TableHead>
               <TableHead className="w-40">
-                <SortButton label="Fechamento" sortK="closed_at" active={sortKey} dir={sortDir} onSort={onSort} />
+                <SortButton label="Vencimento" sortK="slaSolutionDate" active={sortKey} dir={sortDir} onSort={onSort} />
               </TableHead>
               <TableHead className="w-36">
                 <SortButton label="Responsável" sortK="responsavel" active={sortKey} dir={sortDir} onSort={onSort} />

@@ -54,8 +54,8 @@ function KanbanCard({ ticket, agentOptions, onAssign, onUnassign, isLoading, cur
         )}
       </div>
       <div className="rounded-md bg-background/60 px-2.5 py-2 text-[11px] text-muted-foreground">
-        <span className="font-medium text-foreground/85">Fechamento:</span>{' '}
-        {ticket.closed_at ? formatDate(ticket.closed_at) : '—'}
+        <span className="font-medium text-foreground/85">Vencimento:</span>{' '}
+        {ticket.slaSolutionDate ? formatDate(ticket.slaSolutionDate) : '—'}
       </div>
       <TicketActions
         ticket={ticket}
