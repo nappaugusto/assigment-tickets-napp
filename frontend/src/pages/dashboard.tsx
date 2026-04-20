@@ -108,15 +108,7 @@ export function DashboardPage() {
           />
 
           <MonthlyAnalytics
-            analytics={{
-              generated_at: monthlyAnalytics?.generated_at ?? new Date(0).toISOString(),
-              ...monthlyAnalytics,
-              months: monthlyAnalytics?.months?.slice(-3) ?? [],
-              current_month:
-                monthlyAnalytics?.months?.slice(-3).at(-1) ??
-                monthlyAnalytics?.current_month ??
-                null,
-            }}
+            analytics={monthlyAnalytics}
             isLoading={isLoading || syncMutation.isPending}
           />
 
