@@ -89,6 +89,19 @@ export class SyncService {
     return FINAL_STATUS_KEYWORDS.some((keyword) => normalized.includes(keyword));
   }
 
+  private resolveClosedAt(ticket: RawTicket): string | null {
+    const explicitValue = this.getNested(
+      ticket,
+      'closedDate',
+      'closedDateTime',
+      'resolvedDate',
+      'resolvedDateTime',
+    );
+
+    const explicitString = String(explicitValue ?? '').trim();
+    return explicitString || null;
+  }
+
   private normalizeTicket(ticket: RawTicket): Record<string, unknown> | null {
     const id = this.getNested(ticket, 'id');
     if (id === null || id === undefined) return null;
@@ -114,37 +127,9 @@ export class SyncService {
     const openedAt = (
       String(this.getNested(ticket, 'createdDate', 'createdDateTime', 'createdAt') ?? '')
     ).trim() || null;
-    let closedAt = (
-      String(
-        this.getNested(
-          ticket,
-          'closedDate',
-          'closedDateTime',
-          'resolvedDate',
-          'resolvedDateTime',
-        ) ?? '',
-      )
-    ).trim() || null;
+    const closedAt = this.resolveClosedAt(ticket);
 
     const isFinalStatus = this.isFinalStatus(status);
-
-    if (!closedAt && isFinalStatus) {
-      closedAt = (
-        String(
-          this.getNested(
-            ticket,
-            'statusChangedDate',
-            'statusChangedDateTime',
-            'actionDate',
-            'actionDateTime',
-            'lastActionDate',
-            'lastActionDateTime',
-            'lastUpdate',
-            'lastUpdateDate',
-          ) ?? '',
-        )
-      ).trim() || null;
-    }
 
     const responsavelRaw = this.getNested(
       ticket,
