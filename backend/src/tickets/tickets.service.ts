@@ -258,7 +258,7 @@ export class TicketsService {
         if (bucket) bucket.opened += 1;
       }
 
-      const resolvedReferenceDate = closedAt ?? slaAt ?? openedAt;
+      const resolvedReferenceDate = slaAt ?? closedAt ?? openedAt;
 
       if (finalStatus && resolvedReferenceDate) {
         const bucket = monthMap.get(monthKey(resolvedReferenceDate));
