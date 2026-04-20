@@ -264,8 +264,10 @@ export class TicketsService {
         const bucket = monthMap.get(monthKey(resolvedReferenceDate));
         if (bucket) {
           bucket.resolved += 1;
-          if (closedAt && slaAt) {
-            if (closedAt.getTime() <= slaAt.getTime()) {
+          if (slaAt) {
+            const comparisonDate = closedAt ?? now;
+
+            if (comparisonDate.getTime() <= slaAt.getTime()) {
               bucket.resolved_on_time += 1;
             } else {
               bucket.resolved_late += 1;
