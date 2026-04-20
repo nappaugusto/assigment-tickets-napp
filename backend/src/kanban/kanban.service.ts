@@ -1,5 +1,5 @@
 import { Injectable, Inject, BadRequestException } from '@nestjs/common';
-import { Pool } from 'pg';
+import Database from 'better-sqlite3';
 import { DB_TOKEN } from '../database/database.module';
 import { KanbanBoardDto, SaveBoardDto, DEFAULT_BOARD } from './kanban.dto';
 
@@ -13,43 +13,38 @@ interface KanbanBoardRow {
 
 @Injectable()
 export class KanbanService {
-  constructor(@Inject(DB_TOKEN) private readonly db: Pool) {}
+  constructor(@Inject(DB_TOKEN) private readonly db: Database.Database) {}
 
-  async getBoard(userId: number): Promise<KanbanBoardDto> {
-    const result = await this.db.query<KanbanBoardRow>(
-      'SELECT * FROM kanban_board WHERE user_id = $1',
-      [userId],
-    );
-    const row = result.rows[0];
+  getBoard(userId: number): KanbanBoardDto {
+    const row = this.db
+      .prepare('SELECT * FROM kanban_board WHERE user_id = ?')
+      .get(userId) as KanbanBoardRow | undefined;
 
     if (!row) return { columns: [...DEFAULT_BOARD.columns], columnItems: {} };
 
-    const parsedColumns =
-      typeof row.columns === 'string' ? JSON.parse(row.columns) : row.columns;
-    const parsedItems =
-      typeof row.positions === 'string' ? JSON.parse(row.positions) : row.positions;
+    const parsedColumns = JSON.parse(row.columns);
+    const parsedItems = JSON.parse(row.positions);
     return {
       columns: Array.isArray(parsedColumns) ? parsedColumns : [...DEFAULT_BOARD.columns],
       columnItems: parsedItems && typeof parsedItems === 'object' ? parsedItems : {},
     };
   }
 
-  async saveBoard(userId: number, dto: SaveBoardDto): Promise<void> {
+  saveBoard(userId: number, dto: SaveBoardDto): void {
     const defaultCol = dto.columns.find((c) => c.isDefault);
     if (!defaultCol) {
       throw new BadRequestException('Board must have a default column.');
     }
 
-    await this.db.query(
-      `
+    this.db
+      .prepare(`
         INSERT INTO kanban_board (user_id, columns, positions, updated_at)
-        VALUES ($1, $2::jsonb, $3::jsonb, NOW())
+        VALUES (?, ?, ?, datetime('now'))
         ON CONFLICT(user_id) DO UPDATE SET
           columns = excluded.columns,
           positions = excluded.positions,
           updated_at = excluded.updated_at
-      `,
-      [userId, JSON.stringify(dto.columns), JSON.stringify(dto.columnItems)],
-    );
+      `)
+      .run(userId, JSON.stringify(dto.columns), JSON.stringify(dto.columnItems));
   }
 }

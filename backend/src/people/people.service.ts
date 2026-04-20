@@ -86,7 +86,7 @@ export class PeopleService {
       }
 
       // Fallback: names from tickets
-      for (const r of await this.ticketsService.getAllResponsaveis()) {
+      for (const r of this.ticketsService.getAllResponsaveis()) {
         people.add(r);
       }
 
@@ -97,7 +97,7 @@ export class PeopleService {
     } catch (err) {
       this.logger.error(`Error fetching people: ${(err as Error).message}`);
       // Fallback to ticket responsaveis
-      const fallback = await this.ticketsService.getAllResponsaveis();
+      const fallback = this.ticketsService.getAllResponsaveis();
       return fallback;
     }
   }

@@ -79,7 +79,7 @@ export class AuthController {
       throw new BadRequestException(result.error);
     }
 
-    const fullUser = await this.usersService.findByUsername(dto.username);
+    const fullUser = this.usersService.findByUsername(dto.username);
     if (!fullUser) {
       throw new BadRequestException('Erro ao criar usuário.');
     }

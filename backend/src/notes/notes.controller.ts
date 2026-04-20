@@ -11,25 +11,25 @@ export class NotesController {
   constructor(private readonly notesService: NotesService) {}
 
   @Get('tickets-with-notes')
-  async getTicketsWithNotes(@Req() req: Request) {
+  getTicketsWithNotes(@Req() req: Request) {
     const user = (req as any).user as User;
-    return { ticketIds: await this.notesService.getTicketsWithNotes(user.id) };
+    return { ticketIds: this.notesService.getTicketsWithNotes(user.id) };
   }
 
   @Get(':ticketId')
-  async getNote(@Param('ticketId', ParseIntPipe) ticketId: number, @Req() req: Request) {
+  getNote(@Param('ticketId', ParseIntPipe) ticketId: number, @Req() req: Request) {
     const user = (req as any).user as User;
-    return { content: await this.notesService.getNote(user.id, ticketId) };
+    return { content: this.notesService.getNote(user.id, ticketId) };
   }
 
   @Put(':ticketId')
-  async saveNote(
+  saveNote(
     @Param('ticketId', ParseIntPipe) ticketId: number,
     @Body() dto: SaveNoteDto,
     @Req() req: Request,
   ) {
     const user = (req as any).user as User;
-    await this.notesService.saveNote(user.id, ticketId, dto.content);
+    this.notesService.saveNote(user.id, ticketId, dto.content);
     return { success: true };
   }
 }

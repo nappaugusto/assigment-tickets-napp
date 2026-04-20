@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { Pool } from 'pg';
+import Database from 'better-sqlite3';
 import { DB_TOKEN } from '../database/database.module';
 import {
   Ticket,
@@ -30,23 +30,17 @@ function isFinal(status: string | null): boolean {
 
 function toDto(t: Ticket): TicketDto {
   return {
-    id: Number(t.id),
+    id: t.id,
     subject: t.subject,
     status: t.status,
     ownerTeam: t.ownerTeam,
-    slaSolutionDate: toIsoString(t.slaSolutionDate),
+    slaSolutionDate: t.slaSolutionDate,
     slaSolutionDateIsPaused: !!t.slaSolutionDateIsPaused,
-    opened_at: toIsoString(t.opened_at),
-    closed_at: toIsoString(t.closed_at),
+    opened_at: t.opened_at,
+    closed_at: t.closed_at,
     responsavel: t.responsavel,
-    assigned_at: toIsoString(t.assigned_at),
+    assigned_at: t.assigned_at,
   };
-}
-
-function toIsoString(value: string | Date | null | undefined): string | null {
-  if (!value) return null;
-  const parsed = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
 function isToday(isoDate: string | null): boolean {
@@ -81,156 +75,122 @@ function parseIsoDate(value: string | null): Date | null {
 
 @Injectable()
 export class TicketsService {
-  constructor(@Inject(DB_TOKEN) private readonly db: Pool) {}
+  constructor(@Inject(DB_TOKEN) private readonly db: Database.Database) {}
 
-  async getAll(): Promise<TicketDto[]> {
-    const result = await this.db.query<Ticket>(`SELECT * FROM tickets ORDER BY id DESC`);
-    const rows = result.rows;
+  getAll(): TicketDto[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM tickets ORDER BY id DESC`)
+      .all() as Ticket[];
     return rows.map(toDto);
   }
 
-  async getActive(): Promise<TicketDto[]> {
-    const result = await this.db.query<Ticket>(`SELECT * FROM tickets ORDER BY id DESC`);
-    const rows = result.rows;
+  getActive(): TicketDto[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM tickets ORDER BY id DESC`)
+      .all() as Ticket[];
     return rows
-      .filter((t: Ticket) => !isFinal(t.status) && !isToday(toIsoString(t.opened_at)))
+      .filter((t) => !isFinal(t.status) && !isToday(t.opened_at))
       .map(toDto);
   }
 
-  async getNewToday(): Promise<TicketDto[]> {
-    const result = await this.db.query<Ticket>(`SELECT * FROM tickets ORDER BY id DESC`);
-    const rows = result.rows;
-    return rows
-      .filter((t: Ticket) => !isFinal(t.status) && isToday(toIsoString(t.opened_at)))
-      .map(toDto);
+  getNewToday(): TicketDto[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM tickets ORDER BY id DESC`)
+      .all() as Ticket[];
+    return rows.filter((t) => !isFinal(t.status) && isToday(t.opened_at)).map(toDto);
   }
 
-  async findById(id: number): Promise<TicketDto | undefined> {
-    const result = await this.db.query<Ticket>(
-      `SELECT * FROM tickets WHERE id = $1 LIMIT 1`,
-      [id],
-    );
-    const t = result.rows[0];
+  findById(id: number): TicketDto | undefined {
+    const t = this.db
+      .prepare(`SELECT * FROM tickets WHERE id = ? LIMIT 1`)
+      .get(id) as Ticket | undefined;
     return t ? toDto(t) : undefined;
   }
 
-  async assign(id: number, responsavel: string): Promise<void> {
-    await this.db.query(
-      `
-        UPDATE tickets
-        SET responsavel = $1,
-            assigned_at = NOW(),
-            assignment_override = 'local_assigned',
-            updated_at = NOW()
-        WHERE id = $2
-      `,
-      [responsavel, id],
-    );
+  assign(id: number, responsavel: string): void {
+    this.db
+      .prepare(
+        `UPDATE tickets
+         SET responsavel = ?, assigned_at = datetime('now'), assignment_override = 'local_assigned', updated_at = datetime('now')
+         WHERE id = ?`,
+      )
+      .run(responsavel, id);
   }
 
-  async unassign(id: number): Promise<void> {
-    await this.db.query(
-      `
-        UPDATE tickets
-        SET responsavel = NULL,
-            assigned_at = NULL,
-            assignment_override = 'local_unassigned',
-            updated_at = NOW()
-        WHERE id = $1
-      `,
-      [id],
-    );
+  unassign(id: number): void {
+    this.db
+      .prepare(
+        `UPDATE tickets
+         SET responsavel = NULL, assigned_at = NULL, assignment_override = 'local_unassigned', updated_at = datetime('now')
+         WHERE id = ?`,
+      )
+      .run(id);
   }
 
-  async upsertMany(tickets: Partial<Ticket>[]): Promise<void> {
-    const client = await this.db.connect();
+  upsertMany(tickets: Partial<Ticket>[]): void {
+    const upsert = this.db.prepare(`
+      INSERT INTO tickets (id, subject, status, ownerTeam, slaSolutionDate, slaSolutionDateIsPaused, opened_at, closed_at, responsavel, assigned_at, updated_at)
+      VALUES (@id, @subject, @status, @ownerTeam, @slaSolutionDate, @slaSolutionDateIsPaused, @opened_at, @closed_at, @responsavel, @assigned_at, datetime('now'))
+      ON CONFLICT(id) DO UPDATE SET
+        subject = excluded.subject,
+        status = excluded.status,
+        ownerTeam = excluded.ownerTeam,
+        slaSolutionDate = excluded.slaSolutionDate,
+        slaSolutionDateIsPaused = excluded.slaSolutionDateIsPaused,
+        opened_at = excluded.opened_at,
+        closed_at = excluded.closed_at,
+        responsavel = CASE
+          WHEN assignment_override = 'local_assigned' THEN responsavel
+          WHEN assignment_override = 'local_unassigned' THEN NULL
+          ELSE excluded.responsavel
+        END,
+        assigned_at = CASE
+          WHEN assignment_override = 'local_assigned' THEN assigned_at
+          WHEN assignment_override = 'local_unassigned' THEN NULL
+          ELSE excluded.assigned_at
+        END,
+        updated_at = datetime('now')
+    `);
 
-    try {
-      await client.query('BEGIN');
+    const deleteOld = this.db.prepare(
+      `DELETE FROM tickets WHERE id NOT IN (${tickets.map(() => '?').join(',')})`,
+    );
 
+    this.db.transaction(() => {
       for (const t of tickets) {
-        await client.query(
-          `
-            INSERT INTO tickets (
-              id,
-              subject,
-              status,
-              "ownerTeam",
-              "slaSolutionDate",
-              "slaSolutionDateIsPaused",
-              opened_at,
-              closed_at,
-              responsavel,
-              assigned_at,
-              updated_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
-            ON CONFLICT (id) DO UPDATE SET
-              subject = EXCLUDED.subject,
-              status = EXCLUDED.status,
-              "ownerTeam" = EXCLUDED."ownerTeam",
-              "slaSolutionDate" = EXCLUDED."slaSolutionDate",
-              "slaSolutionDateIsPaused" = EXCLUDED."slaSolutionDateIsPaused",
-              opened_at = EXCLUDED.opened_at,
-              closed_at = EXCLUDED.closed_at,
-              responsavel = CASE
-                WHEN tickets.assignment_override = 'local_assigned' THEN tickets.responsavel
-                WHEN tickets.assignment_override = 'local_unassigned' THEN NULL
-                ELSE EXCLUDED.responsavel
-              END,
-              assigned_at = CASE
-                WHEN tickets.assignment_override = 'local_assigned' THEN tickets.assigned_at
-                WHEN tickets.assignment_override = 'local_unassigned' THEN NULL
-                ELSE EXCLUDED.assigned_at
-              END,
-              updated_at = NOW()
-          `,
-          [
-            t.id,
-            t.subject ?? null,
-            t.status ?? null,
-            t.ownerTeam ?? null,
-            toIsoString(t.slaSolutionDate) ?? null,
-            !!t.slaSolutionDateIsPaused,
-            toIsoString(t.opened_at) ?? null,
-            toIsoString(t.closed_at) ?? null,
-            t.responsavel ?? null,
-            toIsoString(t.assigned_at) ?? null,
-          ],
-        );
+        upsert.run({
+          id: t.id,
+          subject: t.subject ?? null,
+          status: t.status ?? null,
+          ownerTeam: t.ownerTeam ?? null,
+          slaSolutionDate: t.slaSolutionDate ?? null,
+          slaSolutionDateIsPaused: t.slaSolutionDateIsPaused ? 1 : 0,
+          opened_at: t.opened_at ?? null,
+          closed_at: t.closed_at ?? null,
+          responsavel: t.responsavel ?? null,
+          assigned_at: t.assigned_at ?? null,
+        });
       }
-
       if (tickets.length > 0) {
-        await client.query(`DELETE FROM tickets WHERE id <> ALL($1::bigint[])`, [
-          tickets.map((ticket) => Number(ticket.id)),
-        ]);
+        deleteOld.run(...tickets.map((t) => t.id));
       }
-
-      await client.query('COMMIT');
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
-    }
+    })();
   }
 
-  async getAllResponsaveis(): Promise<string[]> {
-    const result = await this.db.query<{ responsavel: string }>(
-      `
-        SELECT DISTINCT responsavel
-        FROM tickets
-        WHERE responsavel IS NOT NULL
-        ORDER BY responsavel
-      `,
-    );
-    return result.rows.map((r: { responsavel: string }) => r.responsavel);
+  getAllResponsaveis(): string[] {
+    const rows = this.db
+      .prepare(
+        `SELECT DISTINCT responsavel FROM tickets WHERE responsavel IS NOT NULL ORDER BY responsavel`,
+      )
+      .all() as { responsavel: string }[];
+    return rows.map((r) => r.responsavel);
   }
 
-  async getMonthlyAnalytics(months = 6): Promise<TicketMonthlyAnalyticsDto> {
+  getMonthlyAnalytics(months = 6): TicketMonthlyAnalyticsDto {
     const totalMonths = Math.max(1, Math.min(months, 24));
-    const result = await this.db.query<Ticket>(`SELECT * FROM tickets ORDER BY id DESC`);
-    const rows = result.rows;
+    const rows = this.db
+      .prepare(`SELECT * FROM tickets ORDER BY id DESC`)
+      .all() as Ticket[];
 
     const now = new Date();
     const firstMonth = startOfMonth(addMonths(now, -(totalMonths - 1)));
@@ -250,9 +210,9 @@ export class TicketsService {
     }
 
     for (const ticket of rows) {
-      const openedAt = parseIsoDate(toIsoString(ticket.opened_at));
-      const closedAt = parseIsoDate(toIsoString(ticket.closed_at));
-      const slaAt = parseIsoDate(toIsoString(ticket.slaSolutionDate));
+      const openedAt = parseIsoDate(ticket.opened_at);
+      const closedAt = parseIsoDate(ticket.closed_at);
+      const slaAt = parseIsoDate(ticket.slaSolutionDate);
 
       if (openedAt) {
         const bucket = monthMap.get(monthKey(openedAt));

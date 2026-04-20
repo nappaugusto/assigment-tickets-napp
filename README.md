@@ -6,7 +6,7 @@ Sistema de atribuição e acompanhamento de tickets integrado com a API do Movid
 
 ```
 /
-├── backend/          # API REST — NestJS + TypeScript + PostgreSQL
+├── backend/          # API REST — NestJS + TypeScript + SQLite
 ├── frontend/         # SPA — React + Vite + TypeScript + shadcn/ui
 ├── Dockerfile        # Build multi-stage (frontend + backend + nginx)
 ├── docker-compose.yml
@@ -18,9 +18,9 @@ Sistema de atribuição e acompanhamento de tickets integrado com a API do Movid
 
 | Camada    | Tecnologia                                             |
 |-----------|--------------------------------------------------------|
-| Backend   | NestJS 11, Passport (sessão), pg, bcrypt               |
+| Backend   | NestJS 11, Passport (sessão), better-sqlite3, bcrypt   |
 | Frontend  | React 19, Vite 8, TypeScript, Tailwind CSS v4, shadcn  |
-| Banco     | PostgreSQL                                             |
+| Banco     | SQLite (WAL mode, persistido em volume no Docker)      |
 | Auth      | Sessão por cookie (express-session)                    |
 | Infra     | Docker, nginx, docker-compose                          |
 | Pacotes   | pnpm                                                   |
@@ -44,8 +44,7 @@ Variáveis obrigatórias:
 | Variável                    | Descrição                                            |
 |-----------------------------|------------------------------------------------------|
 | `SESSION_SECRET`            | Segredo para assinar cookies de sessão               |
-| `DATABASE_URL`              | String de conexão do PostgreSQL                         |
-| `DATABASE_SSL`              | Ative `true` quando o provedor exigir SSL               |
+| `DATABASE_PATH`             | Caminho do SQLite; em produção use diretório persistente |
 | `MOVIDESK_API_TOKEN`        | Token da API pública do Movidesk                     |
 | `MOVIDESK_API_QUERY_PARAMS` | Query de busca de tickets, incluindo campos de SLA e fechamento |
 | `ASSIGNMENT_TEAM_NAMES`     | Nomes das equipes para o seletor de atribuição       |
@@ -109,7 +108,7 @@ make docker-down  # para e remove
 ```
 
 A imagem Docker inclui nginx na porta 80 servindo o frontend e fazendo proxy das rotas de API para o NestJS interno.
-No fluxo Docker Compose, um container PostgreSQL dedicado mantém os dados em volume persistente.
+No fluxo Docker, o banco é salvo em `./data/tickets.db` no host e montado como volume persistente dentro do container.
 
 ### Outros targets
 
@@ -141,8 +140,8 @@ O `nginx.conf` faz:
 - Gzip habilitado
 - Cache de 1 ano para assets estáticos (JS/CSS/fontes)
 
-O `docker-compose.yml` sobe um serviço `db` com PostgreSQL 16 e volume persistente `postgres_data`.
-Em produção, o recomendado é usar `DATABASE_URL` de um Postgres gerenciado, como Railway PostgreSQL.
+O `docker-compose.yml` monta o volume `./data` para persistir o banco SQLite fora do container.
+O target `make docker-run` também cria e monta `./data`, evitando perda do banco mesmo sem `docker compose`.
 
 ---
 
@@ -163,7 +162,7 @@ Em produção, o recomendado é usar `DATABASE_URL` de um Postgres gerenciado, c
 ```
 backend/src/
 ├── auth/              # Autenticação (Passport local + sessão)
-├── database/          # Módulo PostgreSQL + inicialização do schema
+├── database/          # Módulo SQLite + inicialização do schema
 ├── email/             # Envio de e-mails via SMTP
 ├── password-reset/    # Fluxo de recuperação de senha
 ├── people/            # Busca de agentes via API Movidesk
