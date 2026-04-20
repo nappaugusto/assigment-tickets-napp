@@ -9,6 +9,14 @@ import {
 } from './ticket.entity';
 
 const FINAL_STATUS_KEYWORDS = ['cancelado', 'resolvido', 'fechado'];
+const BRAZIL_LOCALE = 'pt-BR';
+const BRAZIL_TIME_ZONE = 'America/Sao_Paulo';
+
+interface CalendarDateParts {
+  year: number;
+  month: number;
+  day: number;
+}
 
 function normalize(s: string): string {
   return s
@@ -49,72 +57,112 @@ function isToday(isoDate: string | null): boolean {
   );
 }
 
-function startOfMonth(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), 1);
+function monthKeyFromParts(parts: CalendarDateParts): string {
+  return `${parts.year}-${`${parts.month}`.padStart(2, '0')}`;
 }
 
-function addMonths(date: Date, delta: number): Date {
-  return new Date(date.getFullYear(), date.getMonth() + delta, 1);
+function getBrazilDateParts(date: Date): CalendarDateParts {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: BRAZIL_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+
+  const parts = formatter.formatToParts(date);
+  const year = Number(parts.find((part) => part.type === 'year')?.value);
+  const month = Number(parts.find((part) => part.type === 'month')?.value);
+  const day = Number(parts.find((part) => part.type === 'day')?.value);
+
+  return { year, month, day };
 }
 
-function monthKey(date: Date): string {
-  const month = `${date.getMonth() + 1}`.padStart(2, '0');
-  return `${date.getFullYear()}-${month}`;
-}
-
-function parseTicketDate(value: string | null): Date | null {
+function parseCalendarDateParts(value: string | null): CalendarDateParts | null {
   if (!value) return null;
 
   const trimmed = value.trim();
   if (!trimmed) return null;
 
-  const dotNetMatch = trimmed.match(/\/Date\((\d+)\)\//);
-  if (dotNetMatch) {
-    const parsed = new Date(Number(dotNetMatch[1]));
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s].*)?$/);
+  if (isoMatch) {
+    return {
+      year: Number(isoMatch[1]),
+      month: Number(isoMatch[2]),
+      day: Number(isoMatch[3]),
+    };
   }
 
   const brMatch = trimmed.match(
     /^(\d{2})\/(\d{2})\/(\d{4})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/,
   );
   if (brMatch) {
-    const [, day, month, year, hours = '00', minutes = '00', seconds = '00'] = brMatch;
-    const parsed = new Date(
-      Number(year),
-      Number(month) - 1,
-      Number(day),
-      Number(hours),
-      Number(minutes),
-      Number(seconds),
-    );
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
+    return {
+      year: Number(brMatch[3]),
+      month: Number(brMatch[2]),
+      day: Number(brMatch[1]),
+    };
+  }
+
+  const dotNetMatch = trimmed.match(/\/Date\((\d+)\)\//);
+  if (dotNetMatch) {
+    return getBrazilDateParts(new Date(Number(dotNetMatch[1])));
   }
 
   const parsed = new Date(trimmed);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+  return Number.isNaN(parsed.getTime()) ? null : getBrazilDateParts(parsed);
 }
 
-function endOfDay(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+function compareCalendarDateParts(a: CalendarDateParts, b: CalendarDateParts): number {
+  if (a.year !== b.year) return a.year - b.year;
+  if (a.month !== b.month) return a.month - b.month;
+  return a.day - b.day;
 }
 
-function isOnTimeByCurrentDay(referenceDate: Date, slaDate: Date): boolean {
-  return endOfDay(referenceDate).getTime() <= endOfDay(slaDate).getTime();
+function isOnTimeByBrazilCalendar(
+  referenceDate: CalendarDateParts,
+  slaDate: CalendarDateParts,
+): boolean {
+  return compareCalendarDateParts(referenceDate, slaDate) <= 0;
 }
 
-function getAnalyticsAnchorDate(rows: Ticket[], fallback: Date): Date {
-  let latestTimestamp = 0;
+function createBrazilMonthLabel(year: number, month: number): string {
+  return new Intl.DateTimeFormat(BRAZIL_LOCALE, {
+    timeZone: BRAZIL_TIME_ZONE,
+    month: 'short',
+    year: 'numeric',
+  }).format(new Date(Date.UTC(year, month - 1, 1, 12, 0, 0)));
+}
+
+function addMonthsToParts(parts: CalendarDateParts, delta: number): CalendarDateParts {
+  const date = new Date(parts.year, parts.month - 1 + delta, 1);
+  return {
+    year: date.getFullYear(),
+    month: date.getMonth() + 1,
+    day: 1,
+  };
+}
+
+function getAnalyticsAnchorMonthParts(rows: Ticket[], fallback: Date): CalendarDateParts {
+  let latestMonthParts: CalendarDateParts | null = null;
 
   for (const ticket of rows) {
     for (const value of [ticket.opened_at, ticket.closed_at, ticket.slaSolutionDate]) {
-      const parsed = parseTicketDate(value);
-      if (parsed && parsed.getTime() > latestTimestamp) {
-        latestTimestamp = parsed.getTime();
+      const parts = parseCalendarDateParts(value);
+      if (!parts) continue;
+
+      if (
+        !latestMonthParts ||
+        compareCalendarDateParts(
+          { year: parts.year, month: parts.month, day: 1 },
+          { year: latestMonthParts.year, month: latestMonthParts.month, day: 1 },
+        ) > 0
+      ) {
+        latestMonthParts = { year: parts.year, month: parts.month, day: 1 };
       }
     }
   }
 
-  return latestTimestamp > 0 ? new Date(latestTimestamp) : fallback;
+  return latestMonthParts ?? { ...getBrazilDateParts(fallback), day: 1 };
 }
 
 @Injectable()
@@ -237,16 +285,17 @@ export class TicketsService {
       .all() as Ticket[];
 
     const now = new Date();
-    const anchorDate = getAnalyticsAnchorDate(rows, now);
-    const firstMonth = startOfMonth(addMonths(anchorDate, -(totalMonths - 1)));
+    const brazilToday = getBrazilDateParts(now);
+    const anchorMonth = getAnalyticsAnchorMonthParts(rows, now);
+    const firstMonth = addMonthsToParts(anchorMonth, -(totalMonths - 1));
     const monthMap = new Map<string, TicketMonthlyAnalyticsItem>();
 
     for (let index = 0; index < totalMonths; index++) {
-      const current = addMonths(firstMonth, index);
-      const key = monthKey(current);
+      const current = addMonthsToParts(firstMonth, index);
+      const key = monthKeyFromParts(current);
       monthMap.set(key, {
         month: key,
-        label: current.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }),
+        label: createBrazilMonthLabel(current.year, current.month),
         opened: 0,
         resolved: 0,
         breached: 0,
@@ -256,24 +305,22 @@ export class TicketsService {
     }
 
     for (const ticket of rows) {
-      const openedAt = parseTicketDate(ticket.opened_at);
-      const closedAt = parseTicketDate(ticket.closed_at);
-      const slaAt = parseTicketDate(ticket.slaSolutionDate);
+      const openedAt = parseCalendarDateParts(ticket.opened_at);
+      const slaAt = parseCalendarDateParts(ticket.slaSolutionDate);
       const finalStatus = isFinal(ticket.status);
+      const resolvedAt = finalStatus ? brazilToday : null;
 
       if (openedAt) {
-        const bucket = monthMap.get(monthKey(openedAt));
+        const bucket = monthMap.get(monthKeyFromParts(openedAt));
         if (bucket) bucket.opened += 1;
       }
 
-      const resolvedReferenceDate = slaAt ?? closedAt ?? openedAt;
-
-      if (finalStatus && resolvedReferenceDate) {
-        const bucket = monthMap.get(monthKey(resolvedReferenceDate));
+      if (resolvedAt) {
+        const bucket = monthMap.get(monthKeyFromParts(resolvedAt));
         if (bucket) {
           bucket.resolved += 1;
           if (slaAt) {
-            if (isOnTimeByCurrentDay(now, slaAt)) {
+            if (isOnTimeByBrazilCalendar(resolvedAt, slaAt)) {
               bucket.resolved_on_time += 1;
             } else {
               bucket.resolved_late += 1;
@@ -283,8 +330,8 @@ export class TicketsService {
       }
 
       if (slaAt) {
-        const bucket = monthMap.get(monthKey(slaAt));
-        const breached = !isOnTimeByCurrentDay(now, slaAt);
+        const bucket = monthMap.get(monthKeyFromParts(slaAt));
+        const breached = !isOnTimeByBrazilCalendar(brazilToday, slaAt);
 
         if (bucket && breached) {
           bucket.breached += 1;
