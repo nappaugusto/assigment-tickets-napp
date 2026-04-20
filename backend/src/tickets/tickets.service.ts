@@ -94,6 +94,14 @@ function parseTicketDate(value: string | null): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+function endOfDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+}
+
+function isOnTimeByCurrentDay(referenceDate: Date, slaDate: Date): boolean {
+  return endOfDay(referenceDate).getTime() <= endOfDay(slaDate).getTime();
+}
+
 function getAnalyticsAnchorDate(rows: Ticket[], fallback: Date): Date {
   let latestTimestamp = 0;
 
@@ -265,7 +273,7 @@ export class TicketsService {
         if (bucket) {
           bucket.resolved += 1;
           if (slaAt) {
-            if (now.getTime() <= slaAt.getTime()) {
+            if (isOnTimeByCurrentDay(now, slaAt)) {
               bucket.resolved_on_time += 1;
             } else {
               bucket.resolved_late += 1;
@@ -277,8 +285,8 @@ export class TicketsService {
       if (slaAt) {
         const bucket = monthMap.get(monthKey(slaAt));
         const breached =
-          (!finalStatus && slaAt.getTime() < now.getTime()) ||
-          (finalStatus && !!closedAt && closedAt.getTime() > slaAt.getTime());
+          (!finalStatus && !isOnTimeByCurrentDay(now, slaAt)) ||
+          (finalStatus && !!closedAt && !isOnTimeByCurrentDay(closedAt, slaAt));
 
         if (bucket && breached) {
           bucket.breached += 1;

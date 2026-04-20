@@ -4,6 +4,10 @@
 
 export type SlaStatus = 'expired' | 'warning' | 'normal' | 'paused' | 'none'
 
+function endOfDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999)
+}
+
 export function getSlaStatus(
   slaSolutionDate: string | null,
   isPaused: boolean,
@@ -13,10 +17,12 @@ export function getSlaStatus(
 
   const deadline = new Date(slaSolutionDate)
   const now = new Date()
+  const deadlineDayEnd = endOfDay(deadline)
+  const nowDayEnd = endOfDay(now)
 
-  if (deadline < now) return 'expired'
+  if (deadlineDayEnd < nowDayEnd) return 'expired'
 
-  const diffMs = deadline.getTime() - now.getTime()
+  const diffMs = deadlineDayEnd.getTime() - now.getTime()
   const diffHours = diffMs / (1000 * 60 * 60)
 
   if (diffHours <= 24) return 'warning'
@@ -28,7 +34,7 @@ export function getTimeUntilSla(slaSolutionDate: string | null): string {
 
   const deadline = new Date(slaSolutionDate)
   const now = new Date()
-  const diffMs = deadline.getTime() - now.getTime()
+  const diffMs = endOfDay(deadline).getTime() - now.getTime()
 
   if (diffMs < 0) return 'Expirado'
 
