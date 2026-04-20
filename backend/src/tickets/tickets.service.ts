@@ -8,13 +8,7 @@ import {
   TicketMonthlyAnalyticsItem,
 } from './ticket.entity';
 
-const FINAL_STATUSES = [
-  'cancelado',
-  'resolvido',
-  'resolvido - não atende',
-  'fechado',
-  'fechado pelo sistema',
-];
+const FINAL_STATUS_KEYWORDS = ['cancelado', 'resolvido', 'fechado'];
 
 function normalize(s: string): string {
   return s
@@ -25,7 +19,8 @@ function normalize(s: string): string {
 
 function isFinal(status: string | null): boolean {
   if (!status) return false;
-  return FINAL_STATUSES.includes(normalize(status));
+  const normalizedStatus = normalize(status);
+  return FINAL_STATUS_KEYWORDS.some((keyword) => normalizedStatus.includes(keyword));
 }
 
 function toDto(t: Ticket): TicketDto {
@@ -263,14 +258,18 @@ export class TicketsService {
         if (bucket) bucket.opened += 1;
       }
 
-      if (finalStatus && closedAt && slaAt) {
-        const bucket = monthMap.get(monthKey(closedAt));
+      const resolvedReferenceDate = closedAt ?? slaAt ?? openedAt;
+
+      if (finalStatus && resolvedReferenceDate) {
+        const bucket = monthMap.get(monthKey(resolvedReferenceDate));
         if (bucket) {
           bucket.resolved += 1;
-          if (closedAt.getTime() <= slaAt.getTime()) {
-            bucket.resolved_on_time += 1;
-          } else {
-            bucket.resolved_late += 1;
+          if (closedAt && slaAt) {
+            if (closedAt.getTime() <= slaAt.getTime()) {
+              bucket.resolved_on_time += 1;
+            } else {
+              bucket.resolved_late += 1;
+            }
           }
         }
       }
