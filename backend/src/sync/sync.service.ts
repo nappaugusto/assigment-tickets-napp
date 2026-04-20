@@ -236,7 +236,7 @@ export class SyncService {
 
     this.logger.log(
       [
-        'Analytics diagnostics',
+        'ANALYTICS_DIAGNOSTICS',
         `final=${finalTickets.length}`,
         `with_closed=${withClosed.length}`,
         `with_sla=${withSla.length}`,
@@ -253,7 +253,7 @@ export class SyncService {
     }));
 
     if (sample.length > 0) {
-      this.logger.debug(`Analytics sample: ${JSON.stringify(sample)}`);
+      this.logger.log(`ANALYTICS_SAMPLE | ${JSON.stringify(sample)}`);
     }
   }
 
