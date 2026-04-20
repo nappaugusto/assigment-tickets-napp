@@ -22,8 +22,17 @@ fi
 
 # Start NestJS on a fixed internal port (never conflicts with nginx)
 echo "[docker] Starting NestJS backend on port 3001..."
-PORT=3001 node /app/backend/dist/main.js > /tmp/nestjs.log 2>&1 &
+touch /tmp/nestjs.log
+tail -n +1 -f /tmp/nestjs.log &
+TAIL_PID=$!
+PORT=3001 node /app/backend/dist/main.js 2>&1 | tee -a /tmp/nestjs.log &
 NESTJS_PID=$!
+
+cleanup() {
+  kill "$TAIL_PID" 2>/dev/null || true
+}
+
+trap cleanup EXIT
 
 # Wait for backend to be ready (max 45s), checking if process is still alive
 echo "[docker] Waiting for backend to be ready..."
