@@ -8,6 +8,7 @@ interface RawTicket {
 }
 
 const FINAL_STATUS_KEYWORDS = ['cancelado', 'resolvido', 'fechado'];
+const DIAGNOSTIC_TICKET_IDS = new Set([224615, 224608, 224605, 224576, 224570]);
 
 @Injectable()
 export class SyncService {
@@ -95,6 +96,10 @@ export class SyncService {
 
     const numId = Number(id);
     if (isNaN(numId)) return null;
+
+    if (DIAGNOSTIC_TICKET_IDS.has(numId)) {
+      this.logRawTicketDiagnostics(numId, ticket);
+    }
 
     const status = this.extractName(
       this.getNested(ticket, 'status', 'status.name', 'statusName', 'baseStatus'),
@@ -207,6 +212,30 @@ export class SyncService {
     }
 
     return null;
+  }
+
+  private logRawTicketDiagnostics(ticketId: number, ticket: RawTicket) {
+    const rawSnapshot = {
+      id: ticketId,
+      status: this.getNested(ticket, 'status', 'status.name', 'statusName', 'baseStatus'),
+      slaSolutionDate: this.getNested(ticket, 'slaSolutionDate'),
+      slaSolutionDateTime: this.getNested(ticket, 'slaSolutionDateTime'),
+      solutionDate: this.getNested(ticket, 'solutionDate'),
+      solutionDateTime: this.getNested(ticket, 'solutionDateTime'),
+      closedDate: this.getNested(ticket, 'closedDate'),
+      closedDateTime: this.getNested(ticket, 'closedDateTime'),
+      resolvedDate: this.getNested(ticket, 'resolvedDate'),
+      resolvedDateTime: this.getNested(ticket, 'resolvedDateTime'),
+      statusChangedDate: this.getNested(ticket, 'statusChangedDate'),
+      statusChangedDateTime: this.getNested(ticket, 'statusChangedDateTime'),
+      lastActionDate: this.getNested(ticket, 'lastActionDate'),
+      lastActionDateTime: this.getNested(ticket, 'lastActionDateTime'),
+      lastUpdate: this.getNested(ticket, 'lastUpdate'),
+      lastUpdateDate: this.getNested(ticket, 'lastUpdateDate'),
+      sla: this.getNested(ticket, 'sla'),
+    };
+
+    this.logger.log(`RAW_TICKET_DIAGNOSTICS | ${JSON.stringify(rawSnapshot)}`);
   }
 
   private async fetchFromApi(): Promise<Record<string, unknown>[]> {
