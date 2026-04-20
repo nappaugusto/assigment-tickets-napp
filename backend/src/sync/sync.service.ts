@@ -102,7 +102,7 @@ export class SyncService {
     const openedAt = (
       String(this.getNested(ticket, 'createdDate', 'createdDateTime', 'createdAt') ?? '')
     ).trim() || null;
-    const closedAt = (
+    let closedAt = (
       String(
         this.getNested(
           ticket,
@@ -113,6 +113,24 @@ export class SyncService {
         ) ?? '',
       )
     ).trim() || null;
+
+    const normalizedStatus = status
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+    const isFinalStatus = [
+      'cancelado',
+      'resolvido',
+      'resolvido - nao atende',
+      'fechado',
+      'fechado pelo sistema',
+    ].includes(normalizedStatus);
+
+    if (!closedAt && isFinalStatus) {
+      closedAt = (
+        String(this.getNested(ticket, 'lastUpdate', 'lastUpdateDate', 'statusChangedDate') ?? '')
+      ).trim() || null;
+    }
 
     const responsavelRaw = this.getNested(
       ticket,
