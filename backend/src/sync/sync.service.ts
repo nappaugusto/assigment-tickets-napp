@@ -7,6 +7,8 @@ interface RawTicket {
   [key: string]: unknown;
 }
 
+const FINAL_STATUS_KEYWORDS = ['cancelado', 'resolvido', 'fechado'];
+
 @Injectable()
 export class SyncService {
   private readonly logger = new Logger(SyncService.name);
@@ -75,6 +77,18 @@ export class SyncService {
     return String(value).trim();
   }
 
+  private normalizeStatus(status: string): string {
+    return status
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+  }
+
+  private isFinalStatus(status: string): boolean {
+    const normalized = this.normalizeStatus(status);
+    return FINAL_STATUS_KEYWORDS.some((keyword) => normalized.includes(keyword));
+  }
+
   private normalizeTicket(ticket: RawTicket): Record<string, unknown> | null {
     const id = this.getNested(ticket, 'id');
     if (id === null || id === undefined) return null;
@@ -90,7 +104,17 @@ export class SyncService {
     );
     const subject = String(this.getNested(ticket, 'subject', 'title') ?? '').trim();
     const slaSolutionDate = (
-      String(this.getNested(ticket, 'slaSolutionDate', 'sla.solutionDate') ?? '')
+      String(
+        this.getNested(
+          ticket,
+          'slaSolutionDate',
+          'sla.solutionDate',
+          'sla.solutionDateTime',
+          'sla.solutionDeadline',
+          'sla.deadline',
+          'sla.targetDate',
+        ) ?? '',
+      )
     ).trim() || null;
 
     const slaPausedRaw = this.getNested(ticket, 'slaSolutionDateIsPaused', 'sla.isPaused');
@@ -114,21 +138,23 @@ export class SyncService {
       )
     ).trim() || null;
 
-    const normalizedStatus = status
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '');
-    const isFinalStatus = [
-      'cancelado',
-      'resolvido',
-      'resolvido - nao atende',
-      'fechado',
-      'fechado pelo sistema',
-    ].includes(normalizedStatus);
+    const isFinalStatus = this.isFinalStatus(status);
 
     if (!closedAt && isFinalStatus) {
       closedAt = (
-        String(this.getNested(ticket, 'lastUpdate', 'lastUpdateDate', 'statusChangedDate') ?? '')
+        String(
+          this.getNested(
+            ticket,
+            'statusChangedDate',
+            'statusChangedDateTime',
+            'actionDate',
+            'actionDateTime',
+            'lastActionDate',
+            'lastActionDateTime',
+            'lastUpdate',
+            'lastUpdateDate',
+          ) ?? '',
+        )
       ).trim() || null;
     }
 
@@ -188,11 +214,46 @@ export class SyncService {
         if (n) normalized.push(n);
       }
 
+      this.logAnalyticsDiagnostics(normalized);
+
       this.logger.log(`Fetched ${normalized.length} tickets from Movidesk API`);
       return normalized;
     } catch (err) {
       this.logger.error(`Error fetching tickets: ${(err as Error).message}`);
       return [];
+    }
+  }
+
+  private logAnalyticsDiagnostics(tickets: Record<string, unknown>[]) {
+    const finalTickets = tickets.filter((ticket) =>
+      this.isFinalStatus(String(ticket['status'] ?? '')),
+    );
+    const withClosed = finalTickets.filter((ticket) => !!ticket['closed_at']);
+    const withSla = finalTickets.filter((ticket) => !!ticket['slaSolutionDate']);
+    const withBoth = finalTickets.filter(
+      (ticket) => !!ticket['closed_at'] && !!ticket['slaSolutionDate'],
+    );
+
+    this.logger.log(
+      [
+        'Analytics diagnostics',
+        `final=${finalTickets.length}`,
+        `with_closed=${withClosed.length}`,
+        `with_sla=${withSla.length}`,
+        `with_both=${withBoth.length}`,
+      ].join(' | '),
+    );
+
+    const sample = finalTickets.slice(0, 5).map((ticket) => ({
+      id: ticket['id'],
+      status: ticket['status'],
+      opened_at: ticket['opened_at'],
+      closed_at: ticket['closed_at'],
+      slaSolutionDate: ticket['slaSolutionDate'],
+    }));
+
+    if (sample.length > 0) {
+      this.logger.debug(`Analytics sample: ${JSON.stringify(sample)}`);
     }
   }
 
