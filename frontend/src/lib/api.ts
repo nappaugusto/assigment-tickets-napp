@@ -62,36 +62,17 @@ export interface Ticket {
   assigned_at: string | null
 }
 
-export interface TicketMonthlyAnalyticsItem {
-  month: string
-  label: string
-  opened: number
-  resolved: number
-  breached: number
-  resolved_on_time: number
-  resolved_late: number
-}
-
-export interface TicketMonthlyAnalyticsPayload {
-  generated_at: string
-  months: TicketMonthlyAnalyticsItem[]
-  current_month: TicketMonthlyAnalyticsItem | null
-}
-
 export interface TicketsPayload {
   now: string
   tickets: Ticket[]
   close_tickets: Ticket[]
   count_tickets: number
   close_count_tickets: number
-  monthly_analytics?: TicketMonthlyAnalyticsPayload
 }
 
 export const ticketsApi = {
   refresh: (manual = false) =>
     get<TicketsPayload>(`/tickets/refresh${manual ? '?manual=1' : ''}`),
-  monthlyAnalytics: (months = 6) =>
-    get<TicketMonthlyAnalyticsPayload>(`/tickets/analytics/monthly?months=${months}`),
   assign: (id: number, responsavel: string) =>
     http
       .post<{ success: boolean; message: string; ticket_id: number; responsavel: string | null; now: string }>(
