@@ -67,10 +67,51 @@ function monthKey(date: Date): string {
   return `${date.getFullYear()}-${month}`;
 }
 
-function parseIsoDate(value: string | null): Date | null {
+function parseTicketDate(value: string | null): Date | null {
   if (!value) return null;
-  const parsed = new Date(value);
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const dotNetMatch = trimmed.match(/\/Date\((\d+)\)\//);
+  if (dotNetMatch) {
+    const parsed = new Date(Number(dotNetMatch[1]));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const brMatch = trimmed.match(
+    /^(\d{2})\/(\d{2})\/(\d{4})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/,
+  );
+  if (brMatch) {
+    const [, day, month, year, hours = '00', minutes = '00', seconds = '00'] = brMatch;
+    const parsed = new Date(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hours),
+      Number(minutes),
+      Number(seconds),
+    );
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const parsed = new Date(trimmed);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getAnalyticsAnchorDate(rows: Ticket[], fallback: Date): Date {
+  let latestTimestamp = 0;
+
+  for (const ticket of rows) {
+    for (const value of [ticket.opened_at, ticket.closed_at, ticket.slaSolutionDate]) {
+      const parsed = parseTicketDate(value);
+      if (parsed && parsed.getTime() > latestTimestamp) {
+        latestTimestamp = parsed.getTime();
+      }
+    }
+  }
+
+  return latestTimestamp > 0 ? new Date(latestTimestamp) : fallback;
 }
 
 @Injectable()
@@ -193,7 +234,8 @@ export class TicketsService {
       .all() as Ticket[];
 
     const now = new Date();
-    const firstMonth = startOfMonth(addMonths(now, -(totalMonths - 1)));
+    const anchorDate = getAnalyticsAnchorDate(rows, now);
+    const firstMonth = startOfMonth(addMonths(anchorDate, -(totalMonths - 1)));
     const monthMap = new Map<string, TicketMonthlyAnalyticsItem>();
 
     for (let index = 0; index < totalMonths; index++) {
@@ -211,9 +253,9 @@ export class TicketsService {
     }
 
     for (const ticket of rows) {
-      const openedAt = parseIsoDate(ticket.opened_at);
-      const closedAt = parseIsoDate(ticket.closed_at);
-      const slaAt = parseIsoDate(ticket.slaSolutionDate);
+      const openedAt = parseTicketDate(ticket.opened_at);
+      const closedAt = parseTicketDate(ticket.closed_at);
+      const slaAt = parseTicketDate(ticket.slaSolutionDate);
       const finalStatus = isFinal(ticket.status);
 
       if (openedAt) {
