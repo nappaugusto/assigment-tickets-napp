@@ -39,7 +39,7 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
       <CardHeader className="pb-4">
         <CardTitle className="text-xl">Visão mensal da equipe</CardTitle>
         <CardDescription>
-          Compare vencimentos, resoluções no prazo e fora do prazo nos últimos meses sincronizados.
+          Compare aberturas, vencimentos e resoluções no prazo ou fora do prazo nos últimos meses sincronizados.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -76,6 +76,7 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
 
             <div className="rounded-2xl border border-border/60 bg-background/30 p-4">
               <div className="mb-4 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-cyan-400" /> Abertos</span>
                 <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-rose-400" /> Venceram SLA</span>
                 <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-emerald-400" /> No prazo</span>
                 <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-amber-400" /> Fora do prazo</span>
@@ -94,6 +95,7 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
                       </div>
                       <div className="flex h-40 items-end gap-2">
                         {[
+                          { key: 'opened', value: month.opened, color: 'bg-cyan-400' },
                           { key: 'breached', value: month.breached, color: 'bg-rose-400' },
                           { key: 'resolved_on_time', value: month.resolved_on_time, color: 'bg-emerald-400' },
                           { key: 'resolved_late', value: month.resolved_late, color: 'bg-amber-400' },
@@ -109,8 +111,13 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
                           </div>
                         ))}
                       </div>
-                      <div className="mt-3 text-[11px] text-muted-foreground">
-                        Abertos: <strong className="text-foreground">{month.opened}</strong>
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
+                        <span>
+                          Abertos: <strong className="text-foreground">{month.opened}</strong>
+                        </span>
+                        <span>
+                          Resolvidos: <strong className="text-foreground">{month.resolved_on_time + month.resolved_late}</strong>
+                        </span>
                       </div>
                     </div>
                   ))}

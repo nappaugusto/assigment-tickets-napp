@@ -32,6 +32,12 @@ async function bootstrap() {
 
   const dbPath = resolveDatabasePath(process.env);
   mkdirSync(dirname(dbPath), { recursive: true });
+  console.log(`[bootstrap] SQLite database path: ${dbPath}`);
+  if (process.env.RAILWAY_VOLUME_MOUNT_PATH) {
+    console.log(
+      `[bootstrap] Railway volume mount path detected: ${process.env.RAILWAY_VOLUME_MOUNT_PATH}`,
+    );
+  }
 
   app.use(
     session({

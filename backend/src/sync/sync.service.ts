@@ -110,7 +110,6 @@ export class SyncService {
           'closedDateTime',
           'resolvedDate',
           'resolvedDateTime',
-          'lastUpdate',
         ) ?? '',
       )
     ).trim() || null;

@@ -213,13 +213,14 @@ export class TicketsService {
       const openedAt = parseIsoDate(ticket.opened_at);
       const closedAt = parseIsoDate(ticket.closed_at);
       const slaAt = parseIsoDate(ticket.slaSolutionDate);
+      const finalStatus = isFinal(ticket.status);
 
       if (openedAt) {
         const bucket = monthMap.get(monthKey(openedAt));
         if (bucket) bucket.opened += 1;
       }
 
-      if (closedAt && slaAt) {
+      if (finalStatus && closedAt && slaAt) {
         const bucket = monthMap.get(monthKey(closedAt));
         if (bucket) {
           if (closedAt.getTime() <= slaAt.getTime()) {
@@ -233,8 +234,8 @@ export class TicketsService {
       if (slaAt) {
         const bucket = monthMap.get(monthKey(slaAt));
         const breached =
-          (!closedAt && slaAt.getTime() < now.getTime()) ||
-          (!!closedAt && closedAt.getTime() > slaAt.getTime());
+          (!finalStatus && slaAt.getTime() < now.getTime()) ||
+          (finalStatus && !!closedAt && closedAt.getTime() > slaAt.getTime());
 
         if (bucket && breached) {
           bucket.breached += 1;

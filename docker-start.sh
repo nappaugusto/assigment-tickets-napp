@@ -5,8 +5,8 @@ set -e
 export NGINX_PORT=${PORT:-80}
 envsubst '${NGINX_PORT}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
 
-# Prefer a mounted persistent volume when available
-export PERSISTENT_DATA_DIR=${PERSISTENT_DATA_DIR:-/data}
+# Prefer a mounted persistent Railway volume when available
+export PERSISTENT_DATA_DIR=${PERSISTENT_DATA_DIR:-${RAILWAY_VOLUME_MOUNT_PATH:-/data}}
 if [ -d "$PERSISTENT_DATA_DIR" ] || mkdir -p "$PERSISTENT_DATA_DIR" 2>/dev/null; then
   export DATABASE_PATH=${DATABASE_PATH:-$PERSISTENT_DATA_DIR/tickets.db}
 else
@@ -15,6 +15,10 @@ fi
 
 # Ensure persistent data directory exists before NestJS starts
 mkdir -p "$(dirname "$DATABASE_PATH")"
+echo "[docker] Database path resolved to $DATABASE_PATH"
+if [ -n "$RAILWAY_VOLUME_MOUNT_PATH" ]; then
+  echo "[docker] Railway volume mounted at $RAILWAY_VOLUME_MOUNT_PATH"
+fi
 
 # Start NestJS on a fixed internal port (never conflicts with nginx)
 echo "[docker] Starting NestJS backend on port 3001..."

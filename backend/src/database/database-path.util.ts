@@ -15,6 +15,14 @@ export function resolveDatabasePath(env: NodeJS.ProcessEnv): string {
   const explicitPath = env.DATABASE_PATH?.trim();
   if (explicitPath) return explicitPath;
 
+  const railwayVolumeMountPath = env.RAILWAY_VOLUME_MOUNT_PATH?.trim();
+  if (railwayVolumeMountPath) {
+    return join(
+      normalizeDirPath(railwayVolumeMountPath),
+      env.DATABASE_FILENAME?.trim() || DEFAULT_DATABASE_FILENAME,
+    );
+  }
+
   const configuredDataDir = env.PERSISTENT_DATA_DIR?.trim();
   if (configuredDataDir) {
     return join(
