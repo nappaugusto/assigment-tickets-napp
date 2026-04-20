@@ -7,7 +7,6 @@ import { useTicketFilters } from '@/hooks/use-ticket-filters'
 import { useTicketActions } from '@/hooks/use-ticket-actions'
 import { useAppVersion } from '@/hooks/use-app-version'
 import { Header } from '@/components/header'
-import { MonthlyAnalytics } from '@/components/monthly-analytics'
 import { SummaryCards, computeSummary } from '@/components/summary-cards'
 import { QuickFilters } from '@/components/quick-filters'
 import { Toolbar } from '@/components/toolbar'
@@ -30,7 +29,6 @@ export function DashboardPage() {
 
   const tickets = data?.tickets ?? []
   const newTickets = data?.close_tickets ?? []
-  const monthlyAnalytics = data?.monthly_analytics
   const lastSync = data?.now ? formatDate(data.now) : undefined
 
   const filters = useTicketFilters(tickets, newTickets, '')
@@ -105,11 +103,6 @@ export function DashboardPage() {
             lastSync={lastSync}
             viewMode={viewMode}
             onViewMode={handleViewMode}
-          />
-
-          <MonthlyAnalytics
-            analytics={monthlyAnalytics}
-            isLoading={isLoading || syncMutation.isPending}
           />
 
           {viewMode === 'table' ? (
