@@ -284,9 +284,7 @@ export class TicketsService {
 
       if (slaAt) {
         const bucket = monthMap.get(monthKey(slaAt));
-        const breached =
-          (!finalStatus && !isOnTimeByCurrentDay(now, slaAt)) ||
-          (finalStatus && !!closedAt && !isOnTimeByCurrentDay(closedAt, slaAt));
+        const breached = !isOnTimeByCurrentDay(now, slaAt);
 
         if (bucket && breached) {
           bucket.breached += 1;
