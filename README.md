@@ -48,6 +48,8 @@ Variáveis obrigatórias:
 | `PERSISTENT_DATA_DIR`       | Diretório persistente opcional; ex.: `/data` em volumes |
 | `MOVIDESK_API_TOKEN`        | Token da API pública do Movidesk                     |
 | `MOVIDESK_API_QUERY_PARAMS` | Query de busca de tickets, incluindo campos de SLA e fechamento |
+| `MOVIDESK_DEBUG_DATE_FIELDS` | Quando `true`, loga amostras do payload bruto de datas retornado pela API |
+| `MOVIDESK_DEBUG_DATE_FIELDS_SAMPLE_SIZE` | Quantidade de tickets amostrados nos logs de diagnóstico |
 | `ASSIGNMENT_TEAM_NAMES`     | Nomes das equipes para o seletor de atribuição       |
 | `MAIL_SERVER`               | Servidor SMTP para recuperação de senha              |
 | `MAIL_USERNAME`             | Usuário SMTP                                         |

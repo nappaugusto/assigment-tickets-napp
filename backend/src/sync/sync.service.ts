@@ -17,6 +17,8 @@ export class SyncService {
   private readonly apiUrl: string;
   private readonly apiToken: string;
   private readonly queryParams: Record<string, string>;
+  private readonly debugDateFields: boolean;
+  private readonly debugDateFieldsSampleSize: number;
 
   constructor(
     private readonly config: ConfigService,
@@ -26,6 +28,12 @@ export class SyncService {
       Number(config.get('MOVIDESK_SYNC_MIN_INTERVAL_SECONDS') ?? 25) * 1000;
     this.apiUrl = config.get<string>('MOVIDESK_API_URL') ?? '';
     this.apiToken = config.get<string>('MOVIDESK_API_TOKEN') ?? '';
+    this.debugDateFields =
+      String(config.get('MOVIDESK_DEBUG_DATE_FIELDS') ?? '').toLowerCase() === 'true';
+    this.debugDateFieldsSampleSize = Math.max(
+      1,
+      Number(config.get('MOVIDESK_DEBUG_DATE_FIELDS_SAMPLE_SIZE') ?? 5),
+    );
 
     // Parse query params from env string
     const raw = config.get<string>('MOVIDESK_API_QUERY_PARAMS') ?? '';
@@ -194,6 +202,53 @@ export class SyncService {
     return null;
   }
 
+  private buildDateFieldSnapshot(ticket: RawTicket): Record<string, unknown> {
+    const snapshot: Record<string, unknown> = {
+      id: this.getNested(ticket, 'id'),
+      status: this.extractName(
+        this.getNested(ticket, 'status', 'status.name', 'statusName', 'baseStatus'),
+      ),
+      available_keys: Object.keys(ticket).sort(),
+      createdDate: this.getNested(ticket, 'createdDate'),
+      createdDateTime: this.getNested(ticket, 'createdDateTime'),
+      closedDate: this.getNested(ticket, 'closedDate'),
+      closedDateTime: this.getNested(ticket, 'closedDateTime'),
+      resolvedDate: this.getNested(ticket, 'resolvedDate'),
+      resolvedDateTime: this.getNested(ticket, 'resolvedDateTime'),
+      statusChangedDate: this.getNested(ticket, 'statusChangedDate'),
+      statusChangedDateTime: this.getNested(ticket, 'statusChangedDateTime'),
+      slaSolutionDate: this.getNested(ticket, 'slaSolutionDate'),
+      slaSolutionDateTime: this.getNested(ticket, 'slaSolutionDateTime'),
+      solutionDate: this.getNested(ticket, 'solutionDate'),
+      solutionDateTime: this.getNested(ticket, 'solutionDateTime'),
+      slaSolutionDateIsPaused: this.getNested(ticket, 'slaSolutionDateIsPaused'),
+      raw_sla: this.getNested(ticket, 'sla'),
+    };
+
+    return snapshot;
+  }
+
+  private logDateFieldDiagnostics(tickets: RawTicket[]): void {
+    const selectedFields = this.queryParams['$select'] ?? '(not provided)';
+    const expandedFields = this.queryParams['$expand'] ?? '(not provided)';
+
+    this.logger.warn(
+      [
+        'MOVIDESK_DATE_FIELDS_DEBUG',
+        `selected=${selectedFields}`,
+        `expanded=${expandedFields}`,
+        `sample_size=${Math.min(tickets.length, this.debugDateFieldsSampleSize)}`,
+      ].join(' | '),
+    );
+
+    const samples = tickets.slice(0, this.debugDateFieldsSampleSize);
+    for (const ticket of samples) {
+      this.logger.warn(
+        `MOVIDESK_DATE_FIELDS_SAMPLE ${JSON.stringify(this.buildDateFieldSnapshot(ticket))}`,
+      );
+    }
+  }
+
   private async fetchFromApi(): Promise<Record<string, unknown>[]> {
     const params: Record<string, string> = { ...this.queryParams };
     if (this.apiToken) params['token'] = this.apiToken;
@@ -219,6 +274,10 @@ export class SyncService {
       }
 
       if (!Array.isArray(data)) return [];
+
+      if (this.debugDateFields) {
+        this.logDateFieldDiagnostics(data as RawTicket[]);
+      }
 
       const normalized: Record<string, unknown>[] = [];
       for (const item of data as RawTicket[]) {
