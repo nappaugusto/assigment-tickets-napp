@@ -103,19 +103,7 @@ export class SyncService {
       this.getNested(ticket, 'ownerTeam', 'ownerTeam.name', 'ownerTeam.businessName', 'team.name'),
     );
     const subject = String(this.getNested(ticket, 'subject', 'title') ?? '').trim();
-    const slaSolutionDate = (
-      String(
-        this.getNested(
-          ticket,
-          'slaSolutionDate',
-          'sla.solutionDate',
-          'sla.solutionDateTime',
-          'sla.solutionDeadline',
-          'sla.deadline',
-          'sla.targetDate',
-        ) ?? '',
-      )
-    ).trim() || null;
+    const slaSolutionDate = this.resolveSolutionDueDate(ticket);
 
     const slaPausedRaw = this.getNested(ticket, 'slaSolutionDateIsPaused', 'sla.isPaused');
     const slaSolutionDateIsPaused =
@@ -180,6 +168,45 @@ export class SyncService {
       responsavel,
       assigned_at: null,
     };
+  }
+
+  private resolveSolutionDueDate(ticket: RawTicket): string | null {
+    const explicitValue = this.getNested(
+      ticket,
+      'slaSolutionDate',
+      'slaSolutionDateTime',
+      'solutionDate',
+      'solutionDateTime',
+      'sla.solutionDate',
+      'sla.solutionDateTime',
+      'sla.solutionDeadline',
+      'sla.solutionForecast',
+      'sla.solutionForecastDate',
+      'sla.predictedSolutionDate',
+      'sla.estimatedSolutionDate',
+    );
+
+    const explicitString = String(explicitValue ?? '').trim();
+    if (explicitString) return explicitString;
+
+    const slaObject = this.getNested(ticket, 'sla');
+    if (slaObject && typeof slaObject === 'object' && !Array.isArray(slaObject)) {
+      const entries = Object.entries(slaObject as Record<string, unknown>);
+      const preferredEntry = entries.find(([key, value]) => {
+        const normalizedKey = this.normalizeStatus(key);
+        if (!value) return false;
+        return (
+          normalizedKey.includes('solution') ||
+          normalizedKey.includes('solucao') ||
+          normalizedKey.includes('previsao')
+        );
+      });
+
+      const preferredString = String(preferredEntry?.[1] ?? '').trim();
+      if (preferredString) return preferredString;
+    }
+
+    return null;
   }
 
   private async fetchFromApi(): Promise<Record<string, unknown>[]> {
