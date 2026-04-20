@@ -203,6 +203,7 @@ export class TicketsService {
         month: key,
         label: current.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }),
         opened: 0,
+        resolved: 0,
         breached: 0,
         resolved_on_time: 0,
         resolved_late: 0,
@@ -223,6 +224,7 @@ export class TicketsService {
       if (finalStatus && closedAt && slaAt) {
         const bucket = monthMap.get(monthKey(closedAt));
         if (bucket) {
+          bucket.resolved += 1;
           if (closedAt.getTime() <= slaAt.getTime()) {
             bucket.resolved_on_time += 1;
           } else {

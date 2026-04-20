@@ -27,6 +27,7 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
   const maxValue = Math.max(
     1,
     ...months.flatMap((month) => [
+      month.resolved,
       month.breached,
       month.resolved_on_time,
       month.resolved_late,
@@ -44,18 +45,23 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
       </CardHeader>
       <CardContent className="space-y-5">
         {isLoading ? (
-          <div className="grid gap-3 md:grid-cols-4">
-            {[1, 2, 3, 4].map((item) => (
+          <div className="grid gap-3 md:grid-cols-5">
+            {[1, 2, 3, 4, 5].map((item) => (
               <div key={item} className="h-24 animate-pulse rounded-2xl bg-muted/40" />
             ))}
           </div>
         ) : (
           <>
-            <div className="grid gap-3 md:grid-cols-4">
+            <div className="grid gap-3 md:grid-cols-5">
               <MetricCard
                 label="Abertos no mês"
                 value={current?.opened ?? 0}
                 tone="border-cyan-400/20 bg-gradient-to-br from-cyan-400/10 to-transparent"
+              />
+              <MetricCard
+                label="Resolvidos no mês"
+                value={current?.resolved ?? 0}
+                tone="border-sky-400/20 bg-gradient-to-br from-sky-400/10 to-transparent"
               />
               <MetricCard
                 label="Venceram SLA"
@@ -77,6 +83,7 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
             <div className="rounded-2xl border border-border/60 bg-background/30 p-4">
               <div className="mb-4 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                 <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-cyan-400" /> Abertos</span>
+                <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-sky-400" /> Resolvidos</span>
                 <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-rose-400" /> Venceram SLA</span>
                 <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-emerald-400" /> No prazo</span>
                 <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-amber-400" /> Fora do prazo</span>
@@ -87,7 +94,7 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
                   Ainda não há dados suficientes para montar o gráfico mensal.
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                   {months.map((month) => (
                     <div key={month.month} className="rounded-xl border border-border/50 bg-card/50 p-3">
                       <div className="mb-3 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
@@ -96,6 +103,7 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
                       <div className="flex h-40 items-end gap-2">
                         {[
                           { key: 'opened', value: month.opened, color: 'bg-cyan-400' },
+                          { key: 'resolved', value: month.resolved, color: 'bg-sky-400' },
                           { key: 'breached', value: month.breached, color: 'bg-rose-400' },
                           { key: 'resolved_on_time', value: month.resolved_on_time, color: 'bg-emerald-400' },
                           { key: 'resolved_late', value: month.resolved_late, color: 'bg-amber-400' },
@@ -116,7 +124,13 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
                           Abertos: <strong className="text-foreground">{month.opened}</strong>
                         </span>
                         <span>
-                          Resolvidos: <strong className="text-foreground">{month.resolved_on_time + month.resolved_late}</strong>
+                          Resolvidos: <strong className="text-foreground">{month.resolved}</strong>
+                        </span>
+                        <span>
+                          No prazo: <strong className="text-foreground">{month.resolved_on_time}</strong>
+                        </span>
+                        <span>
+                          Fora do prazo: <strong className="text-foreground">{month.resolved_late}</strong>
                         </span>
                       </div>
                     </div>
