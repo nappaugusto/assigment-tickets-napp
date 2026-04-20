@@ -83,6 +83,7 @@ export interface TicketsPayload {
   close_tickets: Ticket[]
   count_tickets: number
   close_count_tickets: number
+  monthly_analytics?: TicketMonthlyAnalyticsPayload
 }
 
 export const ticketsApi = {

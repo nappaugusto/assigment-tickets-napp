@@ -5,8 +5,15 @@ set -e
 export NGINX_PORT=${PORT:-80}
 envsubst '${NGINX_PORT}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
 
+# Prefer a mounted persistent volume when available
+export PERSISTENT_DATA_DIR=${PERSISTENT_DATA_DIR:-/data}
+if [ -d "$PERSISTENT_DATA_DIR" ] || mkdir -p "$PERSISTENT_DATA_DIR" 2>/dev/null; then
+  export DATABASE_PATH=${DATABASE_PATH:-$PERSISTENT_DATA_DIR/tickets.db}
+else
+  export DATABASE_PATH=${DATABASE_PATH:-/app/backend/data/tickets.db}
+fi
+
 # Ensure persistent data directory exists before NestJS starts
-export DATABASE_PATH=${DATABASE_PATH:-/app/backend/data/tickets.db}
 mkdir -p "$(dirname "$DATABASE_PATH")"
 
 # Start NestJS on a fixed internal port (never conflicts with nginx)

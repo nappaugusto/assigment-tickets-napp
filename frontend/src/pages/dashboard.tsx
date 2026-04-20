@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAuth } from '@/contexts/auth-context'
-import { useTicketMonthlyAnalytics, useTickets, useSyncTickets } from '@/hooks/use-tickets'
+import { useTickets, useSyncTickets } from '@/hooks/use-tickets'
 import { useTicketFilters } from '@/hooks/use-ticket-filters'
 import { useTicketActions } from '@/hooks/use-ticket-actions'
 import { useAppVersion } from '@/hooks/use-app-version'
@@ -25,12 +25,12 @@ export function DashboardPage() {
   useAppVersion()
 
   const { data, isLoading } = useTickets()
-  const { data: monthlyAnalytics, isLoading: isMonthlyAnalyticsLoading } = useTicketMonthlyAnalytics(6)
   const syncMutation = useSyncTickets()
   const { assignTicket, unassignTicket, isAssigning, isUnassigning } = useTicketActions()
 
   const tickets = data?.tickets ?? []
   const newTickets = data?.close_tickets ?? []
+  const monthlyAnalytics = data?.monthly_analytics
   const lastSync = data?.now ? formatDate(data.now) : undefined
 
   const filters = useTicketFilters(tickets, newTickets, '')
@@ -109,7 +109,7 @@ export function DashboardPage() {
 
           <MonthlyAnalytics
             analytics={monthlyAnalytics}
-            isLoading={isMonthlyAnalyticsLoading}
+            isLoading={isLoading || syncMutation.isPending}
           />
 
           {viewMode === 'table' ? (

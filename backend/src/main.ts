@@ -5,6 +5,7 @@ import type { Request as ExpressRequest, Response as ExpressResponse } from 'exp
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'fs';
 import { dirname } from 'path';
+import { resolveDatabasePath } from './database/database-path.util';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const session = require('express-session');
@@ -29,7 +30,7 @@ async function bootstrap() {
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
-  const dbPath = process.env.DATABASE_PATH ?? './data/tickets.db';
+  const dbPath = resolveDatabasePath(process.env);
   mkdirSync(dirname(dbPath), { recursive: true });
 
   app.use(

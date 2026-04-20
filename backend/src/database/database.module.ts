@@ -1,22 +1,18 @@
 import { Global, Module, OnModuleInit } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'fs';
 import { dirname } from 'path';
+import { resolveDatabasePath } from './database-path.util';
 
 export const DB_TOKEN = 'DATABASE';
-
-function resolveDatabasePath(config: ConfigService): string {
-  return config.get<string>('DATABASE_PATH') ?? './data/tickets.db';
-}
 
 @Global()
 @Module({
   providers: [
     {
       provide: DB_TOKEN,
-      useFactory: (config: ConfigService) => {
-        const dbPath = resolveDatabasePath(config);
+      useFactory: () => {
+        const dbPath = resolveDatabasePath(process.env);
         mkdirSync(dirname(dbPath), { recursive: true });
         const db = new Database(dbPath);
         db.pragma('journal_mode = WAL');
@@ -24,7 +20,6 @@ function resolveDatabasePath(config: ConfigService): string {
         db.pragma('foreign_keys = ON');
         return db;
       },
-      inject: [ConfigService],
     },
   ],
   exports: [DB_TOKEN],

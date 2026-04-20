@@ -45,6 +45,7 @@ Variáveis obrigatórias:
 |-----------------------------|------------------------------------------------------|
 | `SESSION_SECRET`            | Segredo para assinar cookies de sessão               |
 | `DATABASE_PATH`             | Caminho do SQLite; em produção use diretório persistente |
+| `PERSISTENT_DATA_DIR`       | Diretório persistente opcional; ex.: `/data` em volumes |
 | `MOVIDESK_API_TOKEN`        | Token da API pública do Movidesk                     |
 | `MOVIDESK_API_QUERY_PARAMS` | Query de busca de tickets, incluindo campos de SLA e fechamento |
 | `ASSIGNMENT_TEAM_NAMES`     | Nomes das equipes para o seletor de atribuição       |
@@ -110,6 +111,18 @@ make docker-down  # para e remove
 A imagem Docker inclui nginx na porta 80 servindo o frontend e fazendo proxy das rotas de API para o NestJS interno.
 No fluxo Docker, o banco é salvo em `./data/tickets.db` no host e montado como volume persistente dentro do container.
 
+Em plataformas de deploy com volume, a recomendação é montar o volume em `/data` e usar:
+
+```bash
+DATABASE_PATH=/data/tickets.db
+```
+
+Ou, se preferir deixar o nome do arquivo a cargo da aplicação:
+
+```bash
+PERSISTENT_DATA_DIR=/data
+```
+
 ### Outros targets
 
 ```bash
@@ -142,6 +155,8 @@ O `nginx.conf` faz:
 
 O `docker-compose.yml` monta o volume `./data` para persistir o banco SQLite fora do container.
 O target `make docker-run` também cria e monta `./data`, evitando perda do banco mesmo sem `docker compose`.
+
+Como usuários, sessões e notas ficam no mesmo arquivo SQLite, persistir `tickets.db` também preserva login e dados locais entre deploys.
 
 ---
 

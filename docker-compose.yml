@@ -6,8 +6,9 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_PATH: /app/backend/data/tickets.db
+      PERSISTENT_DATA_DIR: /data
+      DATABASE_PATH: /data/tickets.db
     volumes:
       # Persist SQLite database outside the container
-      - ./data:/app/backend/data
+      - ./data:/data
     restart: unless-stopped

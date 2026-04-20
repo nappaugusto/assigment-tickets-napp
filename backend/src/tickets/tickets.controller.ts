@@ -30,6 +30,7 @@ export class TicketsController {
 
     const tickets = this.ticketsService.getActive();
     const newTickets = this.ticketsService.getNewToday();
+    const monthlyAnalytics = this.ticketsService.getMonthlyAnalytics(6);
 
     return {
       now: new Date().toISOString(),
@@ -37,6 +38,7 @@ export class TicketsController {
       close_tickets: newTickets,
       count_tickets: tickets.length,
       close_count_tickets: newTickets.length,
+      monthly_analytics: monthlyAnalytics,
     };
   }
 
