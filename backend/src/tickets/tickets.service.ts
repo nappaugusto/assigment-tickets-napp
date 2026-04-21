@@ -10,9 +10,9 @@ import {
 
 const FINAL_STATUS_KEYWORDS = ['cancelado', 'resolvido', 'fechado'];
 const INTERRUPTED_PAUSED_STATUS_KEYWORDS = [
-  'dependencia de terceiros',
-  'aguardando - cliente',
-  'interrupcao do sla',
+  'Dependência de Terceiros',
+  'Aguardando - Cliente',
+  'Interrupção do SLA',
 ];
 const BRAZIL_LOCALE = 'pt-BR';
 const BRAZIL_TIME_ZONE = 'America/Sao_Paulo';
@@ -39,7 +39,9 @@ function isFinal(status: string | null): boolean {
 function isInterruptedPausedStatus(status: string | null): boolean {
   if (!status) return false;
   const normalizedStatus = normalize(status);
-  return INTERRUPTED_PAUSED_STATUS_KEYWORDS.some((keyword) => normalizedStatus.includes(keyword));
+  return INTERRUPTED_PAUSED_STATUS_KEYWORDS.some((keyword) =>
+    normalizedStatus.includes(normalize(keyword)),
+  );
 }
 
 function toDto(t: Ticket): TicketDto {
