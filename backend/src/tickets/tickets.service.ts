@@ -18,16 +18,6 @@ interface CalendarDateParts {
   day: number;
 }
 
-interface TicketExitEvent {
-  ticket_id: number;
-  sla_solution_date: string | null;
-  exited_at: string;
-  exited_month: string;
-  exited_label: string;
-  resolved_on_time: number;
-  resolved_late: number;
-}
-
 function normalize(s: string): string {
   return s
     .toLowerCase()
@@ -51,6 +41,7 @@ function toDto(t: Ticket): TicketDto {
     slaSolutionDateIsPaused: !!t.slaSolutionDateIsPaused,
     opened_at: t.opened_at,
     closed_at: t.closed_at,
+    last_update: t.last_update,
     responsavel: t.responsavel,
     assigned_at: t.assigned_at,
   };
@@ -149,15 +140,17 @@ function addMonthsToParts(parts: CalendarDateParts, delta: number): CalendarDate
   };
 }
 
-function getAnalyticsAnchorMonthPartsFromExitEvents(
-  events: TicketExitEvent[],
+function getAnalyticsAnchorMonthPartsFromTickets(
+  tickets: Ticket[],
   fallback: Date,
 ): CalendarDateParts {
   let latestMonthParts: CalendarDateParts | null = null;
 
-  for (const event of events) {
-    const parts = parseCalendarDateParts(`${event.exited_month}-01`);
-    if (!parts) continue;
+  for (const ticket of tickets) {
+    const parts = parseCalendarDateParts(ticket.opened_at);
+    if (!parts) {
+      continue;
+    }
 
     const monthOnly = { year: parts.year, month: parts.month, day: 1 };
     if (!latestMonthParts || compareCalendarDateParts(monthOnly, latestMonthParts) > 0) {
@@ -167,6 +160,57 @@ function getAnalyticsAnchorMonthPartsFromExitEvents(
 
   const fallbackParts = getBrazilDateParts(fallback);
   return latestMonthParts ?? { year: fallbackParts.year, month: fallbackParts.month, day: 1 };
+}
+
+function parseTicketDateTime(value: string | null): Date | null {
+  if (!value) return null;
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const dotNetMatch = trimmed.match(/\/Date\((\d+)\)\//);
+  if (dotNetMatch) {
+    const parsed = new Date(Number(dotNetMatch[1]));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const isoMatch = trimmed.match(
+    /^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?)?$/,
+  );
+  if (isoMatch) {
+    const [, year, month, day, hours = '00', minutes = '00', seconds = '00', fraction = '0'] =
+      isoMatch;
+    const milliseconds = Number(fraction.padEnd(3, '0').slice(0, 3));
+    const parsed = new Date(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hours),
+      Number(minutes),
+      Number(seconds),
+      milliseconds,
+    );
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const brMatch = trimmed.match(
+    /^(\d{2})\/(\d{2})\/(\d{4})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/,
+  );
+  if (brMatch) {
+    const [, day, month, year, hours = '00', minutes = '00', seconds = '00'] = brMatch;
+    const parsed = new Date(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hours),
+      Number(minutes),
+      Number(seconds),
+    );
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const parsed = new Date(trimmed);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 @Injectable()
@@ -225,8 +269,8 @@ export class TicketsService {
 
   upsertMany(tickets: Partial<Ticket>[]): void {
     const upsert = this.db.prepare(`
-      INSERT INTO tickets (id, subject, status, ownerTeam, slaSolutionDate, slaSolutionDateIsPaused, opened_at, closed_at, responsavel, assigned_at, updated_at)
-      VALUES (@id, @subject, @status, @ownerTeam, @slaSolutionDate, @slaSolutionDateIsPaused, @opened_at, @closed_at, @responsavel, @assigned_at, datetime('now'))
+      INSERT INTO tickets (id, subject, status, ownerTeam, slaSolutionDate, slaSolutionDateIsPaused, opened_at, closed_at, last_update, responsavel, assigned_at, updated_at)
+      VALUES (@id, @subject, @status, @ownerTeam, @slaSolutionDate, @slaSolutionDateIsPaused, @opened_at, @closed_at, @last_update, @responsavel, @assigned_at, datetime('now'))
       ON CONFLICT(id) DO UPDATE SET
         subject = excluded.subject,
         status = excluded.status,
@@ -235,6 +279,7 @@ export class TicketsService {
         slaSolutionDateIsPaused = excluded.slaSolutionDateIsPaused,
         opened_at = excluded.opened_at,
         closed_at = excluded.closed_at,
+        last_update = excluded.last_update,
         responsavel = CASE
           WHEN assignment_override = 'local_assigned' THEN responsavel
           WHEN assignment_override = 'local_unassigned' THEN NULL
@@ -263,6 +308,7 @@ export class TicketsService {
           slaSolutionDateIsPaused: t.slaSolutionDateIsPaused ? 1 : 0,
           opened_at: t.opened_at ?? null,
           closed_at: t.closed_at ?? null,
+          last_update: t.last_update ?? null,
           responsavel: t.responsavel ?? null,
           assigned_at: t.assigned_at ?? null,
         });
@@ -288,73 +334,13 @@ export class TicketsService {
       .all() as Ticket[];
   }
 
-  registerTicketExitEvents(missingTickets: Ticket[], referenceDate = new Date()): void {
-    if (missingTickets.length === 0) return;
-
-    const brazilNow = getBrazilDateParts(referenceDate);
-    const exitedAt = referenceDate.toISOString();
-    const exitedMonth = monthKeyFromParts({ year: brazilNow.year, month: brazilNow.month, day: 1 });
-    const exitedLabel = createBrazilMonthLabel(brazilNow.year, brazilNow.month);
-
-    const insertEvent = this.db.prepare(`
-      INSERT OR IGNORE INTO ticket_exit_events (
-        ticket_id,
-        sla_solution_date,
-        exited_at,
-        exited_month,
-        exited_label,
-        resolved_on_time,
-        resolved_late
-      )
-      VALUES (
-        @ticket_id,
-        @sla_solution_date,
-        @exited_at,
-        @exited_month,
-        @exited_label,
-        @resolved_on_time,
-        @resolved_late
-      )
-    `);
-
-    this.db.transaction(() => {
-      for (const ticket of missingTickets) {
-        const dueAt = parseCalendarDateParts(ticket.slaSolutionDate);
-        const resolvedOnTime = dueAt && isOnTimeByBrazilCalendar(brazilNow, dueAt) ? 1 : 0;
-        const resolvedLate = dueAt && !isOnTimeByBrazilCalendar(brazilNow, dueAt) ? 1 : 0;
-
-        insertEvent.run({
-          ticket_id: ticket.id,
-          sla_solution_date: ticket.slaSolutionDate ?? null,
-          exited_at: exitedAt,
-          exited_month: exitedMonth,
-          exited_label: exitedLabel,
-          resolved_on_time: resolvedOnTime,
-          resolved_late: resolvedLate,
-        });
-      }
-    })();
-  }
-
-  purgeOldTicketExitEvents(referenceDate = new Date(), monthsToKeep = 3): void {
-    const safeMonthsToKeep = Math.max(1, monthsToKeep);
-    const brazilNow = getBrazilDateParts(referenceDate);
-    const currentMonth = { year: brazilNow.year, month: brazilNow.month, day: 1 };
-    const oldestMonthToKeep = addMonthsToParts(currentMonth, -(safeMonthsToKeep - 1));
-    const oldestKeyToKeep = monthKeyFromParts(oldestMonthToKeep);
-
-    this.db
-      .prepare(`DELETE FROM ticket_exit_events WHERE exited_month < ?`)
-      .run(oldestKeyToKeep);
-  }
-
   getMonthlyAnalytics(months = 3): TicketMonthlyAnalyticsDto {
     const totalMonths = Math.max(1, Math.min(months, 12));
-    const events = this.db
-      .prepare(`SELECT * FROM ticket_exit_events ORDER BY exited_month ASC, ticket_id ASC`)
-      .all() as TicketExitEvent[];
+    const rows = this.db
+      .prepare(`SELECT * FROM tickets ORDER BY id DESC`)
+      .all() as Ticket[];
 
-    const anchorMonth = getAnalyticsAnchorMonthPartsFromExitEvents(events, new Date());
+    const anchorMonth = getAnalyticsAnchorMonthPartsFromTickets(rows, new Date());
     const firstMonth = addMonthsToParts(anchorMonth, -(totalMonths - 1));
     const monthMap = new Map<string, TicketMonthlyAnalyticsItem>();
 
@@ -369,11 +355,31 @@ export class TicketsService {
       });
     }
 
-    for (const event of events) {
-      const bucket = monthMap.get(event.exited_month);
-      if (bucket) {
-        bucket.resolved_on_time += event.resolved_on_time;
-        bucket.resolved_late += event.resolved_late;
+    const oldestMonthToKeep = monthKeyFromParts(firstMonth);
+
+    for (const ticket of rows) {
+      const openedAt = parseCalendarDateParts(ticket.opened_at);
+      const dueAt = parseTicketDateTime(ticket.slaSolutionDate);
+      const lastUpdate = parseTicketDateTime(ticket.last_update);
+
+      if (!openedAt || !dueAt || !lastUpdate) {
+        continue;
+      }
+
+      const openedMonthKey = monthKeyFromParts(openedAt);
+      if (openedMonthKey < oldestMonthToKeep) {
+        continue;
+      }
+
+      const bucket = monthMap.get(openedMonthKey);
+      if (!bucket) {
+        continue;
+      }
+
+      if (dueAt.getTime() > lastUpdate.getTime()) {
+        bucket.resolved_on_time += 1;
+      } else {
+        bucket.resolved_late += 1;
       }
     }
 

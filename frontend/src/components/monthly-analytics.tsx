@@ -246,7 +246,7 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
           <div>
             <CardTitle className="text-xl">Visão mensal da equipe</CardTitle>
             <CardDescription>
-              Quando um ticket some da fila, o sistema compara o SLA com a data atual do Brasil e registra apenas dentro ou fora do prazo.
+              O gráfico compara `lastUpdate` com `slaSolutionDate` para tickets criados na janela de 3 meses e exibe o mês atual com 2 meses retroativos.
             </CardDescription>
           </div>
           <Button

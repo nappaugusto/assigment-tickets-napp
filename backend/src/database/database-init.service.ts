@@ -31,6 +31,7 @@ export class DatabaseInitService implements OnModuleInit {
         slaSolutionDateIsPaused INTEGER DEFAULT 0,
         opened_at               TEXT,
         closed_at               TEXT,
+        last_update             TEXT,
         responsavel             TEXT,
         assigned_at             TEXT,
         assignment_override     TEXT,
@@ -81,6 +82,10 @@ export class DatabaseInitService implements OnModuleInit {
 
     if (!ticketColumns.some((column) => column.name === 'closed_at')) {
       this.db.exec(`ALTER TABLE tickets ADD COLUMN closed_at TEXT;`);
+    }
+
+    if (!ticketColumns.some((column) => column.name === 'last_update')) {
+      this.db.exec(`ALTER TABLE tickets ADD COLUMN last_update TEXT;`);
     }
 
     this.logger.log('Database schema initialized');

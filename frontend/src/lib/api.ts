@@ -58,6 +58,7 @@ export interface Ticket {
   slaSolutionDateIsPaused: boolean
   opened_at: string | null
   closed_at: string | null
+  last_update: string | null
   responsavel: string | null
   assigned_at: string | null
 }

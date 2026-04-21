@@ -136,6 +136,7 @@ export class SyncService {
       String(this.getNested(ticket, 'createdDate', 'createdDateTime', 'createdAt') ?? '')
     ).trim() || null;
     const closedAt = this.resolveClosedAt(ticket);
+    const lastUpdate = String(this.getNested(ticket, 'lastUpdate') ?? '').trim() || null;
 
     const isFinalStatus = this.isFinalStatus(status);
 
@@ -158,6 +159,7 @@ export class SyncService {
       slaSolutionDateIsPaused,
       opened_at: openedAt,
       closed_at: closedAt,
+      last_update: lastUpdate,
       responsavel,
       assigned_at: null,
     };
@@ -217,6 +219,7 @@ export class SyncService {
       resolvedDateTime: this.getNested(ticket, 'resolvedDateTime'),
       statusChangedDate: this.getNested(ticket, 'statusChangedDate'),
       statusChangedDateTime: this.getNested(ticket, 'statusChangedDateTime'),
+      lastUpdate: this.getNested(ticket, 'lastUpdate'),
       slaSolutionDate: this.getNested(ticket, 'slaSolutionDate'),
       slaSolutionDateTime: this.getNested(ticket, 'slaSolutionDateTime'),
       solutionDate: this.getNested(ticket, 'solutionDate'),
@@ -306,17 +309,7 @@ export class SyncService {
 
     const tickets = await this.fetchFromApi();
     if (tickets.length > 0) {
-      const existingTickets = this.ticketsService.getAllRaw();
-      const incomingIds = new Set(
-        tickets
-          .map((ticket) => Number((ticket as Record<string, unknown>).id))
-          .filter((id) => Number.isFinite(id)),
-      );
-      const missingTickets = existingTickets.filter((ticket) => !incomingIds.has(ticket.id));
-
-      this.ticketsService.registerTicketExitEvents(missingTickets, now);
       this.ticketsService.upsertMany(tickets as any);
-      this.ticketsService.purgeOldTicketExitEvents(now, 3);
       this.lastSyncAt = now;
       this.logger.log(`Sync complete: ${tickets.length} tickets upserted`);
     }
