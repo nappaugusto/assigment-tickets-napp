@@ -38,6 +38,17 @@ export class DatabaseInitService implements OnModuleInit {
         updated_at              TEXT DEFAULT (datetime('now'))
       );
 
+      CREATE TABLE IF NOT EXISTS ticket_exit_events (
+        ticket_id        INTEGER PRIMARY KEY,
+        sla_solution_date TEXT,
+        exited_at         TEXT NOT NULL,
+        exited_month      TEXT NOT NULL,
+        exited_label      TEXT NOT NULL,
+        resolved_on_time  INTEGER NOT NULL DEFAULT 0,
+        resolved_late     INTEGER NOT NULL DEFAULT 0,
+        created_at        TEXT DEFAULT (datetime('now'))
+      );
+
       CREATE TABLE IF NOT EXISTS password_resets (
         id         INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

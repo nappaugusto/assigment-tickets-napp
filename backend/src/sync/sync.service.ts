@@ -306,6 +306,15 @@ export class SyncService {
 
     const tickets = await this.fetchFromApi();
     if (tickets.length > 0) {
+      const existingTickets = this.ticketsService.getAllRaw();
+      const incomingIds = new Set(
+        tickets
+          .map((ticket) => Number((ticket as Record<string, unknown>).id))
+          .filter((id) => Number.isFinite(id)),
+      );
+      const missingTickets = existingTickets.filter((ticket) => !incomingIds.has(ticket.id));
+
+      this.ticketsService.registerTicketExitEvents(missingTickets, now);
       this.ticketsService.upsertMany(tickets as any);
       this.lastSyncAt = now;
       this.logger.log(`Sync complete: ${tickets.length} tickets upserted`);

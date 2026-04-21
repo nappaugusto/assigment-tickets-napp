@@ -30,8 +30,6 @@ export interface TicketDto {
 export interface TicketMonthlyAnalyticsItem {
   month: string;
   label: string;
-  opened: number;
-  overdue: number;
   resolved_on_time: number;
   resolved_late: number;
 }

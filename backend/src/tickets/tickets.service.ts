@@ -18,6 +18,16 @@ interface CalendarDateParts {
   day: number;
 }
 
+interface TicketExitEvent {
+  ticket_id: number;
+  sla_solution_date: string | null;
+  exited_at: string;
+  exited_month: string;
+  exited_label: string;
+  resolved_on_time: number;
+  resolved_late: number;
+}
+
 function normalize(s: string): string {
   return s
     .toLowerCase()
@@ -139,18 +149,19 @@ function addMonthsToParts(parts: CalendarDateParts, delta: number): CalendarDate
   };
 }
 
-function getAnalyticsAnchorMonthParts(rows: Ticket[], fallback: Date): CalendarDateParts {
+function getAnalyticsAnchorMonthPartsFromExitEvents(
+  events: TicketExitEvent[],
+  fallback: Date,
+): CalendarDateParts {
   let latestMonthParts: CalendarDateParts | null = null;
 
-  for (const ticket of rows) {
-    for (const value of [ticket.opened_at, ticket.closed_at, ticket.slaSolutionDate]) {
-      const parts = parseCalendarDateParts(value);
-      if (!parts) continue;
+  for (const event of events) {
+    const parts = parseCalendarDateParts(`${event.exited_month}-01`);
+    if (!parts) continue;
 
-      const monthOnly = { year: parts.year, month: parts.month, day: 1 };
-      if (!latestMonthParts || compareCalendarDateParts(monthOnly, latestMonthParts) > 0) {
-        latestMonthParts = monthOnly;
-      }
+    const monthOnly = { year: parts.year, month: parts.month, day: 1 };
+    if (!latestMonthParts || compareCalendarDateParts(monthOnly, latestMonthParts) > 0) {
+      latestMonthParts = monthOnly;
     }
   }
 
@@ -271,14 +282,67 @@ export class TicketsService {
     return rows.map((r) => r.responsavel);
   }
 
-  getMonthlyAnalytics(months = 6): TicketMonthlyAnalyticsDto {
-    const totalMonths = Math.max(1, Math.min(months, 24));
-    const rows = this.db
+  getAllRaw(): Ticket[] {
+    return this.db
       .prepare(`SELECT * FROM tickets ORDER BY id DESC`)
       .all() as Ticket[];
+  }
 
-    const today = getBrazilDateParts(new Date());
-    const anchorMonth = getAnalyticsAnchorMonthParts(rows, new Date());
+  registerTicketExitEvents(missingTickets: Ticket[], referenceDate = new Date()): void {
+    if (missingTickets.length === 0) return;
+
+    const brazilNow = getBrazilDateParts(referenceDate);
+    const exitedAt = referenceDate.toISOString();
+    const exitedMonth = monthKeyFromParts({ year: brazilNow.year, month: brazilNow.month, day: 1 });
+    const exitedLabel = createBrazilMonthLabel(brazilNow.year, brazilNow.month);
+
+    const insertEvent = this.db.prepare(`
+      INSERT OR IGNORE INTO ticket_exit_events (
+        ticket_id,
+        sla_solution_date,
+        exited_at,
+        exited_month,
+        exited_label,
+        resolved_on_time,
+        resolved_late
+      )
+      VALUES (
+        @ticket_id,
+        @sla_solution_date,
+        @exited_at,
+        @exited_month,
+        @exited_label,
+        @resolved_on_time,
+        @resolved_late
+      )
+    `);
+
+    this.db.transaction(() => {
+      for (const ticket of missingTickets) {
+        const dueAt = parseCalendarDateParts(ticket.slaSolutionDate);
+        const resolvedOnTime = dueAt && isOnTimeByBrazilCalendar(brazilNow, dueAt) ? 1 : 0;
+        const resolvedLate = dueAt && !isOnTimeByBrazilCalendar(brazilNow, dueAt) ? 1 : 0;
+
+        insertEvent.run({
+          ticket_id: ticket.id,
+          sla_solution_date: ticket.slaSolutionDate ?? null,
+          exited_at: exitedAt,
+          exited_month: exitedMonth,
+          exited_label: exitedLabel,
+          resolved_on_time: resolvedOnTime,
+          resolved_late: resolvedLate,
+        });
+      }
+    })();
+  }
+
+  getMonthlyAnalytics(months = 6): TicketMonthlyAnalyticsDto {
+    const totalMonths = Math.max(1, Math.min(months, 24));
+    const events = this.db
+      .prepare(`SELECT * FROM ticket_exit_events ORDER BY exited_month ASC, ticket_id ASC`)
+      .all() as TicketExitEvent[];
+
+    const anchorMonth = getAnalyticsAnchorMonthPartsFromExitEvents(events, new Date());
     const firstMonth = addMonthsToParts(anchorMonth, -(totalMonths - 1));
     const monthMap = new Map<string, TicketMonthlyAnalyticsItem>();
 
@@ -288,43 +352,16 @@ export class TicketsService {
       monthMap.set(key, {
         month: key,
         label: createBrazilMonthLabel(current.year, current.month),
-        opened: 0,
-        overdue: 0,
         resolved_on_time: 0,
         resolved_late: 0,
       });
     }
 
-    for (const ticket of rows) {
-      const openedAt = parseCalendarDateParts(ticket.opened_at);
-      const closedAt = parseCalendarDateParts(ticket.closed_at);
-      const dueAt = parseCalendarDateParts(ticket.slaSolutionDate);
-      const finalStatus = isFinal(ticket.status);
-
-      if (openedAt) {
-        const openedBucket = monthMap.get(monthKeyFromParts(openedAt));
-        if (openedBucket) openedBucket.opened += 1;
-      }
-
-      if (dueAt) {
-        const overdueBucket = monthMap.get(monthKeyFromParts(dueAt));
-        const referenceDate = finalStatus && closedAt ? closedAt : today;
-        const isOverdue = !isOnTimeByBrazilCalendar(referenceDate, dueAt);
-
-        if (overdueBucket && isOverdue) {
-          overdueBucket.overdue += 1;
-        }
-      }
-
-      if (finalStatus && closedAt && dueAt) {
-        const resolvedBucket = monthMap.get(monthKeyFromParts(closedAt));
-        if (resolvedBucket) {
-          if (isOnTimeByBrazilCalendar(closedAt, dueAt)) {
-            resolvedBucket.resolved_on_time += 1;
-          } else {
-            resolvedBucket.resolved_late += 1;
-          }
-        }
+    for (const event of events) {
+      const bucket = monthMap.get(event.exited_month);
+      if (bucket) {
+        bucket.resolved_on_time += event.resolved_on_time;
+        bucket.resolved_late += event.resolved_late;
       }
     }
 

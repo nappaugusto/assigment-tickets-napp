@@ -24,17 +24,13 @@ interface ChartSeries {
 interface MonthlyChartPoint {
   month: string
   label: string
-  opened: number
-  overdue: number
   resolved_on_time: number
   resolved_late: number
 }
 
 const CHART_SERIES: ChartSeries[] = [
-  { key: 'opened', label: 'Abertos no mês', color: '#22d3ee' },
-  { key: 'overdue', label: 'Vencidos no mês', color: '#fb7185' },
-  { key: 'resolved_on_time', label: 'Resolvidos antes do vencimento', color: '#34d399' },
-  { key: 'resolved_late', label: 'Resolvidos após o vencimento', color: '#fbbf24' },
+  { key: 'resolved_on_time', label: 'Saiu da fila dentro do prazo', color: '#34d399' },
+  { key: 'resolved_late', label: 'Saiu da fila fora do prazo', color: '#fb7185' },
 ]
 
 function MetricCard({ label, value, tone }: MetricCardProps) {
@@ -52,8 +48,6 @@ function toChartPoint(raw: TicketMonthlyAnalyticsPayload['months'][number]): Mon
   return {
     month: String(raw.month),
     label: raw.label,
-    opened: Number(raw.opened),
-    overdue: Number(raw.overdue),
     resolved_on_time: Number(raw.resolved_on_time),
     resolved_late: Number(raw.resolved_late),
   }
@@ -213,18 +207,14 @@ function MonthlyLineChart({ months }: { months: MonthlyChartPoint[] }) {
           <thead>
             <tr className="border-b border-border/50 text-[11px] uppercase tracking-[0.18em]">
               <th className="py-2 pr-4 font-medium">Mês</th>
-              <th className="py-2 pr-4 font-medium">Abertos</th>
-              <th className="py-2 pr-4 font-medium">Vencidos</th>
-              <th className="py-2 pr-4 font-medium">Antes do vencimento</th>
-              <th className="py-2 pr-4 font-medium">Após o vencimento</th>
+              <th className="py-2 pr-4 font-medium">Dentro do prazo</th>
+              <th className="py-2 pr-4 font-medium">Fora do prazo</th>
             </tr>
           </thead>
           <tbody>
             {months.map((month) => (
               <tr key={month.month} className="border-b border-border/30 last:border-b-0">
                 <td className="py-2 pr-4 font-medium text-foreground">{month.label}</td>
-                <td className="py-2 pr-4 tabular-nums text-foreground">{month.opened}</td>
-                <td className="py-2 pr-4 tabular-nums text-foreground">{month.overdue}</td>
                 <td className="py-2 pr-4 tabular-nums text-foreground">{month.resolved_on_time}</td>
                 <td className="py-2 pr-4 tabular-nums text-foreground">{month.resolved_late}</td>
               </tr>
@@ -256,7 +246,7 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
           <div>
             <CardTitle className="text-xl">Visão mensal da equipe</CardTitle>
             <CardDescription>
-              O gráfico usa somente datas reais retornadas pela API para aberturas, vencimentos e resoluções.
+              Quando um ticket some da fila, o sistema compara o SLA com a data atual do Brasil e registra apenas dentro ou fora do prazo.
             </CardDescription>
           </div>
           <Button
@@ -274,33 +264,23 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
       {!isCollapsed && (
         <CardContent className="space-y-5">
           {isLoading ? (
-            <div className="grid gap-3 md:grid-cols-4">
-              {[1, 2, 3, 4].map((item) => (
+            <div className="grid gap-3 md:grid-cols-2">
+              {[1, 2].map((item) => (
                 <div key={item} className="h-24 animate-pulse rounded-2xl bg-muted/40" />
               ))}
             </div>
           ) : (
             <>
-              <div className="grid gap-3 md:grid-cols-4">
+              <div className="grid gap-3 md:grid-cols-2">
                 <MetricCard
-                  label="Abertos no mês"
-                  value={currentMonth?.opened ?? 0}
-                  tone="border-cyan-400/20 bg-gradient-to-br from-cyan-400/10 to-transparent"
-                />
-                <MetricCard
-                  label="Vencidos no mês"
-                  value={currentMonth?.overdue ?? 0}
-                  tone="border-rose-400/20 bg-gradient-to-br from-rose-400/10 to-transparent"
-                />
-                <MetricCard
-                  label="Resolvidos antes"
+                  label="Dentro do prazo"
                   value={currentMonth?.resolved_on_time ?? 0}
                   tone="border-emerald-400/20 bg-gradient-to-br from-emerald-400/10 to-transparent"
                 />
                 <MetricCard
-                  label="Resolvidos após"
+                  label="Fora do prazo"
                   value={currentMonth?.resolved_late ?? 0}
-                  tone="border-amber-400/20 bg-gradient-to-br from-amber-400/10 to-transparent"
+                  tone="border-rose-400/20 bg-gradient-to-br from-rose-400/10 to-transparent"
                 />
               </div>
 

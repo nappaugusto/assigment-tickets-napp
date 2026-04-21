@@ -41,10 +41,8 @@ export class TicketsController {
         [
           'MONTHLY_ANALYTICS_SUMMARY',
           `month=${currentMonth.month}`,
-          `opened=${currentMonth.opened}`,
-          `overdue=${currentMonth.overdue}`,
-          `resolved_on_time=${currentMonth.resolved_on_time}`,
-          `resolved_late=${currentMonth.resolved_late}`,
+          `on_time=${currentMonth.resolved_on_time}`,
+          `late=${currentMonth.resolved_late}`,
         ].join(' | '),
       );
     }
