@@ -316,6 +316,7 @@ export class SyncService {
 
       this.ticketsService.registerTicketExitEvents(missingTickets, now);
       this.ticketsService.upsertMany(tickets as any);
+      this.ticketsService.purgeOldTicketExitEvents(now, 3);
       this.lastSyncAt = now;
       this.logger.log(`Sync complete: ${tickets.length} tickets upserted`);
     }

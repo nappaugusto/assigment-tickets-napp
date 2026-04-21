@@ -87,7 +87,7 @@ export interface TicketsPayload {
 export const ticketsApi = {
   refresh: (manual = false) =>
     get<TicketsPayload>(`/tickets/refresh${manual ? '?manual=1' : ''}`),
-  monthlyAnalytics: (months = 6) =>
+  monthlyAnalytics: (months = 3) =>
     get<TicketMonthlyAnalyticsPayload>(`/tickets/analytics/monthly?months=${months}`),
   assign: (id: number, responsavel: string) =>
     http

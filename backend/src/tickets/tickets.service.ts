@@ -336,8 +336,20 @@ export class TicketsService {
     })();
   }
 
-  getMonthlyAnalytics(months = 6): TicketMonthlyAnalyticsDto {
-    const totalMonths = Math.max(1, Math.min(months, 24));
+  purgeOldTicketExitEvents(referenceDate = new Date(), monthsToKeep = 3): void {
+    const safeMonthsToKeep = Math.max(1, monthsToKeep);
+    const brazilNow = getBrazilDateParts(referenceDate);
+    const currentMonth = { year: brazilNow.year, month: brazilNow.month, day: 1 };
+    const oldestMonthToKeep = addMonthsToParts(currentMonth, -(safeMonthsToKeep - 1));
+    const oldestKeyToKeep = monthKeyFromParts(oldestMonthToKeep);
+
+    this.db
+      .prepare(`DELETE FROM ticket_exit_events WHERE exited_month < ?`)
+      .run(oldestKeyToKeep);
+  }
+
+  getMonthlyAnalytics(months = 3): TicketMonthlyAnalyticsDto {
+    const totalMonths = Math.max(1, Math.min(months, 12));
     const events = this.db
       .prepare(`SELECT * FROM ticket_exit_events ORDER BY exited_month ASC, ticket_id ASC`)
       .all() as TicketExitEvent[];
