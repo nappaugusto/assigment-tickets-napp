@@ -329,6 +329,7 @@ export class TicketsService {
       monthMap.set(key, {
         month: key,
         label: createBrazilMonthLabel(current.year, current.month),
+        opened: 0,
         resolved_on_time: 0,
         resolved_late: 0,
       });
@@ -341,7 +342,7 @@ export class TicketsService {
       const dueAt = parseTicketDateTime(ticket.slaSolutionDate);
       const lastUpdate = parseTicketDateTime(ticket.last_update);
 
-      if (!openedAt || !dueAt || !lastUpdate) {
+      if (!openedAt) {
         continue;
       }
 
@@ -352,6 +353,12 @@ export class TicketsService {
 
       const bucket = monthMap.get(openedMonthKey);
       if (!bucket) {
+        continue;
+      }
+
+      bucket.opened += 1;
+
+      if (!dueAt || !lastUpdate) {
         continue;
       }
 
