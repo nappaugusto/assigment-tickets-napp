@@ -9,6 +9,7 @@ import {
   Query,
   Inject,
   forwardRef,
+  Logger,
 } from '@nestjs/common';
 import { SessionGuard } from '../auth/auth.guard';
 import { TicketsService } from './tickets.service';
@@ -16,6 +17,8 @@ import { SyncService } from '../sync/sync.service';
 
 @Controller()
 export class TicketsController {
+  private readonly logger = new Logger(TicketsController.name);
+
   constructor(
     private readonly ticketsService: TicketsService,
     @Inject(forwardRef(() => SyncService))
@@ -30,6 +33,21 @@ export class TicketsController {
 
     const tickets = this.ticketsService.getActive();
     const newTickets = this.ticketsService.getNewToday();
+    const monthlyAnalytics = this.ticketsService.getMonthlyAnalytics(6);
+    const currentMonth = monthlyAnalytics.current_month;
+
+    if (force && currentMonth) {
+      this.logger.log(
+        [
+          'MONTHLY_ANALYTICS_SUMMARY',
+          `month=${currentMonth.month}`,
+          `opened=${currentMonth.opened}`,
+          `overdue=${currentMonth.overdue}`,
+          `resolved_on_time=${currentMonth.resolved_on_time}`,
+          `resolved_late=${currentMonth.resolved_late}`,
+        ].join(' | '),
+      );
+    }
 
     return {
       now: new Date().toISOString(),
@@ -37,7 +55,15 @@ export class TicketsController {
       close_tickets: newTickets,
       count_tickets: tickets.length,
       close_count_tickets: newTickets.length,
+      monthly_analytics: monthlyAnalytics,
     };
+  }
+
+  @UseGuards(SessionGuard)
+  @Get('tickets/analytics/monthly')
+  monthlyAnalytics(@Query('months') months?: string) {
+    const parsedMonths = Number(months ?? 6);
+    return this.ticketsService.getMonthlyAnalytics(parsedMonths);
   }
 
   @Get('app-version')

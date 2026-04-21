@@ -1,9 +1,22 @@
 import { Injectable, Inject } from '@nestjs/common';
 import Database from 'better-sqlite3';
 import { DB_TOKEN } from '../database/database.module';
-import { Ticket, TicketDto } from './ticket.entity';
+import {
+  Ticket,
+  TicketDto,
+  TicketMonthlyAnalyticsDto,
+  TicketMonthlyAnalyticsItem,
+} from './ticket.entity';
 
 const FINAL_STATUS_KEYWORDS = ['cancelado', 'resolvido', 'fechado'];
+const BRAZIL_LOCALE = 'pt-BR';
+const BRAZIL_TIME_ZONE = 'America/Sao_Paulo';
+
+interface CalendarDateParts {
+  year: number;
+  month: number;
+  day: number;
+}
 
 function normalize(s: string): string {
   return s
@@ -35,13 +48,114 @@ function toDto(t: Ticket): TicketDto {
 
 function isToday(isoDate: string | null): boolean {
   if (!isoDate) return false;
-  const d = new Date(isoDate);
-  const now = new Date();
-  return (
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate()
+  const current = parseCalendarDateParts(isoDate);
+  const today = getBrazilDateParts(new Date());
+  if (!current) return false;
+  return compareCalendarDateParts(current, today) === 0;
+}
+
+function monthKeyFromParts(parts: CalendarDateParts): string {
+  return `${parts.year}-${`${parts.month}`.padStart(2, '0')}`;
+}
+
+function getBrazilDateParts(date: Date): CalendarDateParts {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: BRAZIL_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+
+  const parts = formatter.formatToParts(date);
+  const year = Number(parts.find((part) => part.type === 'year')?.value);
+  const month = Number(parts.find((part) => part.type === 'month')?.value);
+  const day = Number(parts.find((part) => part.type === 'day')?.value);
+
+  return { year, month, day };
+}
+
+function parseCalendarDateParts(value: string | null): CalendarDateParts | null {
+  if (!value) return null;
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s].*)?$/);
+  if (isoMatch) {
+    return {
+      year: Number(isoMatch[1]),
+      month: Number(isoMatch[2]),
+      day: Number(isoMatch[3]),
+    };
+  }
+
+  const brMatch = trimmed.match(
+    /^(\d{2})\/(\d{2})\/(\d{4})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/,
   );
+  if (brMatch) {
+    return {
+      year: Number(brMatch[3]),
+      month: Number(brMatch[2]),
+      day: Number(brMatch[1]),
+    };
+  }
+
+  const dotNetMatch = trimmed.match(/\/Date\((\d+)\)\//);
+  if (dotNetMatch) {
+    return getBrazilDateParts(new Date(Number(dotNetMatch[1])));
+  }
+
+  const parsed = new Date(trimmed);
+  return Number.isNaN(parsed.getTime()) ? null : getBrazilDateParts(parsed);
+}
+
+function compareCalendarDateParts(a: CalendarDateParts, b: CalendarDateParts): number {
+  if (a.year !== b.year) return a.year - b.year;
+  if (a.month !== b.month) return a.month - b.month;
+  return a.day - b.day;
+}
+
+function isOnTimeByBrazilCalendar(
+  referenceDate: CalendarDateParts,
+  dueDate: CalendarDateParts,
+): boolean {
+  return compareCalendarDateParts(referenceDate, dueDate) <= 0;
+}
+
+function createBrazilMonthLabel(year: number, month: number): string {
+  return new Intl.DateTimeFormat(BRAZIL_LOCALE, {
+    timeZone: BRAZIL_TIME_ZONE,
+    month: 'short',
+    year: 'numeric',
+  }).format(new Date(Date.UTC(year, month - 1, 1, 12, 0, 0)));
+}
+
+function addMonthsToParts(parts: CalendarDateParts, delta: number): CalendarDateParts {
+  const date = new Date(parts.year, parts.month - 1 + delta, 1);
+  return {
+    year: date.getFullYear(),
+    month: date.getMonth() + 1,
+    day: 1,
+  };
+}
+
+function getAnalyticsAnchorMonthParts(rows: Ticket[], fallback: Date): CalendarDateParts {
+  let latestMonthParts: CalendarDateParts | null = null;
+
+  for (const ticket of rows) {
+    for (const value of [ticket.opened_at, ticket.closed_at, ticket.slaSolutionDate]) {
+      const parts = parseCalendarDateParts(value);
+      if (!parts) continue;
+
+      const monthOnly = { year: parts.year, month: parts.month, day: 1 };
+      if (!latestMonthParts || compareCalendarDateParts(monthOnly, latestMonthParts) > 0) {
+        latestMonthParts = monthOnly;
+      }
+    }
+  }
+
+  const fallbackParts = getBrazilDateParts(fallback);
+  return latestMonthParts ?? { year: fallbackParts.year, month: fallbackParts.month, day: 1 };
 }
 
 @Injectable()
@@ -155,5 +269,72 @@ export class TicketsService {
       )
       .all() as { responsavel: string }[];
     return rows.map((r) => r.responsavel);
+  }
+
+  getMonthlyAnalytics(months = 6): TicketMonthlyAnalyticsDto {
+    const totalMonths = Math.max(1, Math.min(months, 24));
+    const rows = this.db
+      .prepare(`SELECT * FROM tickets ORDER BY id DESC`)
+      .all() as Ticket[];
+
+    const today = getBrazilDateParts(new Date());
+    const anchorMonth = getAnalyticsAnchorMonthParts(rows, new Date());
+    const firstMonth = addMonthsToParts(anchorMonth, -(totalMonths - 1));
+    const monthMap = new Map<string, TicketMonthlyAnalyticsItem>();
+
+    for (let index = 0; index < totalMonths; index++) {
+      const current = addMonthsToParts(firstMonth, index);
+      const key = monthKeyFromParts(current);
+      monthMap.set(key, {
+        month: key,
+        label: createBrazilMonthLabel(current.year, current.month),
+        opened: 0,
+        overdue: 0,
+        resolved_on_time: 0,
+        resolved_late: 0,
+      });
+    }
+
+    for (const ticket of rows) {
+      const openedAt = parseCalendarDateParts(ticket.opened_at);
+      const closedAt = parseCalendarDateParts(ticket.closed_at);
+      const dueAt = parseCalendarDateParts(ticket.slaSolutionDate);
+      const finalStatus = isFinal(ticket.status);
+
+      if (openedAt) {
+        const openedBucket = monthMap.get(monthKeyFromParts(openedAt));
+        if (openedBucket) openedBucket.opened += 1;
+      }
+
+      if (dueAt) {
+        const overdueBucket = monthMap.get(monthKeyFromParts(dueAt));
+        const referenceDate = finalStatus && closedAt ? closedAt : today;
+        const isOverdue = !isOnTimeByBrazilCalendar(referenceDate, dueAt);
+
+        if (overdueBucket && isOverdue) {
+          overdueBucket.overdue += 1;
+        }
+      }
+
+      if (finalStatus && closedAt && dueAt) {
+        const resolvedBucket = monthMap.get(monthKeyFromParts(closedAt));
+        if (resolvedBucket) {
+          if (isOnTimeByBrazilCalendar(closedAt, dueAt)) {
+            resolvedBucket.resolved_on_time += 1;
+          } else {
+            resolvedBucket.resolved_late += 1;
+          }
+        }
+      }
+    }
+
+    const analyticsMonths = Array.from(monthMap.values());
+    const currentMonth = analyticsMonths[analyticsMonths.length - 1] ?? null;
+
+    return {
+      generated_at: new Date().toISOString(),
+      months: analyticsMonths,
+      current_month: currentMonth,
+    };
   }
 }

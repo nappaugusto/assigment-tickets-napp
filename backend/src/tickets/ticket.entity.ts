@@ -26,3 +26,18 @@ export interface TicketDto {
   responsavel: string | null;
   assigned_at: string | null;
 }
+
+export interface TicketMonthlyAnalyticsItem {
+  month: string;
+  label: string;
+  opened: number;
+  overdue: number;
+  resolved_on_time: number;
+  resolved_late: number;
+}
+
+export interface TicketMonthlyAnalyticsDto {
+  generated_at: string;
+  months: TicketMonthlyAnalyticsItem[];
+  current_month: TicketMonthlyAnalyticsItem | null;
+}
