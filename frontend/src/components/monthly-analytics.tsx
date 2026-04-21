@@ -246,6 +246,9 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
     return current ?? months.at(-1) ?? null
   }, [analytics?.current_month, months])
 
+  const activePaused = analytics?.active_sla_paused ?? currentMonth?.sla_paused ?? 0
+  const currentMonthPaused = analytics?.current_month_sla_paused ?? currentMonth?.sla_paused ?? 0
+
   return (
     <Card className="rounded-[1.5rem] border-border/60 bg-card/80 shadow-[0_24px_80px_rgba(0,0,0,0.22)]">
       <CardHeader className="pb-4">
@@ -260,12 +263,12 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
             <div className="flex flex-wrap items-center gap-2 rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs text-amber-100">
               <span>
                 Tickets pausados:{' '}
-                <strong className="tabular-nums text-amber-50">{analytics?.active_sla_paused ?? 0}</strong>
+                <strong className="tabular-nums text-amber-50">{activePaused}</strong>
               </span>
               <span className="text-amber-200/60">|</span>
               <span>
                 Pausados no mês:{' '}
-                <strong className="tabular-nums text-amber-50">{currentMonth?.sla_paused ?? 0}</strong>
+                <strong className="tabular-nums text-amber-50">{currentMonthPaused}</strong>
               </span>
             </div>
           )}
