@@ -31,6 +31,10 @@ function isFinal(status: string | null): boolean {
   return FINAL_STATUS_KEYWORDS.some((keyword) => normalizedStatus.includes(keyword));
 }
 
+function isActive(ticket: Ticket): boolean {
+  return !isFinal(ticket.status);
+}
+
 function toDto(t: Ticket): TicketDto {
   return {
     id: t.id,
@@ -207,7 +211,7 @@ export class TicketsService {
       .prepare(`SELECT * FROM tickets ORDER BY id DESC`)
       .all() as Ticket[];
     return rows
-      .filter((t) => !isFinal(t.status) && !isToday(t.opened_at))
+      .filter((t) => isActive(t) && !isToday(t.opened_at))
       .map(toDto);
   }
 
@@ -215,7 +219,7 @@ export class TicketsService {
     const rows = this.db
       .prepare(`SELECT * FROM tickets ORDER BY id DESC`)
       .all() as Ticket[];
-    return rows.filter((t) => !isFinal(t.status) && isToday(t.opened_at)).map(toDto);
+    return rows.filter((t) => isActive(t) && isToday(t.opened_at)).map(toDto);
   }
 
   findById(id: number): TicketDto | undefined {
@@ -377,6 +381,13 @@ export class TicketsService {
 
     const analyticsMonths = Array.from(monthMap.values());
     const currentMonth = analyticsMonths[analyticsMonths.length - 1] ?? null;
+    const activePausedCount = rows.filter(
+      (ticket) => isActive(ticket) && !!ticket.slaSolutionDateIsPaused,
+    ).length;
+
+    if (currentMonth) {
+      currentMonth.sla_paused = activePausedCount;
+    }
 
     return {
       generated_at: new Date().toISOString(),
