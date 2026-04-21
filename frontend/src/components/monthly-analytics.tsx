@@ -258,7 +258,7 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
           </div>
           {!isCollapsed && !isLoading && (
             <div className="rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs text-amber-100">
-              Tickets com interrupção: <strong className="tabular-nums text-amber-50">{currentMonth?.sla_paused ?? 0}</strong>
+              Tickets pausados: <strong className="tabular-nums text-amber-50">{currentMonth?.sla_paused ?? 0}</strong>
             </div>
           )}
           <Button
