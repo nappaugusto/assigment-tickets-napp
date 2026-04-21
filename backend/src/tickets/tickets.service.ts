@@ -140,28 +140,6 @@ function addMonthsToParts(parts: CalendarDateParts, delta: number): CalendarDate
   };
 }
 
-function getAnalyticsAnchorMonthPartsFromTickets(
-  tickets: Ticket[],
-  fallback: Date,
-): CalendarDateParts {
-  let latestMonthParts: CalendarDateParts | null = null;
-
-  for (const ticket of tickets) {
-    const parts = parseCalendarDateParts(ticket.opened_at);
-    if (!parts) {
-      continue;
-    }
-
-    const monthOnly = { year: parts.year, month: parts.month, day: 1 };
-    if (!latestMonthParts || compareCalendarDateParts(monthOnly, latestMonthParts) > 0) {
-      latestMonthParts = monthOnly;
-    }
-  }
-
-  const fallbackParts = getBrazilDateParts(fallback);
-  return latestMonthParts ?? { year: fallbackParts.year, month: fallbackParts.month, day: 1 };
-}
-
 function parseTicketDateTime(value: string | null): Date | null {
   if (!value) return null;
 
@@ -340,7 +318,8 @@ export class TicketsService {
       .prepare(`SELECT * FROM tickets ORDER BY id DESC`)
       .all() as Ticket[];
 
-    const anchorMonth = getAnalyticsAnchorMonthPartsFromTickets(rows, new Date());
+    const today = getBrazilDateParts(new Date());
+    const anchorMonth = { year: today.year, month: today.month, day: 1 };
     const firstMonth = addMonthsToParts(anchorMonth, -(totalMonths - 1));
     const monthMap = new Map<string, TicketMonthlyAnalyticsItem>();
 

@@ -49,6 +49,11 @@ export class SyncService {
       const value = decodeURIComponent(part.slice(eqIdx + 1));
       result[key] = value;
     }
+
+    if (result['$select'] && !result['$select'].split(',').includes('lastUpdate')) {
+      result['$select'] = `${result['$select']},lastUpdate`;
+    }
+
     return result;
   }
 
