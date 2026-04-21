@@ -385,12 +385,9 @@ export class TicketsService {
       (ticket) => isActive(ticket) && !!ticket.slaSolutionDateIsPaused,
     ).length;
 
-    if (currentMonth) {
-      currentMonth.sla_paused = activePausedCount;
-    }
-
     return {
       generated_at: new Date().toISOString(),
+      active_sla_paused: activePausedCount,
       months: analyticsMonths,
       current_month: currentMonth,
     };

@@ -40,6 +40,7 @@ export interface TicketMonthlyAnalyticsItem {
 
 export interface TicketMonthlyAnalyticsDto {
   generated_at: string;
+  active_sla_paused: number;
   months: TicketMonthlyAnalyticsItem[];
   current_month: TicketMonthlyAnalyticsItem | null;
 }

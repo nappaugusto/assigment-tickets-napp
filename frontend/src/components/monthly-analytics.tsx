@@ -257,8 +257,16 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
             </CardDescription>
           </div>
           {!isCollapsed && !isLoading && (
-            <div className="rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs text-amber-100">
-              Tickets pausados: <strong className="tabular-nums text-amber-50">{currentMonth?.sla_paused ?? 0}</strong>
+            <div className="flex flex-wrap items-center gap-2 rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs text-amber-100">
+              <span>
+                Tickets pausados:{' '}
+                <strong className="tabular-nums text-amber-50">{analytics?.active_sla_paused ?? 0}</strong>
+              </span>
+              <span className="text-amber-200/60">|</span>
+              <span>
+                Pausados no mês:{' '}
+                <strong className="tabular-nums text-amber-50">{currentMonth?.sla_paused ?? 0}</strong>
+              </span>
             </div>
           )}
           <Button
