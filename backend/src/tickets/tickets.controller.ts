@@ -33,7 +33,7 @@ export class TicketsController {
 
     const tickets = this.ticketsService.getActive();
     const newTickets = this.ticketsService.getNewToday();
-    const monthlyAnalytics = this.ticketsService.getMonthlyAnalytics(3);
+    const monthlyAnalytics = this.ticketsService.getMonthlyAnalytics();
     const currentMonth = monthlyAnalytics.current_month;
 
     if (force && currentMonth) {
@@ -60,7 +60,7 @@ export class TicketsController {
   @UseGuards(SessionGuard)
   @Get('tickets/analytics/monthly')
   monthlyAnalytics(@Query('months') months?: string) {
-    const parsedMonths = Number(months ?? 3);
+    const parsedMonths = months ? Number(months) : undefined;
     return this.ticketsService.getMonthlyAnalytics(parsedMonths);
   }
 

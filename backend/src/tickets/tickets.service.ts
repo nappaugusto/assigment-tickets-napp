@@ -11,6 +11,8 @@ import {
 const FINAL_STATUS_KEYWORDS = ['cancelado', 'resolvido', 'fechado'];
 const BRAZIL_LOCALE = 'pt-BR';
 const BRAZIL_TIME_ZONE = 'America/Sao_Paulo';
+const DEFAULT_ANALYTICS_MONTHS = 4;
+const TICKET_RETENTION_MONTHS = 5;
 
 interface CalendarDateParts {
   year: number;
@@ -144,6 +146,12 @@ function addMonthsToParts(parts: CalendarDateParts, delta: number): CalendarDate
   };
 }
 
+function getOldestMonthToKeep(months: number): string {
+  const today = getBrazilDateParts(new Date());
+  const anchorMonth = { year: today.year, month: today.month, day: 1 };
+  return monthKeyFromParts(addMonthsToParts(anchorMonth, -(months - 1)));
+}
+
 function parseTicketDateTime(value: string | null): Date | null {
   if (!value) return null;
 
@@ -275,9 +283,8 @@ export class TicketsService {
         updated_at = datetime('now')
     `);
 
-    const deleteOld = this.db.prepare(
-      `DELETE FROM tickets WHERE id NOT IN (${tickets.map(() => '?').join(',')})`,
-    );
+    const selectTicketDates = this.db.prepare(`SELECT id, opened_at FROM tickets`);
+    const deleteById = this.db.prepare(`DELETE FROM tickets WHERE id = ?`);
 
     this.db.transaction(() => {
       for (const t of tickets) {
@@ -295,8 +302,13 @@ export class TicketsService {
           assigned_at: t.assigned_at ?? null,
         });
       }
-      if (tickets.length > 0) {
-        deleteOld.run(...tickets.map((t) => t.id));
+      const oldestMonthToKeep = getOldestMonthToKeep(TICKET_RETENTION_MONTHS);
+      const storedTickets = selectTicketDates.all() as Pick<Ticket, 'id' | 'opened_at'>[];
+      for (const ticket of storedTickets) {
+        const openedAt = parseCalendarDateParts(ticket.opened_at);
+        if (openedAt && monthKeyFromParts(openedAt) < oldestMonthToKeep) {
+          deleteById.run(ticket.id);
+        }
       }
     })();
   }
@@ -316,7 +328,7 @@ export class TicketsService {
       .all() as Ticket[];
   }
 
-  getMonthlyAnalytics(months = 3): TicketMonthlyAnalyticsDto {
+  getMonthlyAnalytics(months = DEFAULT_ANALYTICS_MONTHS): TicketMonthlyAnalyticsDto {
     const totalMonths = Math.max(1, Math.min(months, 12));
     const rows = this.db
       .prepare(`SELECT * FROM tickets ORDER BY id DESC`)

@@ -253,7 +253,7 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
           <div>
             <CardTitle className="text-xl">Visão mensal da equipe</CardTitle>
             <CardDescription>
-              O gráfico compara `lastUpdate` com `slaSolutionDate` para tickets criados na janela de 3 meses e exibe o mês atual com 2 meses retroativos.
+              O gráfico compara `lastUpdate` com `slaSolutionDate` para tickets criados no mês atual e nos 3 meses retroativos.
             </CardDescription>
           </div>
           {!isCollapsed && !isLoading && (
