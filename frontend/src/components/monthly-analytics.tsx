@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { type TicketMonthlyAnalyticsPayload } from '@/lib/api'
 
@@ -15,10 +15,22 @@ interface MetricCardProps {
   tone: string
 }
 
+type ChartMetricKey = 'opened' | 'resolved_on_time' | 'resolved_late' | 'sla_paused'
+
 interface ChartSeries {
-  key: keyof MonthlyChartPoint
+  key: ChartMetricKey
   label: string
   color: string
+}
+
+interface HoveredPoint {
+  key: ChartMetricKey
+  label: string
+  color: string
+  monthLabel: string
+  value: number
+  x: number
+  y: number
 }
 
 interface MonthlyChartPoint {
@@ -34,7 +46,10 @@ const CHART_SERIES: ChartSeries[] = [
   { key: 'opened', label: 'Abertos no mês', color: '#22d3ee' },
   { key: 'resolved_on_time', label: 'Resposta dentro do prazo', color: '#34d399' },
   { key: 'resolved_late', label: 'Resposta fora do prazo', color: '#fb7185' },
+  { key: 'sla_paused', label: 'Pausados no mês', color: '#facc15' },
 ]
+
+const DEFAULT_VISIBLE_SERIES = CHART_SERIES.map((series) => series.key)
 
 function MetricCard({ label, value, tone }: MetricCardProps) {
   return (
@@ -67,14 +82,17 @@ function formatAxisValue(value: number) {
 }
 
 function MonthlyLineChart({ months }: { months: MonthlyChartPoint[] }) {
+  const [visibleSeriesKeys, setVisibleSeriesKeys] = useState<ChartMetricKey[]>(DEFAULT_VISIBLE_SERIES)
+  const [hoveredPoint, setHoveredPoint] = useState<HoveredPoint | null>(null)
   const width = 960
   const height = 320
   const padding = { top: 20, right: 24, bottom: 50, left: 44 }
   const plotWidth = width - padding.left - padding.right
   const plotHeight = height - padding.top - padding.bottom
+  const activeSeries = CHART_SERIES.filter((series) => visibleSeriesKeys.includes(series.key))
 
   const { yTicks, seriesWithPoints } = useMemo(() => {
-    const allValues = months.flatMap((month) => CHART_SERIES.map((series) => month[series.key] as number))
+    const allValues = months.flatMap((month) => activeSeries.map((series) => month[series.key]))
     const maxValue = Math.max(0, ...allValues)
     const yMax = maxValue === 0 ? 1 : maxValue
     const yTicks = Array.from({ length: 5 }, (_, index) => {
@@ -83,9 +101,9 @@ function MonthlyLineChart({ months }: { months: MonthlyChartPoint[] }) {
     })
     const xStep = months.length > 1 ? plotWidth / (months.length - 1) : 0
 
-    const seriesWithPoints = CHART_SERIES.map((series) => {
+    const seriesWithPoints = activeSeries.map((series) => {
       const points = months.map((month, index) => {
-        const value = month[series.key] as number
+        const value = month[series.key]
         const x = padding.left + xStep * index
         const y = padding.top + plotHeight - (value / yMax) * plotHeight
         return { x, y, value, month }
@@ -99,18 +117,37 @@ function MonthlyLineChart({ months }: { months: MonthlyChartPoint[] }) {
     })
 
     return { yTicks, seriesWithPoints }
-  }, [months, plotHeight, plotWidth, padding.left, padding.top])
+  }, [activeSeries, months, plotHeight, plotWidth, padding.left, padding.top])
 
   const xStep = months.length > 1 ? plotWidth / (months.length - 1) : 0
+  const toggleSeries = (key: ChartMetricKey) => {
+    setVisibleSeriesKeys((current) => {
+      if (current.includes(key)) {
+        return current.length === 1 ? current : current.filter((item) => item !== key)
+      }
+
+      return [...current, key]
+    })
+    setHoveredPoint(null)
+  }
 
   return (
     <div className="rounded-2xl border border-border/60 bg-background/30 p-4">
-      <div className="mb-4 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+      <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         {CHART_SERIES.map((series) => (
-          <span key={series.key} className="flex items-center gap-2">
+          <button
+            key={series.key}
+            type="button"
+            onClick={() => toggleSeries(series.key)}
+            className={`flex items-center gap-2 rounded-full border px-3 py-1 transition-colors ${
+              visibleSeriesKeys.includes(series.key)
+                ? 'border-border/70 bg-muted/50 text-foreground'
+                : 'border-border/30 text-muted-foreground/55'
+            }`}
+          >
             <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: series.color }} />
             {series.label}
-          </span>
+          </button>
         ))}
       </div>
 
@@ -188,7 +225,27 @@ function MonthlyLineChart({ months }: { months: MonthlyChartPoint[] }) {
                 />
                 {series.points.map((point) => (
                   <g key={`${series.key}-${point.month.month}`}>
-                    <circle cx={point.x} cy={point.y} r="4.5" fill={series.color} stroke="#0f172a" strokeWidth="2" />
+                    <circle
+                      cx={point.x}
+                      cy={point.y}
+                      r={hoveredPoint?.key === series.key && hoveredPoint.monthLabel === point.month.label ? 7 : 4.5}
+                      fill={series.color}
+                      stroke="#0f172a"
+                      strokeWidth="2"
+                      className="cursor-pointer transition-all"
+                      onMouseEnter={() =>
+                        setHoveredPoint({
+                          key: series.key,
+                          label: series.label,
+                          color: series.color,
+                          monthLabel: point.month.label,
+                          value: point.value,
+                          x: point.x,
+                          y: point.y,
+                        })
+                      }
+                      onMouseLeave={() => setHoveredPoint(null)}
+                    />
                     <text
                       x={point.x}
                       y={point.y - 10}
@@ -203,6 +260,51 @@ function MonthlyLineChart({ months }: { months: MonthlyChartPoint[] }) {
                 ))}
               </g>
             ))}
+
+            {hoveredPoint && (
+              <g pointerEvents="none">
+                <line
+                  x1={hoveredPoint.x}
+                  y1={padding.top}
+                  x2={hoveredPoint.x}
+                  y2={padding.top + plotHeight}
+                  stroke="rgba(226, 232, 240, 0.35)"
+                  strokeDasharray="4 6"
+                />
+                <rect
+                  x={Math.min(Math.max(hoveredPoint.x - 86, padding.left), width - padding.right - 172)}
+                  y={Math.max(hoveredPoint.y - 72, padding.top + 4)}
+                  width="172"
+                  height="54"
+                  rx="8"
+                  fill="rgba(15, 23, 42, 0.96)"
+                  stroke="rgba(148, 163, 184, 0.35)"
+                />
+                <text
+                  x={Math.min(Math.max(hoveredPoint.x - 74, padding.left + 12), width - padding.right - 160)}
+                  y={Math.max(hoveredPoint.y - 48, padding.top + 28)}
+                  fontSize="11"
+                  fill="rgba(226, 232, 240, 0.72)"
+                >
+                  {hoveredPoint.monthLabel}
+                </text>
+                <circle
+                  cx={Math.min(Math.max(hoveredPoint.x - 74, padding.left + 12), width - padding.right - 160) + 5}
+                  cy={Math.max(hoveredPoint.y - 26, padding.top + 50)}
+                  r="4"
+                  fill={hoveredPoint.color}
+                />
+                <text
+                  x={Math.min(Math.max(hoveredPoint.x - 62, padding.left + 24), width - padding.right - 148)}
+                  y={Math.max(hoveredPoint.y - 22, padding.top + 54)}
+                  fontSize="12"
+                  fontWeight="600"
+                  fill="rgba(248, 250, 252, 0.95)"
+                >
+                  {hoveredPoint.label}: {hoveredPoint.value}
+                </text>
+              </g>
+            )}
           </svg>
         </div>
       </div>
@@ -215,6 +317,7 @@ function MonthlyLineChart({ months }: { months: MonthlyChartPoint[] }) {
               <th className="py-2 pr-4 font-medium">Abertos</th>
               <th className="py-2 pr-4 font-medium">Dentro do prazo</th>
               <th className="py-2 pr-4 font-medium">Fora do prazo</th>
+              <th className="py-2 pr-4 font-medium">Pausados</th>
             </tr>
           </thead>
           <tbody>
@@ -224,6 +327,7 @@ function MonthlyLineChart({ months }: { months: MonthlyChartPoint[] }) {
                 <td className="py-2 pr-4 tabular-nums text-foreground">{month.opened}</td>
                 <td className="py-2 pr-4 tabular-nums text-foreground">{month.resolved_on_time}</td>
                 <td className="py-2 pr-4 tabular-nums text-foreground">{month.resolved_late}</td>
+                <td className="py-2 pr-4 tabular-nums text-foreground">{month.sla_paused}</td>
               </tr>
             ))}
           </tbody>
@@ -252,9 +356,6 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <CardTitle className="text-xl">Visão mensal da equipe</CardTitle>
-            <CardDescription>
-              O gráfico compara `lastUpdate` com `slaSolutionDate` para tickets criados no mês atual e nos 3 meses retroativos.
-            </CardDescription>
           </div>
           {!isCollapsed && !isLoading && (
             <div className="flex flex-wrap items-center gap-2 rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs text-amber-100">
