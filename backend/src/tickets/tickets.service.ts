@@ -381,7 +381,6 @@ export class TicketsService {
 
     const analyticsMonths = Array.from(monthMap.values());
     const currentMonth = analyticsMonths[analyticsMonths.length - 1] ?? null;
-    const currentMonthPausedCount = currentMonth?.sla_paused ?? 0;
     const activePausedCount = rows.filter(
       (ticket) => isActive(ticket) && !!ticket.slaSolutionDateIsPaused,
     ).length;
@@ -389,9 +388,8 @@ export class TicketsService {
     return {
       generated_at: new Date().toISOString(),
       active_sla_paused: activePausedCount,
-      current_month_sla_paused: currentMonthPausedCount,
       months: analyticsMonths,
-      current_month: currentMonth ? { ...currentMonth, sla_paused: activePausedCount } : null,
+      current_month: currentMonth,
     };
   }
 }

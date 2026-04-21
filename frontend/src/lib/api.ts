@@ -75,7 +75,6 @@ export interface TicketMonthlyAnalyticsItem {
 export interface TicketMonthlyAnalyticsPayload {
   generated_at: string
   active_sla_paused: number
-  current_month_sla_paused: number
   months: TicketMonthlyAnalyticsItem[]
   current_month: TicketMonthlyAnalyticsItem | null
 }
