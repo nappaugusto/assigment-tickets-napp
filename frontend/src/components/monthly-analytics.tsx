@@ -31,8 +31,8 @@ interface MonthlyChartPoint {
 
 const CHART_SERIES: ChartSeries[] = [
   { key: 'opened', label: 'Abertos no mês', color: '#22d3ee' },
-  { key: 'resolved_on_time', label: 'Saiu da fila dentro do prazo', color: '#34d399' },
-  { key: 'resolved_late', label: 'Saiu da fila fora do prazo', color: '#fb7185' },
+  { key: 'resolved_on_time', label: 'Resposta dentro do prazo', color: '#34d399' },
+  { key: 'resolved_late', label: 'Resposta fora do prazo', color: '#fb7185' },
 ]
 
 function MetricCard({ label, value, tone }: MetricCardProps) {
