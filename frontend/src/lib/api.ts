@@ -69,6 +69,7 @@ export interface TicketMonthlyAnalyticsItem {
   opened: number
   resolved_on_time: number
   resolved_late: number
+  sla_paused: number
 }
 
 export interface TicketMonthlyAnalyticsPayload {

@@ -332,6 +332,7 @@ export class TicketsService {
         opened: 0,
         resolved_on_time: 0,
         resolved_late: 0,
+        sla_paused: 0,
       });
     }
 
@@ -357,6 +358,11 @@ export class TicketsService {
       }
 
       bucket.opened += 1;
+
+      if (ticket.slaSolutionDateIsPaused) {
+        bucket.sla_paused += 1;
+        continue;
+      }
 
       if (!dueAt || !lastUpdate) {
         continue;

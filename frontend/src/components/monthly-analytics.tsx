@@ -27,6 +27,7 @@ interface MonthlyChartPoint {
   opened: number
   resolved_on_time: number
   resolved_late: number
+  sla_paused: number
 }
 
 const CHART_SERIES: ChartSeries[] = [
@@ -53,6 +54,7 @@ function toChartPoint(raw: TicketMonthlyAnalyticsPayload['months'][number]): Mon
     opened: Number(raw.opened),
     resolved_on_time: Number(raw.resolved_on_time),
     resolved_late: Number(raw.resolved_late),
+    sla_paused: Number(raw.sla_paused),
   }
 }
 
@@ -254,6 +256,11 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
               O gráfico compara `lastUpdate` com `slaSolutionDate` para tickets criados na janela de 3 meses e exibe o mês atual com 2 meses retroativos.
             </CardDescription>
           </div>
+          {!isCollapsed && !isLoading && (
+            <div className="rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs text-amber-100">
+              SLA pausado: <strong className="tabular-nums text-amber-50">{currentMonth?.sla_paused ?? 0}</strong>
+            </div>
+          )}
           <Button
             type="button"
             variant="outline"
