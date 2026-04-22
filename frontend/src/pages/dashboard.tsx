@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAuth } from '@/contexts/auth-context'
-import { useTickets, useSyncTickets } from '@/hooks/use-tickets'
+import { useAssignmentPeople, useTickets, useSyncTickets } from '@/hooks/use-tickets'
 import { useTicketFilters } from '@/hooks/use-ticket-filters'
 import { useTicketActions } from '@/hooks/use-ticket-actions'
 import { useAppVersion } from '@/hooks/use-app-version'
@@ -25,6 +25,7 @@ export function DashboardPage() {
   useAppVersion()
 
   const { data, isLoading } = useTickets()
+  const { data: assignmentPeople } = useAssignmentPeople()
   const syncMutation = useSyncTickets()
   const { assignTicket, unassignTicket, isAssigning, isUnassigning } = useTicketActions()
 
@@ -34,6 +35,9 @@ export function DashboardPage() {
   const lastSync = data?.now ? formatDate(data.now) : undefined
 
   const filters = useTicketFilters(tickets, newTickets, '')
+  const agentOptions = assignmentPeople?.people?.length
+    ? assignmentPeople.people
+    : filters.agentOptions
   const summary = computeSummary(filters.filteredTickets, filters.filteredNewTickets)
 
   const handleLogout = async () => {
@@ -99,7 +103,7 @@ export function DashboardPage() {
             onDateChange={filters.setDateFilter}
             agentFilter={filters.agentFilter}
             onAgentChange={filters.setAgentFilter}
-            agentOptions={filters.agentOptions}
+            agentOptions={agentOptions}
             onSync={handleSync}
             isSyncing={syncMutation.isPending}
             lastSync={lastSync}
@@ -116,7 +120,7 @@ export function DashboardPage() {
             <TicketTable
               tickets={filters.filteredTickets}
               newTickets={filters.filteredNewTickets}
-              agentOptions={filters.agentOptions}
+              agentOptions={agentOptions}
               onAssign={assignTicket}
               onUnassign={unassignTicket}
               isLoading={isAssigning || isUnassigning}
@@ -128,7 +132,7 @@ export function DashboardPage() {
             <KanbanBoard
               tickets={filters.filteredTickets}
               newTickets={filters.filteredNewTickets}
-              agentOptions={filters.agentOptions}
+              agentOptions={agentOptions}
               onAssign={assignTicket}
               onUnassign={unassignTicket}
               isLoading={isAssigning || isUnassigning}

@@ -19,6 +19,7 @@ export default defineConfig({
       '/app-version': { target: 'http://127.0.0.1:3001', changeOrigin: true },
       '/kanban': { target: 'http://127.0.0.1:3001', changeOrigin: true },
       '/notes': { target: 'http://127.0.0.1:3001', changeOrigin: true },
+      '/people': { target: 'http://127.0.0.1:3001', changeOrigin: true },
     },
   },
 })

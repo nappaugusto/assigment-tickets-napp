@@ -1,10 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
+  peopleApi,
   ticketsApi,
   type TicketsPayload,
 } from '@/lib/api'
 
 export const TICKETS_QUERY_KEY = ['tickets']
+export const ASSIGNMENT_PEOPLE_QUERY_KEY = ['assignment-people']
 
 export function useTickets() {
   return useQuery({
@@ -22,5 +24,13 @@ export function useSyncTickets() {
     onSuccess: (data) => {
       qc.setQueryData<TicketsPayload>(TICKETS_QUERY_KEY, data)
     },
+  })
+}
+
+export function useAssignmentPeople() {
+  return useQuery({
+    queryKey: ASSIGNMENT_PEOPLE_QUERY_KEY,
+    queryFn: () => peopleApi.assignment(),
+    staleTime: 5 * 60_000,
   })
 }

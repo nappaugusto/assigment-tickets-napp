@@ -2,6 +2,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ticketsApi, type Ticket, type TicketsPayload } from '@/lib/api'
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback
+}
+
 function patchTicketResponsavel(
   payload: TicketsPayload | undefined,
   id: number,
@@ -35,9 +39,9 @@ export function useTicketActions() {
       )
       return { previous }
     },
-    onError: (_err, _vars, ctx) => {
+    onError: (err, _vars, ctx) => {
       if (ctx?.previous) queryClient.setQueryData(['tickets'], ctx.previous)
-      toast.error('Erro ao atribuir ticket')
+      toast.error(getErrorMessage(err, 'Erro ao atribuir ticket'))
     },
     onSuccess: () => {
       toast.success('Ticket atribuído')
@@ -57,9 +61,9 @@ export function useTicketActions() {
       )
       return { previous }
     },
-    onError: (_err, _vars, ctx) => {
+    onError: (err, _vars, ctx) => {
       if (ctx?.previous) queryClient.setQueryData(['tickets'], ctx.previous)
-      toast.error('Erro ao desatribuir ticket')
+      toast.error(getErrorMessage(err, 'Erro ao desatribuir ticket'))
     },
     onSuccess: () => {
       toast.success('Ticket desatribuído')

@@ -108,6 +108,10 @@ export const ticketsApi = {
   appVersion: () => get<{ version: string }>('/app-version'),
 }
 
+export const peopleApi = {
+  assignment: () => get<{ people: string[] }>('/people/assignment'),
+}
+
 // Kanban Board
 export interface KanbanColumn {
   id: string

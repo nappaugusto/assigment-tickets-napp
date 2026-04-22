@@ -2,6 +2,11 @@ import { BadGatewayException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosError } from 'axios';
 
+interface AssignmentPerson {
+  email: string;
+  teamName: string | null;
+}
+
 @Injectable()
 export class MovideskTicketsClient {
   private readonly logger = new Logger(MovideskTicketsClient.name);
@@ -10,7 +15,7 @@ export class MovideskTicketsClient {
   private readonly apiToken: string;
   private readonly timeout: number;
   private readonly assignmentTeams: Set<string>;
-  private cachedPeople: Map<string, string> = new Map();
+  private cachedPeople: Map<string, AssignmentPerson> = new Map();
   private cachedPeopleAt: Date | null = null;
   private readonly peopleCacheMs: number;
 
@@ -34,14 +39,14 @@ export class MovideskTicketsClient {
     responsavel: string,
     ownerTeam: string | null,
   ): Promise<void> {
-    const ownerEmail = await this.resolveOwnerEmail(responsavel);
+    const owner = await this.resolveOwner(responsavel, ownerTeam);
+    const targetOwnerTeam = owner.teamName ?? ownerTeam;
 
     await this.patchTicket(ticketId, {
       owner: {
-        id: ownerEmail,
-        businessName: responsavel,
+        id: owner.email,
       },
-      ...(ownerTeam ? { ownerTeam } : {}),
+      ...(targetOwnerTeam ? { ownerTeam: targetOwnerTeam } : {}),
     });
   }
 
@@ -103,26 +108,19 @@ export class MovideskTicketsClient {
       .replace(/[\u0300-\u036f]/g, '');
   }
 
-  private matchesConfiguredTeam(person: Record<string, unknown>): boolean {
-    if (this.assignmentTeams.size === 0) return true;
-
-    const teams = Array.isArray(person['teams']) ? person['teams'] : [];
-    return teams.some((team) => {
-      const name =
-        team && typeof team === 'object'
-          ? String((team as Record<string, unknown>)['name'] ?? '')
-          : String(team ?? '');
-      return this.assignmentTeams.has(name.trim().toLowerCase());
-    });
-  }
-
-  private async resolveOwnerEmail(responsavel: string): Promise<string> {
+  private async resolveOwner(
+    responsavel: string,
+    currentOwnerTeam: string | null,
+  ): Promise<AssignmentPerson> {
     if (!this.isPeopleCacheValid()) {
       await this.refreshPeopleCache();
     }
 
-    const email = this.cachedPeople.get(this.normalize(responsavel));
-    if (email) return email;
+    const owner = this.cachedPeople.get(this.normalize(responsavel));
+    if (owner) {
+      if (currentOwnerTeam && owner.teamName === currentOwnerTeam) return owner;
+      return owner;
+    }
 
     throw new BadGatewayException(
       `Não encontrei o e-mail do responsável "${responsavel}" na API do Movidesk.`,
@@ -142,7 +140,7 @@ export class MovideskTicketsClient {
     const maxPages = Number(
       this.config.get('MOVIDESK_PERSONS_MAX_PAGES') ?? 10,
     );
-    const people = new Map<string, string>();
+    const people = new Map<string, AssignmentPerson>();
 
     try {
       for (let page = 0; page < maxPages; page++) {
@@ -167,15 +165,16 @@ export class MovideskTicketsClient {
           const email = String(person['email'] ?? '').trim();
           const profileType = Number(person['profileType'] ?? 0);
           const isActive = Boolean(person['isActive']);
+          const teamName = this.resolveAssignmentTeam(person);
 
           if (
             name &&
             email &&
             isActive &&
             (profileType === 1 || profileType === 3) &&
-            this.matchesConfiguredTeam(person)
+            teamName
           ) {
-            people.set(this.normalize(name), email);
+            people.set(this.normalize(name), { email, teamName });
           }
         }
 
@@ -193,5 +192,24 @@ export class MovideskTicketsClient {
         'Não foi possível consultar os agentes no Movidesk.',
       );
     }
+  }
+
+  private resolveAssignmentTeam(person: Record<string, unknown>): string | null {
+    const teams = Array.isArray(person['teams']) ? person['teams'] : [];
+    const teamNames = teams
+      .map((team) =>
+        team && typeof team === 'object'
+          ? String((team as Record<string, unknown>)['name'] ?? '').trim()
+          : String(team ?? '').trim(),
+      )
+      .filter(Boolean);
+
+    if (teamNames.length === 0) return null;
+    if (this.assignmentTeams.size === 0) return teamNames[0];
+
+    return (
+      teamNames.find((team) => this.assignmentTeams.has(team.toLowerCase())) ??
+      null
+    );
   }
 }
