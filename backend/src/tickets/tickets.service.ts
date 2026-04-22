@@ -276,11 +276,17 @@ export class TicketsService {
         updated_at = datetime('now')
     `);
 
-    const selectTicketDates = this.db.prepare(`SELECT id, opened_at FROM tickets`);
+    const selectStoredTickets = this.db.prepare(`SELECT id, status, opened_at FROM tickets`);
     const deleteById = this.db.prepare(`DELETE FROM tickets WHERE id = ?`);
 
     this.db.transaction(() => {
+      const syncedIds = new Set<number>();
+
       for (const t of tickets) {
+        if (typeof t.id === 'number') {
+          syncedIds.add(t.id);
+        }
+
         upsert.run({
           id: t.id,
           subject: t.subject ?? null,
@@ -296,10 +302,18 @@ export class TicketsService {
         });
       }
       const oldestMonthToKeep = getOldestMonthToKeep(TICKET_RETENTION_MONTHS);
-      const storedTickets = selectTicketDates.all() as Pick<Ticket, 'id' | 'opened_at'>[];
+      const storedTickets = selectStoredTickets.all() as Pick<
+        Ticket,
+        'id' | 'status' | 'opened_at'
+      >[];
       for (const ticket of storedTickets) {
         const openedAt = parseCalendarDateParts(ticket.opened_at);
         if (openedAt && monthKeyFromParts(openedAt) < oldestMonthToKeep) {
+          deleteById.run(ticket.id);
+          continue;
+        }
+
+        if (!isFinal(ticket.status) && !syncedIds.has(ticket.id)) {
           deleteById.run(ticket.id);
         }
       }
