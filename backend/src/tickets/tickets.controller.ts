@@ -10,10 +10,12 @@ import {
   Inject,
   forwardRef,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import { SessionGuard } from '../auth/auth.guard';
 import { TicketsService } from './tickets.service';
 import { SyncService } from '../sync/sync.service';
+import { MovideskTicketsClient } from './movidesk-tickets.client';
 
 @Controller()
 export class TicketsController {
@@ -21,6 +23,7 @@ export class TicketsController {
 
   constructor(
     private readonly ticketsService: TicketsService,
+    private readonly movideskTicketsClient: MovideskTicketsClient,
     @Inject(forwardRef(() => SyncService))
     private readonly syncService: SyncService,
   ) {}
@@ -71,27 +74,47 @@ export class TicketsController {
 
   @UseGuards(SessionGuard)
   @Post('atribuir/:id')
-  assign(
+  async assign(
     @Param('id', ParseIntPipe) id: number,
     @Body('responsavel') responsavel: string,
   ) {
     if (!responsavel?.trim()) {
       return { success: false, message: 'Responsável é obrigatório.' };
     }
-    this.ticketsService.assign(id, responsavel.trim());
+
+    const ticket = this.ticketsService.findById(id);
+    if (!ticket) {
+      throw new NotFoundException('Ticket não encontrado.');
+    }
+
+    const trimmedResponsavel = responsavel.trim();
+    await this.movideskTicketsClient.assign(
+      id,
+      trimmedResponsavel,
+      ticket.ownerTeam,
+    );
+    this.ticketsService.assign(id, trimmedResponsavel);
+
     return {
       success: true,
       message: 'Ticket atribuído com sucesso.',
       ticket_id: id,
-      responsavel: responsavel.trim(),
+      responsavel: trimmedResponsavel,
       now: new Date().toISOString(),
     };
   }
 
   @UseGuards(SessionGuard)
   @Post('desatribuir/:id')
-  unassign(@Param('id', ParseIntPipe) id: number) {
+  async unassign(@Param('id', ParseIntPipe) id: number) {
+    const ticket = this.ticketsService.findById(id);
+    if (!ticket) {
+      throw new NotFoundException('Ticket não encontrado.');
+    }
+
+    await this.movideskTicketsClient.unassign(id, ticket.ownerTeam);
     this.ticketsService.unassign(id);
+
     return {
       success: true,
       message: 'Atribuição removida com sucesso.',

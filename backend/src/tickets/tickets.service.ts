@@ -241,7 +241,7 @@ export class TicketsService {
     this.db
       .prepare(
         `UPDATE tickets
-         SET responsavel = ?, assigned_at = datetime('now'), assignment_override = 'local_assigned', updated_at = datetime('now')
+         SET responsavel = ?, assigned_at = datetime('now'), assignment_override = NULL, updated_at = datetime('now')
          WHERE id = ?`,
       )
       .run(responsavel, id);
@@ -251,7 +251,7 @@ export class TicketsService {
     this.db
       .prepare(
         `UPDATE tickets
-         SET responsavel = NULL, assigned_at = NULL, assignment_override = 'local_unassigned', updated_at = datetime('now')
+         SET responsavel = NULL, assigned_at = NULL, assignment_override = NULL, updated_at = datetime('now')
          WHERE id = ?`,
       )
       .run(id);
@@ -270,16 +270,9 @@ export class TicketsService {
         opened_at = excluded.opened_at,
         closed_at = excluded.closed_at,
         last_update = excluded.last_update,
-        responsavel = CASE
-          WHEN assignment_override = 'local_assigned' THEN responsavel
-          WHEN assignment_override = 'local_unassigned' THEN NULL
-          ELSE excluded.responsavel
-        END,
-        assigned_at = CASE
-          WHEN assignment_override = 'local_assigned' THEN assigned_at
-          WHEN assignment_override = 'local_unassigned' THEN NULL
-          ELSE excluded.assigned_at
-        END,
+        responsavel = excluded.responsavel,
+        assigned_at = excluded.assigned_at,
+        assignment_override = NULL,
         updated_at = datetime('now')
     `);
 
