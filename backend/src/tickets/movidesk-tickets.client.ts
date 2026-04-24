@@ -15,6 +15,7 @@ export class MovideskTicketsClient {
   private readonly apiToken: string;
   private readonly timeout: number;
   private readonly assignmentTeams: Set<string>;
+  private readonly personsQueryParams: string;
   private cachedPeople: Map<string, AssignmentPerson> = new Map();
   private cachedPeopleAt: Date | null = null;
   private readonly peopleCacheMs: number;
@@ -26,6 +27,8 @@ export class MovideskTicketsClient {
     this.timeout = Number(config.get('MOVIDESK_API_TIMEOUT') ?? 10000);
     this.peopleCacheMs =
       Number(config.get('MOVIDESK_PERSONS_CACHE_SECONDS') ?? 300) * 1000;
+    this.personsQueryParams =
+      config.get<string>('MOVIDESK_PERSONS_QUERY_PARAMS') ?? '';
     this.assignmentTeams = new Set(
       (config.get<string>('ASSIGNMENT_TEAM_NAMES') ?? '')
         .split(',')
@@ -116,7 +119,13 @@ export class MovideskTicketsClient {
       await this.refreshPeopleCache();
     }
 
-    const owner = this.cachedPeople.get(this.normalize(responsavel));
+    const normalizedResponsavel = this.normalize(responsavel);
+    let owner = this.cachedPeople.get(normalizedResponsavel);
+    if (!owner) {
+      await this.refreshPeopleCache(true);
+      owner = this.cachedPeople.get(normalizedResponsavel);
+    }
+
     if (owner) {
       if (currentOwnerTeam && owner.teamName === currentOwnerTeam) return owner;
       return owner;
@@ -127,7 +136,11 @@ export class MovideskTicketsClient {
     );
   }
 
-  private async refreshPeopleCache(): Promise<void> {
+  private async refreshPeopleCache(force = false): Promise<void> {
+    if (!force && this.isPeopleCacheValid()) {
+      return;
+    }
+
     if (!this.personsApiUrl || !this.apiToken) {
       throw new BadGatewayException(
         'Configuração da API de pessoas do Movidesk incompleta.',
@@ -140,17 +153,26 @@ export class MovideskTicketsClient {
     const maxPages = Number(
       this.config.get('MOVIDESK_PERSONS_MAX_PAGES') ?? 10,
     );
+    const baseParams = this.parseQueryString(this.personsQueryParams);
+    this.ensureSelectedFields(baseParams, [
+      'businessName',
+      'email',
+      'emails',
+      'profileType',
+      'isActive',
+      'teams',
+    ]);
+    baseParams['$top'] = String(pageSize);
+    if (this.apiToken) {
+      baseParams['token'] = this.apiToken;
+    }
     const people = new Map<string, AssignmentPerson>();
 
     try {
       for (let page = 0; page < maxPages; page++) {
+        baseParams['$skip'] = String(page * pageSize);
         const response = await axios.get(this.personsApiUrl, {
-          params: {
-            token: this.apiToken,
-            $select: 'businessName,email,profileType,isActive,teams',
-            $top: pageSize,
-            $skip: page * pageSize,
-          },
+          params: baseParams,
           timeout: this.timeout,
           headers: { accept: 'application/json', 'user-agent': 'NestJS/1.0' },
         });
@@ -162,7 +184,7 @@ export class MovideskTicketsClient {
 
         for (const person of data) {
           const name = String(person['businessName'] ?? '').trim();
-          const email = String(person['email'] ?? '').trim();
+          const email = this.extractEmail(person);
           const profileType = Number(person['profileType'] ?? 0);
           const isActive = Boolean(person['isActive']);
           const teamName = this.resolveAssignmentTeam(person);
@@ -175,6 +197,7 @@ export class MovideskTicketsClient {
             teamName
           ) {
             people.set(this.normalize(name), { email, teamName });
+            people.set(this.normalize(email), { email, teamName });
           }
         }
 
@@ -192,6 +215,64 @@ export class MovideskTicketsClient {
         'Não foi possível consultar os agentes no Movidesk.',
       );
     }
+  }
+
+  private parseQueryString(raw: string): Record<string, string> {
+    const result: Record<string, string> = {};
+    for (const part of raw.split('&')) {
+      const eqIdx = part.indexOf('=');
+      if (eqIdx === -1) continue;
+      const key = decodeURIComponent(part.slice(0, eqIdx));
+      const value = decodeURIComponent(part.slice(eqIdx + 1));
+      result[key] = value;
+    }
+    return result;
+  }
+
+  private ensureSelectedFields(
+    params: Record<string, string>,
+    requiredFields: string[],
+  ): void {
+    const currentFields = new Set(
+      String(params['$select'] ?? '')
+        .split(',')
+        .map((field) => field.trim())
+        .filter(Boolean),
+    );
+
+    for (const field of requiredFields) {
+      currentFields.add(field);
+    }
+
+    params['$select'] = Array.from(currentFields).join(',');
+  }
+
+  private extractEmail(person: Record<string, unknown>): string {
+    const directEmail = String(person['email'] ?? '').trim();
+    if (directEmail) return directEmail;
+
+    const emails = Array.isArray(person['emails']) ? person['emails'] : [];
+    const emailFromList =
+      emails.find(
+        (item) =>
+          item &&
+          typeof item === 'object' &&
+          Boolean((item as Record<string, unknown>)['isDefault']) &&
+          String((item as Record<string, unknown>)['email'] ?? '').trim(),
+      ) ??
+      emails.find(
+        (item) =>
+          item &&
+          typeof item === 'object' &&
+          String((item as Record<string, unknown>)['email'] ?? '').trim(),
+      );
+
+    if (emailFromList && typeof emailFromList === 'object') {
+      return String((emailFromList as Record<string, unknown>)['email'] ?? '')
+        .trim();
+    }
+
+    return '';
   }
 
   private resolveAssignmentTeam(person: Record<string, unknown>): string | null {
