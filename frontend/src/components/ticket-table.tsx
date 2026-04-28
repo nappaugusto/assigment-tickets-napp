@@ -9,6 +9,8 @@ import { TicketNoteDrawer } from '@/components/ticket-note-drawer'
 import { type SortKey, type SortDir } from '@/hooks/use-ticket-filters'
 import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { AssignAgentCommand } from '@/components/assign-agent-command'
 import { getTicketUrl } from '@/lib/utils'
 
 const SLA_BADGE_VARIANT: Record<string, 'destructive' | 'warning' | 'secondary' | 'outline' | 'default'> = {
@@ -56,6 +58,7 @@ function TicketRow({ ticket, agentOptions, onAssign, onUnassign, isLoading, curr
   currentUser: string
 }) {
   const [noteOpen, setNoteOpen] = useState(false)
+  const [assignOpen, setAssignOpen] = useState(false)
   const sla = getSlaStatus(ticket.slaSolutionDate, ticket.slaSolutionDateIsPaused)
   const slaLabel = getTimeUntilSla(ticket.slaSolutionDate)
   const isMyTicket = currentUser && ticket.responsavel &&
@@ -91,13 +94,34 @@ function TicketRow({ ticket, agentOptions, onAssign, onUnassign, isLoading, curr
           {ticket.slaSolutionDate ? formatDate(ticket.slaSolutionDate) : '—'}
         </TableCell>
         <TableCell className="w-36 text-sm">
-          {ticket.responsavel ? (
-            <span className={isMyTicket ? 'text-primary font-medium' : undefined}>
-              {isMyTicket ? 'Seu chamado' : ticket.responsavel}
-            </span>
-          ) : (
-            <span className="text-muted-foreground italic">Não atribuído</span>
-          )}
+          <Popover open={assignOpen} onOpenChange={setAssignOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="max-w-full rounded px-1 py-0.5 text-left transition-colors hover:bg-muted"
+                disabled={isLoading}
+                title="Alterar responsável"
+              >
+                {ticket.responsavel ? (
+                  <span className={isMyTicket ? 'text-primary font-medium' : undefined}>
+                    {isMyTicket ? 'Seu chamado' : ticket.responsavel}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground italic">Não atribuído</span>
+                )}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-56 p-0" align="end">
+              <AssignAgentCommand
+                agentOptions={agentOptions}
+                autoFocus
+                onAssign={(responsavel) => {
+                  onAssign(ticket.id, responsavel)
+                  setAssignOpen(false)
+                }}
+              />
+            </PopoverContent>
+          </Popover>
         </TableCell>
         <TableCell className="w-12 text-center">
           <KanbanCardMenu
