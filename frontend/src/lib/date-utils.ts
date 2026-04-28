@@ -4,6 +4,18 @@
 
 export type SlaStatus = 'expired' | 'warning' | 'normal' | 'paused' | 'none'
 
+const BRAZIL_TIME_ZONE = 'America/Sao_Paulo'
+const ISO_WITHOUT_TIME_ZONE_RE =
+  /^\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/
+
+function parseDate(value: string): Date {
+  const normalized = ISO_WITHOUT_TIME_ZONE_RE.test(value.trim())
+    ? `${value.trim().replace(' ', 'T')}Z`
+    : value
+
+  return new Date(normalized)
+}
+
 function endOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999)
 }
@@ -15,7 +27,7 @@ export function getSlaStatus(
   if (!slaSolutionDate) return 'none'
   if (isPaused) return 'paused'
 
-  const deadline = new Date(slaSolutionDate)
+  const deadline = parseDate(slaSolutionDate)
   const now = new Date()
   const deadlineDayEnd = endOfDay(deadline)
   const nowDayEnd = endOfDay(now)
@@ -32,7 +44,7 @@ export function getSlaStatus(
 export function getTimeUntilSla(slaSolutionDate: string | null): string {
   if (!slaSolutionDate) return ''
 
-  const deadline = new Date(slaSolutionDate)
+  const deadline = parseDate(slaSolutionDate)
   const now = new Date()
   const diffMs = endOfDay(deadline).getTime() - now.getTime()
 
@@ -52,7 +64,7 @@ export function getTimeUntilSla(slaSolutionDate: string | null): string {
 
 export function isToday(isoDate: string | null): boolean {
   if (!isoDate) return false
-  const d = new Date(isoDate)
+  const d = parseDate(isoDate)
   const now = new Date()
   return (
     d.getFullYear() === now.getFullYear() &&
@@ -63,7 +75,8 @@ export function isToday(isoDate: string | null): boolean {
 
 export function formatDate(isoDate: string | null): string {
   if (!isoDate) return ''
-  return new Date(isoDate).toLocaleDateString('pt-BR', {
+  return parseDate(isoDate).toLocaleDateString('pt-BR', {
+    timeZone: BRAZIL_TIME_ZONE,
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',

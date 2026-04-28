@@ -1,4 +1,5 @@
 import { type Ticket } from '@/lib/api'
+import { isToday } from '@/lib/date-utils'
 
 interface SummaryCardsProps {
   visible: number
@@ -45,13 +46,7 @@ export function computeSummary(tickets: Ticket[], newTickets: Ticket[]) {
   const emAndamento = tickets.length
   const venceHoje = all.filter((t) => {
     if (!t.slaSolutionDate || t.slaSolutionDateIsPaused) return false
-    const slaDate = new Date(t.slaSolutionDate)
-    const now = new Date()
-    return (
-      slaDate.getFullYear() === now.getFullYear() &&
-      slaDate.getMonth() === now.getMonth() &&
-      slaDate.getDate() === now.getDate()
-    )
+    return isToday(t.slaSolutionDate)
   }).length
   const semResponsavel = all.filter((t) => !t.responsavel).length
   return { visible: all.length, novos, emAndamento, venceHoje, semResponsavel }
