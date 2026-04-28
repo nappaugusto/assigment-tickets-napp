@@ -2,14 +2,7 @@ import { useState } from 'react'
 import { MoreHorizontal, Link2, UserCheck, UserX, StickyNote, ChevronLeft, User } from 'lucide-react'
 import { toast } from 'sonner'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command'
+import { AssignAgentCommand } from '@/components/assign-agent-command'
 import { type Ticket } from '@/lib/api'
 import { useAuth } from '@/contexts/auth-context'
 import { useTicketsWithNotes } from '@/hooks/use-ticket-note'
@@ -138,23 +131,11 @@ export function KanbanCardMenu({
               <ChevronLeft size={12} />
               Voltar
             </button>
-            <Command>
-              <CommandInput placeholder="Buscar agente…" autoFocus />
-              <CommandList>
-                <CommandEmpty>Nenhum agente encontrado</CommandEmpty>
-                <CommandGroup>
-                  {agentOptions.map((name) => (
-                    <CommandItem
-                      key={name}
-                      value={name}
-                      onSelect={(val) => { onAssign(ticket.id, val); close() }}
-                    >
-                      {name}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
-            </Command>
+            <AssignAgentCommand
+              agentOptions={agentOptions}
+              autoFocus
+              onAssign={(responsavel) => { onAssign(ticket.id, responsavel); close() }}
+            />
           </div>
         )}
       </PopoverContent>

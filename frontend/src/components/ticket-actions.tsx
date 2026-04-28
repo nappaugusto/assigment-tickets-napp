@@ -5,14 +5,7 @@ import { type Ticket } from '@/lib/api'
 import { useAuth } from '@/contexts/auth-context'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command'
+import { AssignAgentCommand } from '@/components/assign-agent-command'
 import { getTicketUrl } from '@/lib/utils'
 
 interface TicketActionsProps {
@@ -69,26 +62,13 @@ export function TicketActions({ ticket, agentOptions, onAssign, onUnassign, isLo
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-56 p-0" align="end">
-          <Command>
-            <CommandInput placeholder="Buscar agente…" />
-            <CommandList>
-              <CommandEmpty>Nenhum agente encontrado</CommandEmpty>
-              <CommandGroup>
-                {agentOptions.map((name) => (
-                  <CommandItem
-                    key={name}
-                    value={name}
-                    onSelect={(val) => {
-                      onAssign(ticket.id, val)
-                      setOpen(false)
-                    }}
-                  >
-                    {name}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
-          </Command>
+          <AssignAgentCommand
+            agentOptions={agentOptions}
+            onAssign={(responsavel) => {
+              onAssign(ticket.id, responsavel)
+              setOpen(false)
+            }}
+          />
         </PopoverContent>
       </Popover>
 
