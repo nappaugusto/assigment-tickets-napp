@@ -97,7 +97,7 @@ describe('MovideskTicketsClient', () => {
     );
   });
 
-  it('refreshes the cache on miss and accepts the responsible e-mail directly', async () => {
+  it('refreshes the cache on miss and resolves the responsible name', async () => {
     mockedAxios.get
       .mockResolvedValueOnce({ data: [] })
       .mockResolvedValueOnce({
@@ -115,7 +115,7 @@ describe('MovideskTicketsClient', () => {
 
     const client = new MovideskTicketsClient(createConfig());
 
-    await client.assign(456, 'joao.souza@napp.com', 'Minha Equipe');
+    await client.assign(456, 'Joao Souza', 'Minha Equipe');
 
     expect(mockedAxios.get).toHaveBeenCalledTimes(2);
     expect(mockedAxios.patch).toHaveBeenCalledWith(
@@ -126,6 +126,62 @@ describe('MovideskTicketsClient', () => {
       },
       expect.objectContaining({
         params: { token: 'token-123', id: 456 },
+      }),
+    );
+  });
+
+  it('assigns directly when the responsible value is an e-mail', async () => {
+    mockedAxios.patch.mockResolvedValue({ data: {} });
+
+    const client = new MovideskTicketsClient(createConfig());
+
+    await client.assign(789, 'ana.lima@napp.com', 'Minha Equipe');
+
+    expect(mockedAxios.get).not.toHaveBeenCalled();
+    expect(mockedAxios.patch).toHaveBeenCalledWith(
+      'https://api.movidesk.com/public/v1/tickets',
+      {
+        owner: { id: 'ana.lima@napp.com' },
+        ownerTeam: 'Minha Equipe',
+      },
+      expect.objectContaining({
+        params: { token: 'token-123', id: 789 },
+      }),
+    );
+  });
+
+  it('uses stale people cache when refreshing people fails', async () => {
+    mockedAxios.get
+      .mockResolvedValueOnce({
+        data: [
+          {
+            businessName: 'Maria Silva',
+            email: 'maria.silva@napp.com',
+            profileType: 1,
+            isActive: true,
+            teams: [{ name: 'Minha Equipe' }],
+          },
+        ],
+      })
+      .mockRejectedValueOnce(new Error('Movidesk unavailable'));
+    mockedAxios.patch.mockResolvedValue({ data: {} });
+
+    const client = new MovideskTicketsClient(
+      createConfig({ MOVIDESK_PERSONS_CACHE_SECONDS: 0 }),
+    );
+
+    await client.assign(123, 'Maria Silva', 'Minha Equipe');
+    await client.assign(124, 'Maria Silva', 'Minha Equipe');
+
+    expect(mockedAxios.get).toHaveBeenCalledTimes(2);
+    expect(mockedAxios.patch).toHaveBeenLastCalledWith(
+      'https://api.movidesk.com/public/v1/tickets',
+      {
+        owner: { id: 'maria.silva@napp.com' },
+        ownerTeam: 'Minha Equipe',
+      },
+      expect.objectContaining({
+        params: { token: 'token-123', id: 124 },
       }),
     );
   });

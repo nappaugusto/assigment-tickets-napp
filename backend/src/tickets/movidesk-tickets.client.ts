@@ -7,6 +7,10 @@ interface AssignmentPerson {
   teamName: string | null;
 }
 
+function isEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
 @Injectable()
 export class MovideskTicketsClient {
   private readonly logger = new Logger(MovideskTicketsClient.name);
@@ -115,11 +119,20 @@ export class MovideskTicketsClient {
     responsavel: string,
     currentOwnerTeam: string | null,
   ): Promise<AssignmentPerson> {
+    const normalizedResponsavel = this.normalize(responsavel);
+
+    if (isEmail(responsavel)) {
+      const cachedEmailOwner = this.cachedPeople.get(normalizedResponsavel);
+      return {
+        email: responsavel.trim(),
+        teamName: cachedEmailOwner?.teamName ?? currentOwnerTeam,
+      };
+    }
+
     if (!this.isPeopleCacheValid()) {
       await this.refreshPeopleCache();
     }
 
-    const normalizedResponsavel = this.normalize(responsavel);
     let owner = this.cachedPeople.get(normalizedResponsavel);
     if (!owner) {
       await this.refreshPeopleCache(true);
@@ -211,6 +224,12 @@ export class MovideskTicketsClient {
       this.logger.error(
         `Error fetching Movidesk people: ${axiosError.message}`,
       );
+
+      if (this.cachedPeople.size > 0) {
+        this.logger.warn('Using stale Movidesk people cache after fetch error.');
+        return;
+      }
+
       throw new BadGatewayException(
         'Não foi possível consultar os agentes no Movidesk.',
       );
