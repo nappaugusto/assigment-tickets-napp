@@ -110,7 +110,7 @@ make docker-up    # sobe
 make docker-down  # para e remove
 ```
 
-A imagem Docker inclui nginx na porta 80 servindo o frontend e fazendo proxy das rotas de API para o NestJS interno.
+A imagem Docker inclui nginx na porta 8080 servindo o frontend e fazendo proxy das rotas de API para o NestJS interno.
 No fluxo Docker, o banco é salvo em `./data/tickets.db` no host e montado como volume persistente dentro do container.
 
 Em plataformas de deploy com volume, a recomendação é montar o volume em `/data` e usar:

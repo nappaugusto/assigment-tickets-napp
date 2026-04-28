@@ -1,8 +1,8 @@
 #!/bin/sh
 set -e
 
-# Railway injects $PORT — nginx must listen on it
-export NGINX_PORT=${PORT:-80}
+# Railway and similar platforms inject $PORT. When they do not, match Dockerfile's EXPOSE.
+export NGINX_PORT=${PORT:-8080}
 envsubst '${NGINX_PORT}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
 
 # Prefer a mounted persistent Railway volume when available
