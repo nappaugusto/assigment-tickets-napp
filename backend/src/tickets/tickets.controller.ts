@@ -15,7 +15,6 @@ import {
 import { SessionGuard } from '../auth/auth.guard';
 import { TicketsService } from './tickets.service';
 import { SyncService } from '../sync/sync.service';
-import { MovideskTicketsClient } from './movidesk-tickets.client';
 
 @Controller()
 export class TicketsController {
@@ -23,7 +22,6 @@ export class TicketsController {
 
   constructor(
     private readonly ticketsService: TicketsService,
-    private readonly movideskTicketsClient: MovideskTicketsClient,
     @Inject(forwardRef(() => SyncService))
     private readonly syncService: SyncService,
   ) {}
@@ -88,11 +86,6 @@ export class TicketsController {
     }
 
     const trimmedResponsavel = responsavel.trim();
-    await this.movideskTicketsClient.assign(
-      id,
-      trimmedResponsavel,
-      ticket.ownerTeam,
-    );
     this.ticketsService.assign(id, trimmedResponsavel);
 
     return {
@@ -112,7 +105,6 @@ export class TicketsController {
       throw new NotFoundException('Ticket não encontrado.');
     }
 
-    await this.movideskTicketsClient.unassign(id, ticket.ownerTeam);
     this.ticketsService.unassign(id);
 
     return {
