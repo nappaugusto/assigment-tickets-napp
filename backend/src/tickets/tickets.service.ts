@@ -241,10 +241,10 @@ export class TicketsService {
     this.db
       .prepare(
         `UPDATE tickets
-         SET responsavel = ?, assigned_at = datetime('now'), assignment_override = NULL, updated_at = datetime('now')
+         SET responsavel = ?, assigned_at = datetime('now'), assignment_override = ?, updated_at = datetime('now')
          WHERE id = ?`,
       )
-      .run(responsavel, id);
+      .run(responsavel, responsavel, id);
   }
 
   unassign(id: number): void {
@@ -270,9 +270,11 @@ export class TicketsService {
         opened_at = excluded.opened_at,
         closed_at = excluded.closed_at,
         last_update = excluded.last_update,
-        responsavel = excluded.responsavel,
-        assigned_at = excluded.assigned_at,
-        assignment_override = NULL,
+        responsavel = COALESCE(tickets.assignment_override, excluded.responsavel),
+        assigned_at = CASE
+          WHEN tickets.assignment_override IS NOT NULL THEN tickets.assigned_at
+          ELSE excluded.assigned_at
+        END,
         updated_at = datetime('now')
     `);
 
