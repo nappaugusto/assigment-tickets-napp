@@ -322,6 +322,25 @@ function MonthlyLineChart({ months }: { months: MonthlyChartPoint[] }) {
                     <circle
                       cx={point.x}
                       cy={point.y}
+                      r="12"
+                      fill="transparent"
+                      className="cursor-pointer"
+                      onMouseEnter={() =>
+                        setHoveredPoint({
+                          key: series.key,
+                          label: series.label,
+                          color: series.color,
+                          monthLabel: point.month.label,
+                          value: point.value,
+                          x: point.x,
+                          y: point.y,
+                        })
+                      }
+                      onMouseLeave={() => setHoveredPoint(null)}
+                    />
+                    <circle
+                      cx={point.x}
+                      cy={point.y}
                       r={hoveredPoint?.key === series.key && hoveredPoint.monthLabel === point.month.label ? 7 : 4.5}
                       fill={series.color}
                       stroke="#0f172a"
@@ -340,16 +359,6 @@ function MonthlyLineChart({ months }: { months: MonthlyChartPoint[] }) {
                       }
                       onMouseLeave={() => setHoveredPoint(null)}
                     />
-                    <text
-                      x={point.x}
-                      y={point.y - 10}
-                      textAnchor="middle"
-                      fontSize="11"
-                      fontWeight="600"
-                      fill={series.color}
-                    >
-                      {point.value}
-                    </text>
                   </g>
                 ))}
               </g>
