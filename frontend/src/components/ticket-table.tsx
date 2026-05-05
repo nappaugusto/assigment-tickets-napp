@@ -71,13 +71,13 @@ function TicketRow({ ticket, agentOptions, onAssign, onUnassign, isLoading, curr
 
   return (
     <>
-      <TableRow className={rowColor}>
+      <TableRow className={`${rowColor ?? ''} border-border/35 transition-colors`}>
         <TableCell className="font-mono text-xs w-16">
           <a
             href={getTicketUrl(ticket.id)}
             target="_blank"
             rel="noreferrer"
-            className="text-primary hover:underline"
+            className="rounded-md bg-primary/10 px-2 py-1 text-primary transition-colors hover:bg-primary/18 hover:no-underline"
           >
             #{ticket.id}
           </a>
@@ -170,15 +170,17 @@ function Section({
   onSort: (k: SortKey) => void
 }) {
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-baseline gap-2">
-        <h2 className="font-semibold">{title}</h2>
-        <span className="text-xs text-muted-foreground">{count} ticket{count !== 1 ? 's' : ''}</span>
+    <div className="flex flex-col gap-3 rounded-xl border border-border/55 bg-card/62 p-3 shadow-[0_14px_36px_rgba(0,0,0,0.14)]">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+        <h2 className="text-base font-semibold text-foreground">{title}</h2>
+        <span className="rounded-full border border-border/60 bg-background/55 px-3 py-1 text-xs text-muted-foreground">
+          {count} ticket{count !== 1 ? 's' : ''}
+        </span>
       </div>
-      <div className="rounded-lg border border-border/40 overflow-hidden">
+      <div className="overflow-x-auto rounded-lg border border-border/45 bg-background/25">
         <Table>
           <TableHeader>
-            <TableRow className="bg-muted/30 hover:bg-muted/30">
+            <TableRow className="border-border/40 bg-muted/35 hover:bg-muted/35">
               <TableHead className="w-16">
                 <SortButton label="ID" sortK="id" active={sortKey} dir={sortDir} onSort={onSort} />
               </TableHead>

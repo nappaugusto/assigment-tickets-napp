@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { type Ticket } from '@/lib/api'
-import { normalizeText, getSlaStatus } from '@/lib/date-utils'
+import { normalizeText, getSlaStatus, formatDate } from '@/lib/date-utils'
 
 export type QuickFilter =
   | 'all'
@@ -20,7 +20,7 @@ const STATUS_ALIASES: Record<string, string[]> = {
   waiting: ['aguardando', 'waiting', 'em pausa', 'pausado'],
 }
 
-function matchesQuickFilter(ticket: Ticket, filter: QuickFilter, currentUser: string): boolean {
+function matchesQuickFilter(ticket: Ticket, filter: QuickFilter): boolean {
   if (filter === 'all') return true
   if (filter === 'unassigned') return !ticket.responsavel
   if (filter === 'due_today') {
@@ -44,10 +44,32 @@ function matchesQuickFilter(ticket: Ticket, filter: QuickFilter, currentUser: st
   return true
 }
 
+function buildSearchHaystack(ticket: Ticket): string {
+  return normalizeText(
+    [
+      ticket.id,
+      `#${ticket.id}`,
+      ticket.subject,
+      ticket.status,
+      ticket.ownerTeam,
+      ticket.responsavel,
+      ticket.slaSolutionDate,
+      ticket.slaSolutionDate ? formatDate(ticket.slaSolutionDate) : '',
+      ticket.opened_at,
+      ticket.opened_at ? formatDate(ticket.opened_at) : '',
+      ticket.closed_at,
+      ticket.closed_at ? formatDate(ticket.closed_at) : '',
+      ticket.last_update,
+      ticket.last_update ? formatDate(ticket.last_update) : '',
+    ]
+      .filter(Boolean)
+      .join(' '),
+  )
+}
+
 export function useTicketFilters(
   tickets: Ticket[],
   newTickets: Ticket[],
-  currentUser: string,
 ) {
   const allTickets = useMemo(() => [...tickets, ...newTickets], [tickets, newTickets])
 
@@ -67,17 +89,29 @@ export function useTicketFilters(
     }
   }
 
-  const filterTickets = (list: Ticket[]): Ticket[] => {
+  const clearFilters = () => {
+    setSearch('')
+    setDateFilter('')
+    setAgentFilter('')
+    setQuickFilter('all')
+  }
+
+  const searchTerms = useMemo(() => {
+    return normalizeText(search)
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+  }, [search])
+
+  const filterTickets = useCallback((list: Ticket[]): Ticket[] => {
     let filtered = list
 
-    if (search) {
-      const q = normalizeText(search)
+    if (searchTerms.length > 0) {
       filtered = filtered.filter(
-        (t) =>
-          normalizeText(String(t.id)).includes(q) ||
-          normalizeText(t.subject ?? '').includes(q) ||
-          normalizeText(t.responsavel ?? '').includes(q) ||
-          normalizeText(t.status ?? '').includes(q),
+        (t) => {
+          const haystack = buildSearchHaystack(t)
+          return searchTerms.every((term) => haystack.includes(term))
+        },
       )
     }
 
@@ -94,7 +128,7 @@ export function useTicketFilters(
       })
     }
 
-    filtered = filtered.filter((t) => matchesQuickFilter(t, quickFilter, currentUser))
+    filtered = filtered.filter((t) => matchesQuickFilter(t, quickFilter))
 
     if (sortKey) {
       filtered = [...filtered].sort((a, b) => {
@@ -120,10 +154,17 @@ export function useTicketFilters(
     }
 
     return filtered
-  }
+  }, [agentFilter, dateFilter, quickFilter, searchTerms, sortDir, sortKey])
 
-  const filteredTickets = useMemo(() => filterTickets(tickets), [tickets, search, agentFilter, dateFilter, quickFilter, sortKey, sortDir])
-  const filteredNewTickets = useMemo(() => filterTickets(newTickets), [newTickets, search, agentFilter, dateFilter, quickFilter, sortKey, sortDir])
+  const filteredTickets = useMemo(() => filterTickets(tickets), [tickets, filterTickets])
+  const filteredNewTickets = useMemo(() => filterTickets(newTickets), [newTickets, filterTickets])
+
+  const activeFilterCount = [
+    search.trim(),
+    dateFilter,
+    agentFilter,
+    quickFilter !== 'all' ? quickFilter : '',
+  ].filter(Boolean).length
 
   const agentOptions = useMemo(() => {
     const names = new Set<string>()
@@ -136,6 +177,9 @@ export function useTicketFilters(
     dateFilter, setDateFilter,
     agentFilter, setAgentFilter,
     quickFilter, setQuickFilter,
+    activeFilterCount,
+    hasActiveFilters: activeFilterCount > 0,
+    clearFilters,
     sortKey, sortDir, toggleSort,
     filteredTickets,
     filteredNewTickets,

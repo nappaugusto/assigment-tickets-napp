@@ -34,7 +34,7 @@ export function DashboardPage() {
   const monthlyAnalytics = data?.monthly_analytics
   const lastSync = data?.now ? formatDate(data.now) : undefined
 
-  const filters = useTicketFilters(tickets, newTickets, '')
+  const filters = useTicketFilters(tickets, newTickets)
   const agentOptions = assignmentPeople?.people?.length
     ? assignmentPeople.people
     : filters.agentOptions
@@ -109,6 +109,11 @@ export function DashboardPage() {
             lastSync={lastSync}
             viewMode={viewMode}
             onViewMode={handleViewMode}
+            totalCount={tickets.length + newTickets.length}
+            visibleCount={summary.visible}
+            activeFilterCount={filters.activeFilterCount}
+            hasActiveFilters={filters.hasActiveFilters}
+            onClearFilters={filters.clearFilters}
           />
 
           <MonthlyAnalytics
