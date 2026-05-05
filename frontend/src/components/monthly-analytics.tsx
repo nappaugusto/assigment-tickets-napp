@@ -448,6 +448,7 @@ function MonthlyLineChart({ months }: { months: MonthlyChartPoint[] }) {
 
 export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps) {
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const [isSummaryCollapsed, setIsSummaryCollapsed] = useState(false)
 
   const months = useMemo(
     () => (analytics?.months ?? []).map(toChartPoint).filter((item): item is MonthlyChartPoint => item !== null),
@@ -516,75 +517,98 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
             </div>
           ) : (
             <>
-              <div className="grid gap-3 md:grid-cols-3">
-                <MetricCard
-                  label="Abertos no mês"
-                  value={currentMonth?.opened ?? 0}
-                  helper={getDelta(currentMonth?.opened ?? 0, previousMonth?.opened)}
-                  tone="border-cyan-400/20 bg-gradient-to-br from-cyan-400/10 to-transparent"
-                />
-                <MetricCard
-                  label="Dentro do prazo"
-                  value={currentMonth?.resolved_on_time ?? 0}
-                  helper={getDelta(currentMonth?.resolved_on_time ?? 0, previousMonth?.resolved_on_time)}
-                  tone="border-emerald-400/20 bg-gradient-to-br from-emerald-400/10 to-transparent"
-                />
-                <MetricCard
-                  label="Fora do prazo"
-                  value={currentMonth?.resolved_late ?? 0}
-                  helper={getDelta(currentMonth?.resolved_late ?? 0, previousMonth?.resolved_late)}
-                  tone="border-rose-400/20 bg-gradient-to-br from-rose-400/10 to-transparent"
-                />
-              </div>
-
-              <div className="grid gap-3 lg:grid-cols-3">
-                <InsightCard
-                  title="Taxa de SLA"
-                  value={formatPercent(currentSlaRate)}
-                  helper={getPercentDelta(currentSlaRate, previousSlaRate)}
-                  icon={currentSlaRate !== null && currentSlaRate >= 80 ? TrendingUp : AlertTriangle}
-                  tone="border-primary/20 bg-primary/10 text-primary"
-                />
-                <InsightCard
-                  title="Atrasos"
-                  value={`${currentMonth?.resolved_late ?? 0}`}
-                  helper={getDelta(currentMonth?.resolved_late ?? 0, previousMonth?.resolved_late)}
-                  icon={lateTrendIcon}
-                  tone="border-rose-400/20 bg-rose-400/10 text-rose-200"
-                />
-                <InsightCard
-                  title="SLA pausado"
-                  value={`${analytics?.active_sla_paused ?? 0}`}
-                  helper={`${currentMonth?.sla_paused ?? 0} pausados no mês`}
-                  icon={PauseCircle}
-                  tone="border-amber-400/20 bg-amber-400/10 text-amber-100"
-                />
-              </div>
-
-              {months.length > 1 && (
-                <div className="grid gap-3 lg:grid-cols-3">
-                  <InsightCard
-                    title="Melhor SLA"
-                    value={bestSlaMonth ? formatPercent(getSlaRate(bestSlaMonth)) : '-'}
-                    helper={bestSlaMonth ? `${bestSlaMonth.label} foi o melhor mês do período` : 'Sem base suficiente'}
-                    icon={Award}
-                    tone="border-emerald-400/20 bg-emerald-400/10 text-emerald-200"
-                  />
-                  <InsightCard
-                    title="Maior entrada"
-                    value={`${peakOpenedMonth?.opened ?? 0}`}
-                    helper={peakOpenedMonth ? `${peakOpenedMonth.label} concentrou mais tickets abertos` : 'Sem base suficiente'}
-                    icon={Gauge}
-                    tone="border-cyan-400/20 bg-cyan-400/10 text-cyan-100"
-                  />
-                  <InsightCard
-                    title="Mês mais crítico"
-                    value={`${worstLateMonth?.resolved_late ?? 0}`}
-                    helper={worstLateMonth ? `${worstLateMonth.label} teve mais respostas fora do prazo` : 'Sem base suficiente'}
-                    icon={AlertTriangle}
-                    tone="border-orange-400/20 bg-orange-400/10 text-orange-100"
-                  />
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/50 bg-background/25 px-3 py-2">
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Resumo mensal</p>
+                  <p className="text-xs text-muted-foreground">
+                    {isSummaryCollapsed ? 'Cards ocultos para priorizar o gráfico.' : 'Indicadores principais e destaques do período.'}
+                  </p>
                 </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-2 rounded-md text-xs"
+                  onClick={() => setIsSummaryCollapsed((value) => !value)}
+                >
+                  {isSummaryCollapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+                  {isSummaryCollapsed ? 'Mostrar resumo' : 'Ocultar resumo'}
+                </Button>
+              </div>
+
+              {!isSummaryCollapsed && (
+                <>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <MetricCard
+                      label="Abertos no mês"
+                      value={currentMonth?.opened ?? 0}
+                      helper={getDelta(currentMonth?.opened ?? 0, previousMonth?.opened)}
+                      tone="border-cyan-400/20 bg-gradient-to-br from-cyan-400/10 to-transparent"
+                    />
+                    <MetricCard
+                      label="Dentro do prazo"
+                      value={currentMonth?.resolved_on_time ?? 0}
+                      helper={getDelta(currentMonth?.resolved_on_time ?? 0, previousMonth?.resolved_on_time)}
+                      tone="border-emerald-400/20 bg-gradient-to-br from-emerald-400/10 to-transparent"
+                    />
+                    <MetricCard
+                      label="Fora do prazo"
+                      value={currentMonth?.resolved_late ?? 0}
+                      helper={getDelta(currentMonth?.resolved_late ?? 0, previousMonth?.resolved_late)}
+                      tone="border-rose-400/20 bg-gradient-to-br from-rose-400/10 to-transparent"
+                    />
+                  </div>
+
+                  <div className="grid gap-3 lg:grid-cols-3">
+                    <InsightCard
+                      title="Taxa de SLA"
+                      value={formatPercent(currentSlaRate)}
+                      helper={getPercentDelta(currentSlaRate, previousSlaRate)}
+                      icon={currentSlaRate !== null && currentSlaRate >= 80 ? TrendingUp : AlertTriangle}
+                      tone="border-primary/20 bg-primary/10 text-primary"
+                    />
+                    <InsightCard
+                      title="Atrasos"
+                      value={`${currentMonth?.resolved_late ?? 0}`}
+                      helper={getDelta(currentMonth?.resolved_late ?? 0, previousMonth?.resolved_late)}
+                      icon={lateTrendIcon}
+                      tone="border-rose-400/20 bg-rose-400/10 text-rose-200"
+                    />
+                    <InsightCard
+                      title="SLA pausado"
+                      value={`${analytics?.active_sla_paused ?? 0}`}
+                      helper={`${currentMonth?.sla_paused ?? 0} pausados no mês`}
+                      icon={PauseCircle}
+                      tone="border-amber-400/20 bg-amber-400/10 text-amber-100"
+                    />
+                  </div>
+
+                  {months.length > 1 && (
+                    <div className="grid gap-3 lg:grid-cols-3">
+                      <InsightCard
+                        title="Melhor SLA"
+                        value={bestSlaMonth ? formatPercent(getSlaRate(bestSlaMonth)) : '-'}
+                        helper={bestSlaMonth ? `${bestSlaMonth.label} foi o melhor mês do período` : 'Sem base suficiente'}
+                        icon={Award}
+                        tone="border-emerald-400/20 bg-emerald-400/10 text-emerald-200"
+                      />
+                      <InsightCard
+                        title="Maior entrada"
+                        value={`${peakOpenedMonth?.opened ?? 0}`}
+                        helper={peakOpenedMonth ? `${peakOpenedMonth.label} concentrou mais tickets abertos` : 'Sem base suficiente'}
+                        icon={Gauge}
+                        tone="border-cyan-400/20 bg-cyan-400/10 text-cyan-100"
+                      />
+                      <InsightCard
+                        title="Mês mais crítico"
+                        value={`${worstLateMonth?.resolved_late ?? 0}`}
+                        helper={worstLateMonth ? `${worstLateMonth.label} teve mais respostas fora do prazo` : 'Sem base suficiente'}
+                        icon={AlertTriangle}
+                        tone="border-orange-400/20 bg-orange-400/10 text-orange-100"
+                      />
+                    </div>
+                  )}
+                </>
               )}
 
               {months.length === 0 ? (
