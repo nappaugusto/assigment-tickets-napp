@@ -8,6 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { existsSync } from 'fs';
 
 interface McpConnection {
   client: Client;
@@ -66,20 +67,41 @@ export class McpMovideskService implements OnModuleDestroy {
 
   private getArgs(): string[] {
     const raw = this.config.get<string>('MOVIDESK_MCP_ARGS')?.trim() ?? '';
-    if (!raw) return [];
+    if (!raw) {
+      return this.resolveMcpArgs([]);
+    }
 
     if (raw.startsWith('[')) {
       try {
         const parsed = JSON.parse(raw) as unknown;
         if (Array.isArray(parsed) && parsed.every((item) => typeof item === 'string')) {
-          return parsed;
+          return this.resolveMcpArgs(parsed);
         }
       } catch {
         throw new BadRequestException('MOVIDESK_MCP_ARGS deve ser um JSON array válido.');
       }
     }
 
-    return raw.match(/"[^"]+"|'[^']+'|\S+/g)?.map((arg) => arg.replace(/^['"]|['"]$/g, '')) ?? [];
+    const args =
+      raw.match(/"[^"]+"|'[^']+'|\S+/g)?.map((arg) => arg.replace(/^['"]|['"]$/g, '')) ?? [];
+    return this.resolveMcpArgs(args);
+  }
+
+  private resolveMcpArgs(args: string[]): string[] {
+    const bundledPath = '/app/mcp-movidesk/dist/index.js';
+    if (args.length === 0) {
+      return existsSync(bundledPath) ? [bundledPath] : [];
+    }
+
+    const entrypoint = args[0];
+    if (entrypoint.startsWith('/') && !existsSync(entrypoint) && existsSync(bundledPath)) {
+      this.logger.warn(
+        `MOVIDESK_MCP_ARGS aponta para arquivo inexistente (${entrypoint}); usando MCP empacotado.`,
+      );
+      return [bundledPath, ...args.slice(1)];
+    }
+
+    return args;
   }
 
   private getToken(): string {

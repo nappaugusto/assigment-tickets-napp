@@ -20,6 +20,11 @@ if [ -n "$RAILWAY_VOLUME_MOUNT_PATH" ]; then
   echo "[docker] Railway volume mounted at $RAILWAY_VOLUME_MOUNT_PATH"
 fi
 
+# Use the MCP server bundled in the Docker image unless explicitly overridden.
+export MOVIDESK_MCP_COMMAND=${MOVIDESK_MCP_COMMAND:-node}
+export MOVIDESK_MCP_ARGS=${MOVIDESK_MCP_ARGS:-'["/app/mcp-movidesk/dist/index.js"]'}
+export MOVIDESK_MCP_CWD=${MOVIDESK_MCP_CWD:-/app/mcp-movidesk}
+
 # Start NestJS on a fixed internal port (never conflicts with nginx)
 echo "[docker] Starting NestJS backend on port 3001..."
 touch /tmp/nestjs.log

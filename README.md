@@ -80,6 +80,11 @@ MOVIDESK_TOKEN=seu-token-movidesk
 
 Se `MOVIDESK_TOKEN` ficar vazio, o backend reutiliza `MOVIDESK_API_TOKEN`.
 
+Em Docker/Railway, o servidor MCP Movidesk é empacotado na imagem em
+`/app/mcp-movidesk/dist/index.js`. Nesse ambiente, basta configurar
+`MOVIDESK_API_TOKEN` ou `MOVIDESK_TOKEN`; as variáveis `MOVIDESK_MCP_*`
+têm fallback automático para o caminho empacotado.
+
 ---
 
 ## Fluxos com Makefile
