@@ -6,6 +6,8 @@ BOLD   := \033[1m
 GREEN  := \033[32m
 YELLOW := \033[33m
 CYAN   := \033[36m
+PNPM   ?= npx pnpm@10.33.0
+NODE20 ?= npx -p node@20 node
 
 # ─── Help ─────────────────────────────────────────────────────────────────────
 .PHONY: help
@@ -20,9 +22,9 @@ help: ## Exibe esta mensagem
 .PHONY: first-run
 first-run: ## [INÍCIO] Clona dependências e configura .env
 	@echo "$(YELLOW)→ Instalando dependências do backend...$(RESET)"
-	cd backend && pnpm install
+	cd backend && $(PNPM) install
 	@echo "$(YELLOW)→ Instalando dependências do frontend...$(RESET)"
-	cd frontend && pnpm install
+	cd frontend && $(PNPM) install
 	@if [ ! -f .env ]; then \
 		cp .env.example .env; \
 		echo "$(GREEN)✔ .env criado a partir de .env.example — preencha as variáveis antes de rodar.$(RESET)"; \
@@ -44,17 +46,17 @@ dev: ## Sobe backend (porta 3001) e frontend (porta 5173) em paralelo
 	@echo "   Use Ctrl+C para parar ambos."
 	@echo ""
 	@trap 'kill %1 %2 2>/dev/null; exit' INT TERM; \
-	  (cd backend && pnpm run start:dev 2>&1 | sed "s/^/$(BOLD)[backend]$(RESET) /") & \
-	  (cd frontend && pnpm run dev 2>&1 | sed "s/^/$(BOLD)[frontend]$(RESET) /") & \
+	  (cd backend && $(PNPM) run start:dev 2>&1 | sed "s/^/$(BOLD)[backend]$(RESET) /") & \
+	  (cd frontend && $(NODE20) ./node_modules/vite/bin/vite.js 2>&1 | sed "s/^/$(BOLD)[frontend]$(RESET) /") & \
 	  wait
 
 .PHONY: dev-backend
 dev-backend: ## Sobe apenas o backend em modo watch
-	cd backend && pnpm run start:dev
+	cd backend && $(PNPM) run start:dev
 
 .PHONY: dev-frontend
 dev-frontend: ## Sobe apenas o frontend
-	cd frontend && pnpm run dev
+	cd frontend && $(NODE20) ./node_modules/vite/bin/vite.js
 
 # ─── Build ────────────────────────────────────────────────────────────────────
 .PHONY: build
@@ -63,12 +65,12 @@ build: build-backend build-frontend ## Build de produção completo (backend + f
 .PHONY: build-backend
 build-backend: ## Build do NestJS
 	@echo "$(YELLOW)→ Compilando backend...$(RESET)"
-	cd backend && pnpm run build
+	cd backend && $(PNPM) run build
 
 .PHONY: build-frontend
 build-frontend: ## Build do Vite
 	@echo "$(YELLOW)→ Compilando frontend...$(RESET)"
-	cd frontend && pnpm run build
+	cd frontend && $(PNPM) exec tsc -b && $(NODE20) ./node_modules/vite/bin/vite.js build
 
 # ─── Produção (sem Docker) ────────────────────────────────────────────────────
 .PHONY: start
@@ -97,13 +99,13 @@ docker-down: ## Para e remove containers do docker compose
 # ─── Qualidade ────────────────────────────────────────────────────────────────
 .PHONY: lint
 lint: ## Lint em backend e frontend
-	cd backend && pnpm run lint
-	cd frontend && pnpm run lint
+	cd backend && $(PNPM) run lint
+	cd frontend && $(PNPM) run lint
 
 .PHONY: typecheck
 typecheck: ## Verificação de tipos TypeScript
-	cd backend && pnpm exec tsc --noEmit
-	cd frontend && pnpm exec tsc --noEmit
+	cd backend && $(PNPM) exec tsc --noEmit
+	cd frontend && $(PNPM) exec tsc --noEmit
 
 # ─── Limpeza ──────────────────────────────────────────────────────────────────
 .PHONY: clean
