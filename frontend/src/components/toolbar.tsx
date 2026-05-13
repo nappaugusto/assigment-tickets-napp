@@ -1,4 +1,4 @@
-import { CalendarDays, Columns3, RefreshCw, Search, Table2, Users, X } from 'lucide-react'
+import { Bot, CalendarDays, Columns3, RefreshCw, Search, Table2, Users, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -20,6 +20,7 @@ interface ToolbarProps {
   activeFilterCount: number
   hasActiveFilters: boolean
   onClearFilters: () => void
+  onOpenMcpDesk?: () => void
 }
 
 export function Toolbar({
@@ -40,6 +41,7 @@ export function Toolbar({
   activeFilterCount,
   hasActiveFilters,
   onClearFilters,
+  onOpenMcpDesk,
 }: ToolbarProps) {
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-border/70 bg-card/88 p-4 shadow-[0_18px_50px_rgba(0,0,0,0.18)] backdrop-blur-sm">
@@ -145,6 +147,12 @@ export function Toolbar({
         </div>
 
         <div className="flex items-center gap-2 sm:justify-end">
+          {onOpenMcpDesk && (
+            <Button size="sm" variant="outline" className="h-8 rounded-md gap-1.5 px-3 text-xs" onClick={onOpenMcpDesk}>
+              <Bot className="h-3.5 w-3.5" />
+              MCP
+            </Button>
+          )}
           <Button size="sm" variant="outline" className="h-8 rounded-md gap-1.5 px-3 text-xs" onClick={onSync} disabled={isSyncing}>
             <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
             {isSyncing ? 'Sincronizando…' : 'Sincronizar'}

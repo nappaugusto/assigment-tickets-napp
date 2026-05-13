@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link2, UserCheck, UserX } from 'lucide-react'
+import { Bot, Link2, UserCheck, UserX } from 'lucide-react'
 import { toast } from 'sonner'
 import { type Ticket } from '@/lib/api'
 import { useAuth } from '@/contexts/auth-context'
@@ -14,9 +14,10 @@ interface TicketActionsProps {
   onAssign: (id: number, responsavel: string) => void
   onUnassign: (id: number) => void
   isLoading?: boolean
+  onOpenService?: () => void
 }
 
-export function TicketActions({ ticket, agentOptions, onAssign, onUnassign, isLoading }: TicketActionsProps) {
+export function TicketActions({ ticket, agentOptions, onAssign, onUnassign, isLoading, onOpenService }: TicketActionsProps) {
   const { user } = useAuth()
   const [open, setOpen] = useState(false)
 
@@ -31,6 +32,18 @@ export function TicketActions({ ticket, agentOptions, onAssign, onUnassign, isLo
 
   return (
     <div className="flex items-center gap-1">
+      {onOpenService && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          title="Atendimento MCP"
+          onClick={onOpenService}
+        >
+          <Bot className="h-3.5 w-3.5" />
+        </Button>
+      )}
+
       <Button
         variant="ghost"
         size="icon"

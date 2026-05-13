@@ -13,6 +13,7 @@ import { QuickFilters } from '@/components/quick-filters'
 import { Toolbar } from '@/components/toolbar'
 import { TicketTable } from '@/components/ticket-table'
 import { KanbanBoard } from '@/components/kanban-board'
+import { McpDeskDrawer } from '@/components/mcp-desk-drawer'
 import { formatDate } from '@/lib/date-utils'
 
 export function DashboardPage() {
@@ -21,6 +22,7 @@ export function DashboardPage() {
   const [viewMode, setViewMode] = useState<'table' | 'kanban'>(() => {
     return (localStorage.getItem('viewMode') as 'table' | 'kanban') ?? 'table'
   })
+  const [mcpDeskOpen, setMcpDeskOpen] = useState(false)
 
   useAppVersion()
 
@@ -114,6 +116,7 @@ export function DashboardPage() {
             activeFilterCount={filters.activeFilterCount}
             hasActiveFilters={filters.hasActiveFilters}
             onClearFilters={filters.clearFilters}
+            onOpenMcpDesk={() => setMcpDeskOpen(true)}
           />
 
           <MonthlyAnalytics
@@ -143,6 +146,11 @@ export function DashboardPage() {
               isLoading={isAssigning || isUnassigning}
             />
           )}
+
+          <McpDeskDrawer
+            open={mcpDeskOpen}
+            onClose={() => setMcpDeskOpen(false)}
+          />
         </main>
       </div>
     </div>

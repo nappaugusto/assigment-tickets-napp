@@ -7,6 +7,7 @@ import { formatDate, getSlaStatus, getTimeUntilSla } from '@/lib/date-utils'
 import { Badge } from '@/components/ui/badge'
 import { TicketActions } from '@/components/ticket-actions'
 import { TicketNoteDrawer } from '@/components/ticket-note-drawer'
+import { TicketServiceDrawer } from '@/components/ticket-service-drawer'
 import { useTicketsWithNotes } from '@/hooks/use-ticket-note'
 import { getTicketUrl } from '@/lib/utils'
 
@@ -38,6 +39,7 @@ export function KanbanCardDraggable({
   isDragOverlay = false,
 }: KanbanCardDraggableProps) {
   const [noteOpen, setNoteOpen] = useState(false)
+  const [serviceOpen, setServiceOpen] = useState(false)
   const sla = getSlaStatus(ticket.slaSolutionDate, ticket.slaSolutionDateIsPaused)
   const slaLabel = getTimeUntilSla(ticket.slaSolutionDate)
   const isMyTicket =
@@ -103,6 +105,7 @@ export function KanbanCardDraggable({
             onAssign={onAssign}
             onUnassign={onUnassign}
             isLoading={isLoading}
+            onOpenService={() => setServiceOpen(true)}
           />
           {!isDragOverlay && (
             <button
@@ -124,6 +127,13 @@ export function KanbanCardDraggable({
         ticket={noteOpen ? ticket : null}
         open={noteOpen}
         onClose={() => setNoteOpen(false)}
+      />
+      <TicketServiceDrawer
+        ticket={serviceOpen ? ticket : null}
+        open={serviceOpen}
+        onClose={() => setServiceOpen(false)}
+        agentOptions={agentOptions}
+        onAssignLocal={onAssign}
       />
     </>
   )

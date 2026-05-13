@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { KanbanCardMenu } from '@/components/kanban-card-menu'
 import { TicketNoteDrawer } from '@/components/ticket-note-drawer'
+import { TicketServiceDrawer } from '@/components/ticket-service-drawer'
 import { type SortKey, type SortDir } from '@/hooks/use-ticket-filters'
 import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -58,6 +59,7 @@ function TicketRow({ ticket, agentOptions, onAssign, onUnassign, isLoading, curr
   currentUser: string
 }) {
   const [noteOpen, setNoteOpen] = useState(false)
+  const [serviceOpen, setServiceOpen] = useState(false)
   const [assignOpen, setAssignOpen] = useState(false)
   const sla = getSlaStatus(ticket.slaSolutionDate, ticket.slaSolutionDateIsPaused)
   const slaLabel = getTimeUntilSla(ticket.slaSolutionDate)
@@ -131,6 +133,7 @@ function TicketRow({ ticket, agentOptions, onAssign, onUnassign, isLoading, curr
             onUnassign={onUnassign}
             isLoading={isLoading}
             onOpenNotes={() => setNoteOpen(true)}
+            onOpenService={() => setServiceOpen(true)}
           />
         </TableCell>
       </TableRow>
@@ -139,6 +142,13 @@ function TicketRow({ ticket, agentOptions, onAssign, onUnassign, isLoading, curr
         ticket={noteOpen ? ticket : null}
         open={noteOpen}
         onClose={() => setNoteOpen(false)}
+      />
+      <TicketServiceDrawer
+        ticket={serviceOpen ? ticket : null}
+        open={serviceOpen}
+        onClose={() => setServiceOpen(false)}
+        agentOptions={agentOptions}
+        onAssignLocal={onAssign}
       />
     </>
   )

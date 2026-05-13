@@ -56,6 +56,30 @@ Variáveis obrigatórias:
 | `MAIL_PASSWORD`             | Senha SMTP                                           |
 | `VITE_MOVIDESK_BASE_URL`    | URL base da instância do Movidesk para abrir tickets |
 
+### MCP Movidesk
+
+Este projeto também pode chamar o servidor MCP Movidesk listado no LobeHub:
+https://lobehub.com/mcp/raylann-lopes-mcp-movidesk
+
+Configure o servidor MCP como um processo local via stdio:
+
+```bash
+git clone <url-do-repositorio-indicado-no-lobehub> MCP_MOVIDESK
+cd MCP_MOVIDESK
+npm install
+npm run build
+```
+
+Depois ajuste o `.env` deste app:
+
+```bash
+MOVIDESK_MCP_COMMAND=node
+MOVIDESK_MCP_ARGS=/caminho/absoluto/para/MCP_MOVIDESK/dist/index.js
+MOVIDESK_TOKEN=seu-token-movidesk
+```
+
+Se `MOVIDESK_TOKEN` ficar vazio, o backend reutiliza `MOVIDESK_API_TOKEN`.
+
 ---
 
 ## Fluxos com Makefile
@@ -183,6 +207,7 @@ backend/src/
 ├── email/             # Envio de e-mails via SMTP
 ├── password-reset/    # Fluxo de recuperação de senha
 ├── people/            # Busca de agentes via API Movidesk
+├── mcp/               # Cliente MCP Movidesk via stdio
 ├── sync/              # Sincronização de tickets com Movidesk
 ├── tickets/           # CRUD de tickets + atribuição
 └── users/             # Gerenciamento de usuários
@@ -217,6 +242,9 @@ frontend/src/
 | GET    | `/tickets/refresh?manual=1`       | Forçar sincronização             |
 | POST   | `/atribuir/:id`                   | Atribuir ticket                  |
 | POST   | `/desatribuir/:id`                | Desatribuir ticket               |
+| GET    | `/mcp/movidesk/status`            | Status da integração MCP         |
+| GET    | `/mcp/movidesk/tools`             | Listar ferramentas MCP           |
+| POST   | `/mcp/movidesk/tools/:name/call`  | Executar ferramenta MCP          |
 | GET    | `/app-version`                    | Versão da aplicação              |
 
 ---

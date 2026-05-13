@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { MoreHorizontal, Link2, UserCheck, UserX, StickyNote, ChevronLeft, User } from 'lucide-react'
+import { MoreHorizontal, Link2, UserCheck, UserX, StickyNote, ChevronLeft, User, Bot } from 'lucide-react'
 import { toast } from 'sonner'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { AssignAgentCommand } from '@/components/assign-agent-command'
@@ -15,6 +15,7 @@ interface KanbanCardMenuProps {
   onUnassign: (id: number) => void
   isLoading?: boolean
   onOpenNotes: () => void
+  onOpenService?: () => void
 }
 
 type MenuView = 'main' | 'assign'
@@ -26,6 +27,7 @@ export function KanbanCardMenu({
   onUnassign,
   isLoading,
   onOpenNotes,
+  onOpenService,
 }: KanbanCardMenuProps) {
   const { user } = useAuth()
   const [open, setOpen] = useState(false)
@@ -75,6 +77,15 @@ export function KanbanCardMenu({
       >
         {view === 'main' ? (
           <div className="flex flex-col gap-0.5">
+            {onOpenService && (
+              <MenuItem
+                icon={<Bot size={13} />}
+                onClick={() => { onOpenService(); close() }}
+              >
+                Atendimento MCP
+              </MenuItem>
+            )}
+
             <MenuItem
               icon={<StickyNote size={13} />}
               onClick={() => { onOpenNotes(); close() }}

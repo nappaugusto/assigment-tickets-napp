@@ -112,6 +112,46 @@ export const peopleApi = {
   assignment: () => get<{ people: string[] }>('/people/assignment'),
 }
 
+export interface McpMovideskStatus {
+  configured: boolean
+  connected: boolean
+  command: string
+  args: string[]
+  cwd: string | null
+  tokenConfigured: boolean
+}
+
+export interface McpTool {
+  name: string
+  description?: string
+  inputSchema: {
+    type: 'object'
+    properties?: Record<string, object>
+    required?: string[]
+    [key: string]: unknown
+  }
+}
+
+export interface McpToolsPayload {
+  tools: McpTool[]
+}
+
+export interface McpToolCallResult {
+  content?: Array<Record<string, unknown>>
+  structuredContent?: Record<string, unknown>
+  isError?: boolean
+  [key: string]: unknown
+}
+
+export const mcpMovideskApi = {
+  status: () => get<McpMovideskStatus>('/mcp/movidesk/status'),
+  tools: () => get<McpToolsPayload>('/mcp/movidesk/tools'),
+  callTool: (name: string, args: Record<string, unknown> = {}) =>
+    post<McpToolCallResult>(`/mcp/movidesk/tools/${encodeURIComponent(name)}/call`, {
+      arguments: args,
+    }),
+}
+
 // Kanban Board
 export interface KanbanColumn {
   id: string

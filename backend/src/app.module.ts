@@ -12,6 +12,7 @@ import { EmailModule } from './email/email.module';
 import { PasswordResetModule } from './password-reset/password-reset.module';
 import { KanbanModule } from './kanban/kanban.module';
 import { NotesModule } from './notes/notes.module';
+import { McpModule } from './mcp/mcp.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { NotesModule } from './notes/notes.module';
     PasswordResetModule,
     KanbanModule,
     NotesModule,
+    McpModule,
   ],
   providers: [DatabaseInitService],
 })
