@@ -5,22 +5,30 @@ type CandidateMap = Record<string, unknown>
 const FIELD_ALIASES: Record<string, string[]> = {
   ticketId: ['ticketId', 'ticket_id', 'id', 'ticket', 'codigo', 'code'],
   status: ['status', 'newStatus', 'novoStatus', 'situacao'],
-  agent: ['agent', 'agente', 'responsavel', 'owner', 'ownerName', 'person', 'personName'],
+  agent: ['agent', 'agente', 'agenteId', 'responsavel', 'owner', 'ownerName', 'person', 'personName'],
   team: ['team', 'equipe', 'ownerTeam', 'teamName'],
-  message: ['message', 'mensagem', 'comentario', 'comment', 'text', 'description', 'body', 'content'],
+  message: ['message', 'mensagem', 'comentario', 'comment', 'text', 'description', 'descricao', 'body', 'content', 'conteudo'],
   internal: ['internal', 'interno', 'isInternal', 'private', 'privado'],
-  query: ['query', 'termo', 'search', 'q', 'keyword', 'keywords'],
+  public: ['public', 'publico', 'isPublic'],
+  query: ['query', 'termo', 'search', 'q', 'keyword', 'keywords', 'descricaoProblema'],
   subject: ['subject', 'assunto', 'title', 'titulo'],
   description: ['description', 'descricao', 'body', 'content', 'message', 'mensagem'],
-  email: ['email', 'customerEmail', 'clienteEmail', 'clientEmail'],
-  document: ['document', 'documento', 'cpf', 'cnpj', 'customerDocument', 'clienteDocumento'],
+  email: ['email', 'emailCliente', 'customerEmail', 'clienteEmail', 'clientEmail'],
+  document: ['document', 'documento', 'documentoCliente', 'cpf', 'cnpj', 'customerDocument', 'clienteDocumento'],
   urgency: ['urgency', 'urgencia', 'priority', 'prioridade'],
   category: ['category', 'categoria', 'service', 'servico'],
-  customer: ['customer', 'cliente', 'email', 'document', 'documento', 'cpf', 'cnpj'],
+  customer: ['customer', 'cliente', 'nomeCliente', 'emailCliente', 'documentoCliente', 'email', 'document', 'documento', 'cpf', 'cnpj'],
 }
 
 export function findTool(tools: McpTool[] | undefined, name: string): McpTool | undefined {
   return tools?.find((tool) => tool.name === name)
+}
+
+export function findFirstTool(
+  tools: McpTool[] | undefined,
+  names: string[],
+): McpTool | undefined {
+  return tools?.find((tool) => names.includes(tool.name))
 }
 
 export function buildToolArguments(tool: McpTool | undefined, candidates: CandidateMap): CandidateMap {

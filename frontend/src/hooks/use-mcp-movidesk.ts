@@ -5,7 +5,7 @@ import {
   type McpTool,
   type McpToolCallResult,
 } from '@/lib/api'
-import { buildToolArguments, findTool } from '@/lib/mcp-movidesk'
+import { buildToolArguments, findFirstTool } from '@/lib/mcp-movidesk'
 import { TICKETS_QUERY_KEY } from '@/hooks/use-tickets'
 
 export const MCP_MOVIDESK_STATUS_QUERY_KEY = ['mcp-movidesk', 'status']
@@ -15,9 +15,9 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback
 }
 
-function requireTool(tools: McpTool[] | undefined, name: string): McpTool {
-  const tool = findTool(tools, name)
-  if (!tool) throw new Error(`Ferramenta MCP indisponível: ${name}`)
+function requireTool(tools: McpTool[] | undefined, names: string[]): McpTool {
+  const tool = findFirstTool(tools, names)
+  if (!tool) throw new Error(`Ferramenta MCP indisponível: ${names.join(' ou ')}`)
   return tool
 }
 
@@ -48,10 +48,10 @@ export function useMcpMovideskActions() {
       mcpMovideskApi.callTool(name, args),
   })
 
-  const callKnownTool = (name: string, candidates: Record<string, unknown>) => {
-    const tool = requireTool(tools, name)
+  const callKnownTool = (names: string[], candidates: Record<string, unknown>) => {
+    const tool = requireTool(tools, names)
     return call.mutateAsync({
-      name,
+      name: tool.name,
       args: buildToolArguments(tool, candidates),
     })
   }
@@ -61,18 +61,19 @@ export function useMcpMovideskActions() {
     isPending: call.isPending,
     rawCall: call.mutateAsync,
     consultTicket: (ticketId: number) =>
-      callKnownTool('consultar_ticket', { ticketId }),
+      callKnownTool(['consultar_ticket'], { ticketId }),
     addInteraction: async (ticketId: number, message: string, internal: boolean) => {
-      const result = await callKnownTool('adicionar_interacao', {
+      const result = await callKnownTool(['adicionar_interacao'], {
         ticketId,
         message,
+        public: !internal,
         internal,
       })
       toast.success(internal ? 'Nota interna enviada ao Movidesk' : 'Resposta enviada ao Movidesk')
       return result
     },
     changeStatus: async (ticketId: number, status: string) => {
-      const result = await callKnownTool('alterar_status_ticket', {
+      const result = await callKnownTool(['alterar_status_ticket'], {
         ticketId,
         status,
       })
@@ -81,7 +82,7 @@ export function useMcpMovideskActions() {
       return result
     },
     assignAgent: async (ticketId: number, agent: string) => {
-      const result = await callKnownTool('atribuir_agente', {
+      const result = await callKnownTool(['atribuir_agente'], {
         ticketId,
         agent,
         team: agent,
@@ -91,7 +92,7 @@ export function useMcpMovideskActions() {
       return result
     },
     searchKb: (query: string): Promise<McpToolCallResult> =>
-      callKnownTool('buscar_artigo_kb', { query }),
+      callKnownTool(['buscar_conhecimento', 'buscar_artigo_kb'], { query }),
     createTicket: async (payload: {
       subject: string
       description: string
@@ -99,13 +100,13 @@ export function useMcpMovideskActions() {
       urgency?: string
       category?: string
     }) => {
-      const result = await callKnownTool('criar_ticket', payload)
+      const result = await callKnownTool(['criar_ticket'], payload)
       await qc.invalidateQueries({ queryKey: TICKETS_QUERY_KEY })
       toast.success('Ticket criado no Movidesk')
       return result
     },
     listCustomerTickets: (customer: string): Promise<McpToolCallResult> =>
-      callKnownTool('listar_tickets_cliente', {
+      callKnownTool(['listar_tickets_cliente'], {
         customer,
         email: customer,
         document: customer,

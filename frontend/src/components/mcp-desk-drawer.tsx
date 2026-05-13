@@ -37,6 +37,7 @@ export function McpDeskDrawer({ open, onClose }: McpDeskDrawerProps) {
   )
 
   const hasMcpActions = statusQuery.data?.configured && !statusQuery.isError
+  const hasTool = (...names: string[]) => names.some((name) => availableTools.has(name))
 
   const createTicket = async () => {
     if (!subject.trim() || !description.trim() || !email.trim()) {
@@ -132,7 +133,7 @@ export function McpDeskDrawer({ open, onClose }: McpDeskDrawerProps) {
                   <Button
                     type="button"
                     size="sm"
-                    disabled={!availableTools.has('criar_ticket') || mcp.isPending}
+                    disabled={!hasTool('criar_ticket') || mcp.isPending}
                     onClick={createTicket}
                   >
                     {mcp.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
@@ -157,7 +158,7 @@ export function McpDeskDrawer({ open, onClose }: McpDeskDrawerProps) {
                   <Button
                     type="button"
                     size="icon"
-                    disabled={!availableTools.has('listar_tickets_cliente') || mcp.isPending}
+                    disabled={!hasTool('listar_tickets_cliente') || mcp.isPending}
                     onClick={listCustomerTickets}
                     title="Buscar"
                   >

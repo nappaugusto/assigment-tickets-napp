@@ -85,6 +85,7 @@ function TicketServiceDrawerContent({
   )
 
   const hasMcpActions = statusQuery.data?.configured && !statusQuery.isError
+  const hasTool = (...names: string[]) => names.some((name) => availableTools.has(name))
 
   useEffect(() => {
     if (!open) return
@@ -97,7 +98,7 @@ function TicketServiceDrawerContent({
   }, [open, ticket?.id, ticket?.subject])
 
   useEffect(() => {
-    if (!open || !ticket || !availableTools.has('consultar_ticket')) return
+    if (!open || !ticket || !hasTool('consultar_ticket')) return
     void loadTicketDetails()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, ticket?.id, availableTools])
@@ -216,7 +217,7 @@ function TicketServiceDrawerContent({
                     variant="outline"
                     size="sm"
                     className="h-7 px-2"
-                    disabled={!availableTools.has('consultar_ticket') || mcp.isPending}
+                    disabled={!hasTool('consultar_ticket') || mcp.isPending}
                     onClick={loadTicketDetails}
                   >
                     {mcp.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
@@ -257,7 +258,7 @@ function TicketServiceDrawerContent({
                     <Button
                       type="button"
                       size="sm"
-                      disabled={!availableTools.has('adicionar_interacao') || mcp.isPending}
+                      disabled={!hasTool('adicionar_interacao') || mcp.isPending}
                       onClick={sendInteraction}
                     >
                       {mcp.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -278,7 +279,7 @@ function TicketServiceDrawerContent({
                         variant="outline"
                         size="sm"
                         className="justify-start"
-                        disabled={!availableTools.has('alterar_status_ticket') || mcp.isPending}
+                        disabled={!hasTool('alterar_status_ticket') || mcp.isPending}
                         onClick={() => changeStatus(status)}
                       >
                         {status}
@@ -296,7 +297,7 @@ function TicketServiceDrawerContent({
                         variant="outline"
                         size="sm"
                         className="mt-3 w-full justify-start"
-                        disabled={!availableTools.has('atribuir_agente') || mcp.isPending}
+                        disabled={!hasTool('atribuir_agente') || mcp.isPending}
                       >
                         Trocar no Movidesk
                       </Button>
@@ -324,7 +325,7 @@ function TicketServiceDrawerContent({
                       type="button"
                       size="icon"
                       className="h-8 w-8"
-                      disabled={!availableTools.has('buscar_artigo_kb') || mcp.isPending}
+                      disabled={!hasTool('buscar_conhecimento', 'buscar_artigo_kb') || mcp.isPending}
                       onClick={searchKb}
                       title="Buscar"
                     >
