@@ -72,20 +72,22 @@ export function useMcpMovideskActions() {
       toast.success(internal ? 'Nota interna enviada ao Movidesk' : 'Resposta enviada ao Movidesk')
       return result
     },
-    changeStatus: async (ticketId: number, status: string) => {
+    changeStatus: async (ticketId: number, status: string, justification?: string) => {
       const result = await callKnownTool(['alterar_status_ticket'], {
         ticketId,
         status,
+        justification,
       })
       await qc.invalidateQueries({ queryKey: TICKETS_QUERY_KEY })
       toast.success('Status atualizado no Movidesk')
       return result
     },
-    assignAgent: async (ticketId: number, agent: string) => {
+    assignAgent: async (ticketId: number, agent: string, agentName?: string, team?: string) => {
       const result = await callKnownTool(['atribuir_agente'], {
         ticketId,
         agent,
-        team: agent,
+        agentName,
+        team,
       })
       await qc.invalidateQueries({ queryKey: TICKETS_QUERY_KEY })
       toast.success('Responsável atualizado no Movidesk')

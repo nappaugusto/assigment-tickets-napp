@@ -38,7 +38,7 @@ interface TicketServiceDrawerProps {
   onAssignLocal?: (id: number, responsavel: string) => void
 }
 
-const STATUS_OPTIONS = ['Em atendimento', 'Resolvido', 'Cancelado']
+const STATUS_OPTIONS = ['Novo', 'Em atendimento', 'Parado', 'Resolvido', 'Cancelado', 'Fechado']
 
 export function TicketServiceDrawer({
   ticket,
@@ -74,6 +74,10 @@ function TicketServiceDrawerContent({
   const [kbQuery, setKbQuery] = useState('')
   const [kbResult, setKbResult] = useState('')
   const [assignOpen, setAssignOpen] = useState(false)
+  const [statusJustification, setStatusJustification] = useState('')
+  const [agentIdentifier, setAgentIdentifier] = useState('')
+  const [agentDisplayName, setAgentDisplayName] = useState('')
+  const [agentTeam, setAgentTeam] = useState('')
 
   const statusQuery = useMcpMovideskStatus()
   const toolsQuery = useMcpMovideskTools(open)
@@ -95,6 +99,10 @@ function TicketServiceDrawerContent({
     setInternal(false)
     setKbQuery(ticket?.subject ?? '')
     setKbResult('')
+    setStatusJustification('')
+    setAgentIdentifier('')
+    setAgentDisplayName('')
+    setAgentTeam('')
   }, [open, ticket?.id, ticket?.subject])
 
   useEffect(() => {
@@ -131,17 +139,29 @@ function TicketServiceDrawerContent({
 
   const changeStatus = async (status: string) => {
     try {
-      await mcp.changeStatus(ticket.id, status)
+      await mcp.changeStatus(ticket.id, status, statusJustification.trim() || undefined)
+      setStatusJustification('')
       await loadTicketDetails()
     } catch (error) {
       mcp.handleError(error, 'Não foi possível alterar o status')
     }
   }
 
-  const assignAgent = async (responsavel: string) => {
+  const assignAgent = async () => {
+    const identifier = agentIdentifier.trim()
+    if (!identifier) {
+      toast.error('Informe o ID, e-mail ou identificador do agente/equipe.')
+      return
+    }
+
     try {
-      await mcp.assignAgent(ticket.id, responsavel)
-      onAssignLocal?.(ticket.id, responsavel)
+      await mcp.assignAgent(
+        ticket.id,
+        identifier,
+        agentDisplayName.trim() || identifier,
+        agentTeam.trim() || undefined,
+      )
+      onAssignLocal?.(ticket.id, agentDisplayName.trim() || identifier)
       setAssignOpen(false)
       await loadTicketDetails()
     } catch (error) {
@@ -271,6 +291,12 @@ function TicketServiceDrawerContent({
               <aside className="flex flex-col gap-4">
                 <section className="rounded-lg border border-border/45 bg-card/50 p-3">
                   <PanelTitle icon={<CheckCircle2 size={15} />} title="Status" />
+                  <textarea
+                    value={statusJustification}
+                    onChange={(event) => setStatusJustification(event.target.value)}
+                    placeholder="Justificativa quando necessário..."
+                    className="mt-3 min-h-16 w-full resize-y rounded-md border border-border/45 bg-background/70 p-2 text-xs outline-none transition-colors placeholder:text-muted-foreground focus:border-primary/50"
+                  />
                   <div className="mt-3 grid gap-2">
                     {STATUS_OPTIONS.map((status) => (
                       <Button
@@ -290,6 +316,26 @@ function TicketServiceDrawerContent({
 
                 <section className="rounded-lg border border-border/45 bg-card/50 p-3">
                   <PanelTitle icon={<UserRoundCheck size={15} />} title="Responsável" />
+                  <div className="mt-3 grid gap-2">
+                    <Input
+                      value={agentIdentifier}
+                      onChange={(event) => setAgentIdentifier(event.target.value)}
+                      placeholder="ID/e-mail do agente ou equipe"
+                      className="h-8"
+                    />
+                    <Input
+                      value={agentDisplayName}
+                      onChange={(event) => setAgentDisplayName(event.target.value)}
+                      placeholder="Nome para referência"
+                      className="h-8"
+                    />
+                    <Input
+                      value={agentTeam}
+                      onChange={(event) => setAgentTeam(event.target.value)}
+                      placeholder="Equipe opcional"
+                      className="h-8"
+                    />
+                  </div>
                   <Popover open={assignOpen} onOpenChange={setAssignOpen}>
                     <PopoverTrigger asChild>
                       <Button
@@ -299,17 +345,30 @@ function TicketServiceDrawerContent({
                         className="mt-3 w-full justify-start"
                         disabled={!hasTool('atribuir_agente') || mcp.isPending}
                       >
-                        Trocar no Movidesk
+                        Escolher responsável local
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-60 p-0" align="end">
                       <AssignAgentCommand
                         agentOptions={agentOptions}
                         autoFocus
-                        onAssign={assignAgent}
+                        onAssign={(responsavel) => {
+                          setAgentIdentifier(responsavel)
+                          setAgentDisplayName(responsavel)
+                          setAssignOpen(false)
+                        }}
                       />
                     </PopoverContent>
                   </Popover>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="mt-2 w-full justify-start"
+                    disabled={!hasTool('atribuir_agente') || mcp.isPending}
+                    onClick={assignAgent}
+                  >
+                    Atribuir no Movidesk
+                  </Button>
                 </section>
 
                 <section className="rounded-lg border border-border/45 bg-card/50 p-3">
