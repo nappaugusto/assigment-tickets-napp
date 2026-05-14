@@ -160,43 +160,63 @@ export function KanbanBoard({
     return Object.entries(boardState.columnItems ?? {}).find(([, ids]) => ids.includes(itemId))?.[0]
   }
 
-  const getClosestColumnId = (activeRect: { left: number; width: number } | null | undefined) => {
+  const getDefaultColumnId = (boardState: KanbanBoardState) =>
+    boardState.columns.find((c) => c.isDefault)?.id ?? 'entrada'
+
+  const getColumnRects = () =>
+    Array.from(document.querySelectorAll<HTMLElement>('[data-kanban-column-id]'))
+      .map((column) => ({
+        id: column.dataset.kanbanColumnId,
+        rect: column.getBoundingClientRect(),
+      }))
+      .filter((column): column is { id: string; rect: DOMRect } => Boolean(column.id))
+      .sort((a, b) => a.rect.left - b.rect.left)
+
+  const getClosestColumnId = (
+    boardState: KanbanBoardState,
+    activeId: string,
+    activeRect: { left: number; width: number } | null | undefined,
+  ) => {
     if (!activeRect) return null
 
     const activeCenterX = activeRect.left + activeRect.width / 2
-    const columns = Array.from(
-      document.querySelectorAll<HTMLElement>('[data-kanban-column-id]'),
-    )
+    const activeRight = activeRect.left + activeRect.width
+    const columns = getColumnRects()
+    const sourceColumnId = findColumnIdForItem(boardState, activeId) ?? getDefaultColumnId(boardState)
+    const sourceIndex = columns.findIndex((column) => column.id === sourceColumnId)
 
-    let closest: { id: string; distance: number; limit: number } | null = null
+    if (sourceIndex !== -1) {
+      const nextColumns = columns.slice(sourceIndex + 1)
+      const rightTarget = nextColumns
+        .filter((column) => activeRight >= column.rect.left - 96)
+        .at(-1)
+      if (rightTarget) return rightTarget.id
+
+      const previousColumns = columns.slice(0, sourceIndex)
+      const leftTarget = previousColumns.find((column) => activeRect.left <= column.rect.right + 96)
+      if (leftTarget) return leftTarget.id
+    }
+
+    let closest: { id: string; distance: number } | null = null
 
     for (const column of columns) {
-      const rect = column.getBoundingClientRect()
-      const id = column.dataset.kanbanColumnId
-      if (!id) continue
-
-      const distance =
-        activeCenterX < rect.left
-          ? rect.left - activeCenterX
-          : activeCenterX > rect.right
-            ? activeCenterX - rect.right
-            : 0
-
-      const limit = rect.width / 2 + 120
+      const columnCenterX = column.rect.left + column.rect.width / 2
+      const distance = Math.abs(activeCenterX - columnCenterX)
       if (!closest || distance < closest.distance) {
-        closest = { id, distance, limit }
+        closest = { id: column.id, distance }
       }
     }
 
-    return closest && closest.distance <= closest.limit ? closest.id : null
+    return closest?.id ?? null
   }
 
   const getDropTarget = (
     boardState: KanbanBoardState,
+    activeId: string,
     activeRect: { left: number; width: number } | null | undefined,
     overId?: string,
   ) => {
-    const closestColumnId = getClosestColumnId(activeRect)
+    const closestColumnId = getClosestColumnId(boardState, activeId, activeRect)
     if (!closestColumnId) return overId ?? null
     if (!overId) return closestColumnId
 
@@ -281,7 +301,7 @@ export function KanbanBoard({
     if (!board) return
 
     const activeRect = active.rect.current.translated
-    const targetId = getDropTarget(board, activeRect, over ? String(over.id) : undefined)
+    const targetId = getDropTarget(board, String(active.id), activeRect, over ? String(over.id) : undefined)
     if (!targetId) return
 
     const overRect = over?.rect
@@ -300,7 +320,7 @@ export function KanbanBoard({
     if (!board) return
 
     const activeRect = active.rect.current.translated
-    const targetId = getDropTarget(board, activeRect, over ? String(over.id) : undefined)
+    const targetId = getDropTarget(board, String(active.id), activeRect, over ? String(over.id) : undefined)
     if (!targetId) return
 
     const overRect = over?.rect
