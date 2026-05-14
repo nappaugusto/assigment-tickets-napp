@@ -11,7 +11,7 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core'
 import { Plus } from 'lucide-react'
-import { type Ticket } from '@/lib/api'
+import { type KanbanBoard as KanbanBoardState, type Ticket } from '@/lib/api'
 import { useKanbanBoard } from '@/hooks/use-kanban-board'
 import { useAuth } from '@/contexts/auth-context'
 import { KanbanColumn } from '@/components/kanban-column'
@@ -72,12 +72,61 @@ export function KanbanBoard({
       .filter((t): t is Ticket => t !== undefined)
   }
 
+  const findColumnIdForItem = (boardState: KanbanBoardState, itemId: string) => {
+    if (boardState.columns.some((c) => c.id === itemId)) return itemId
+    return Object.entries(boardState.columnItems ?? {}).find(([, ids]) => ids.includes(itemId))?.[0]
+  }
+
+  const getClosestColumnId = (activeRect: { left: number; width: number } | null | undefined) => {
+    if (!activeRect) return null
+
+    const activeCenterX = activeRect.left + activeRect.width / 2
+    const columns = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-kanban-column-id]'),
+    )
+
+    let closest: { id: string; distance: number; limit: number } | null = null
+
+    for (const column of columns) {
+      const rect = column.getBoundingClientRect()
+      const id = column.dataset.kanbanColumnId
+      if (!id) continue
+
+      const distance =
+        activeCenterX < rect.left
+          ? rect.left - activeCenterX
+          : activeCenterX > rect.right
+            ? activeCenterX - rect.right
+            : 0
+
+      const limit = rect.width / 2 + 120
+      if (!closest || distance < closest.distance) {
+        closest = { id, distance, limit }
+      }
+    }
+
+    return closest && closest.distance <= closest.limit ? closest.id : null
+  }
+
+  const getDropTarget = (
+    boardState: KanbanBoardState,
+    activeRect: { left: number; width: number } | null | undefined,
+    overId?: string,
+  ) => {
+    const closestColumnId = getClosestColumnId(activeRect)
+    if (!closestColumnId) return overId ?? null
+    if (!overId) return closestColumnId
+
+    const overColumnId = findColumnIdForItem(boardState, overId)
+    return overColumnId === closestColumnId ? overId : closestColumnId
+  }
+
   const moveTicketOnBoard = (
-    prev: NonNullable<typeof board>,
+    prev: KanbanBoardState,
     activeId: string,
     overId: string,
     insertAfter = false,
-  ): NonNullable<typeof board> => {
+  ): KanbanBoardState => {
     if (activeId === overId) return prev
 
     const defaultColId = prev.columns.find((c) => c.isDefault)?.id ?? 'entrada'
@@ -145,31 +194,37 @@ export function KanbanBoard({
 
   const handleDragOver = (event: DragOverEvent) => {
     const { active, over } = event
-    if (!over || !board) return
+    if (!board) return
 
     const activeRect = active.rect.current.translated
-    const overRect = over.rect
+    const targetId = getDropTarget(board, activeRect, over ? String(over.id) : undefined)
+    if (!targetId) return
+
+    const overRect = over?.rect
     const insertAfter =
-      activeRect && !board.columns.some((c) => c.id === String(over.id))
+      activeRect && overRect && !board.columns.some((c) => c.id === targetId)
         ? activeRect.top + activeRect.height / 2 > overRect.top + overRect.height / 2
         : false
 
-    updateBoard((prev) => moveTicketOnBoard(prev, String(active.id), String(over.id), insertAfter))
+    updateBoard((prev) => moveTicketOnBoard(prev, String(active.id), targetId, insertAfter))
   }
 
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveTicket(null)
     const { active, over } = event
-    if (!over || !board) return
+    if (!board) return
 
     const activeRect = active.rect.current.translated
-    const overRect = over.rect
+    const targetId = getDropTarget(board, activeRect, over ? String(over.id) : undefined)
+    if (!targetId) return
+
+    const overRect = over?.rect
     const insertAfter =
-      activeRect && !board.columns.some((c) => c.id === String(over.id))
+      activeRect && overRect && !board.columns.some((c) => c.id === targetId)
         ? activeRect.top + activeRect.height / 2 > overRect.top + overRect.height / 2
         : false
 
-    updateBoard((prev) => moveTicketOnBoard(prev, String(active.id), String(over.id), insertAfter))
+    updateBoard((prev) => moveTicketOnBoard(prev, String(active.id), targetId, insertAfter))
   }
 
   const handleDeleteColumn = (columnId: string) => {
