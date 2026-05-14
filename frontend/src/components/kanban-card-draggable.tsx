@@ -56,6 +56,7 @@ export function KanbanCardDraggable({
 
   const { data: ticketsWithNotes } = useTicketsWithNotes()
   const hasNote = ticketsWithNotes?.has(ticket.id) ?? false
+  const canMoveBetweenColumns = !isDragOverlay && columns.length > 0 && onMoveToColumn
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: String(ticket.id), disabled: isDragOverlay })
@@ -89,6 +90,55 @@ export function KanbanCardDraggable({
             <Badge variant={SLA_BADGE_VARIANT[sla]} className="text-xs shrink-0">
               {sla === 'paused' ? 'Pausado' : sla === 'none' ? '—' : slaLabel}
             </Badge>
+            {canMoveBetweenColumns && (
+              <Popover open={moveOpen} onOpenChange={setMoveOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                    title="Mover para lista"
+                    className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    <MoreVertical size={14} />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="end"
+                  className="w-56 p-2"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="px-2 pb-2 text-xs font-medium text-muted-foreground">
+                    Mover para lista
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    {columns.map((column) => {
+                      const isCurrent = column.id === currentColumnId
+                      return (
+                        <button
+                          key={column.id}
+                          type="button"
+                          disabled={isCurrent}
+                          onClick={() => {
+                            onMoveToColumn(ticket.id, column.id)
+                            setMoveOpen(false)
+                          }}
+                          className={`flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
+                            isCurrent
+                              ? 'cursor-default text-primary bg-primary/10'
+                              : 'text-foreground hover:bg-muted'
+                          }`}
+                        >
+                          <span className="truncate">{column.title}</span>
+                          {isCurrent && <Check size={13} />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
             {!isDragOverlay && (
               <button
                 type="button"
@@ -139,56 +189,6 @@ export function KanbanCardDraggable({
                   <span className="absolute top-0 right-0 w-1.5 h-1.5 rounded-full bg-primary" />
                 )}
               </button>
-
-              {columns.length > 0 && onMoveToColumn && (
-                <Popover open={moveOpen} onOpenChange={setMoveOpen}>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onClick={(e) => e.stopPropagation()}
-                      title="Mover para lista"
-                      className="flex items-center justify-center p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
-                    >
-                      <MoreVertical size={13} />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent
-                    align="end"
-                    className="w-56 p-2"
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="px-2 pb-2 text-xs font-medium text-muted-foreground">
-                      Mover para lista
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      {columns.map((column) => {
-                        const isCurrent = column.id === currentColumnId
-                        return (
-                          <button
-                            key={column.id}
-                            type="button"
-                            disabled={isCurrent}
-                            onClick={() => {
-                              onMoveToColumn(ticket.id, column.id)
-                              setMoveOpen(false)
-                            }}
-                            className={`flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
-                              isCurrent
-                                ? 'cursor-default text-primary bg-primary/10'
-                                : 'text-foreground hover:bg-muted'
-                            }`}
-                          >
-                            <span className="truncate">{column.title}</span>
-                            {isCurrent && <Check size={13} />}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              )}
             </div>
           )}
         </div>
