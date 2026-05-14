@@ -424,6 +424,10 @@ export function KanbanBoard({
     })
   }
 
+  const handleMoveTicketToColumn = (ticketId: number, columnId: string) => {
+    updateBoard((prev) => moveTicketOnBoard(prev, String(ticketId), columnId))
+  }
+
   if (boardLoading) {
     return (
       <div className="flex gap-4 overflow-x-auto pb-4">
@@ -457,6 +461,7 @@ export function KanbanBoard({
           <KanbanColumn
             key={col.id}
             column={col}
+            columns={board.columns}
             tickets={sortTicketsForColumn(col.id, getTicketsForColumn(col.id))}
             dateSort={columnDateSorts[col.id] ?? 'manual'}
             onDateSortChange={handleColumnDateSortChange}
@@ -466,6 +471,7 @@ export function KanbanBoard({
             isLoading={isLoading}
             currentUser={currentUser}
             onDelete={handleDeleteColumn}
+            onMoveTicketToColumn={handleMoveTicketToColumn}
           />
         ))}
 

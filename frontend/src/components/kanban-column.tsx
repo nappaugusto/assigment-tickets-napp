@@ -9,6 +9,7 @@ export type KanbanColumnDateSort = 'manual' | 'date_asc' | 'date_desc'
 
 interface KanbanColumnProps {
   column: KanbanColumnType
+  columns: KanbanColumnType[]
   tickets: Ticket[]
   dateSort: KanbanColumnDateSort
   onDateSortChange: (columnId: string, sort: KanbanColumnDateSort) => void
@@ -18,10 +19,12 @@ interface KanbanColumnProps {
   isLoading?: boolean
   currentUser: string
   onDelete: (columnId: string) => void
+  onMoveTicketToColumn: (ticketId: number, columnId: string) => void
 }
 
 export function KanbanColumn({
   column,
+  columns,
   tickets,
   dateSort,
   onDateSortChange,
@@ -31,6 +34,7 @@ export function KanbanColumn({
   isLoading,
   currentUser,
   onDelete,
+  onMoveTicketToColumn,
 }: KanbanColumnProps) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -121,6 +125,9 @@ export function KanbanColumn({
                 onUnassign={onUnassign}
                 isLoading={isLoading}
                 currentUser={currentUser}
+                columns={columns}
+                currentColumnId={column.id}
+                onMoveToColumn={onMoveTicketToColumn}
               />
             ))
           )}

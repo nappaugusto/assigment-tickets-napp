@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Pencil } from 'lucide-react'
-import { type Ticket } from '@/lib/api'
+import { Check, MoreVertical, Pencil } from 'lucide-react'
+import { type KanbanColumn, type Ticket } from '@/lib/api'
 import { formatDate, getSlaStatus, getTimeUntilSla } from '@/lib/date-utils'
 import { Badge } from '@/components/ui/badge'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { TicketActions } from '@/components/ticket-actions'
 import { TicketNoteDrawer } from '@/components/ticket-note-drawer'
 import { TicketServiceDrawer } from '@/components/ticket-service-drawer'
@@ -27,6 +28,9 @@ interface KanbanCardDraggableProps {
   isLoading?: boolean
   currentUser: string
   isDragOverlay?: boolean
+  columns?: KanbanColumn[]
+  currentColumnId?: string
+  onMoveToColumn?: (ticketId: number, columnId: string) => void
 }
 
 export function KanbanCardDraggable({
@@ -37,9 +41,13 @@ export function KanbanCardDraggable({
   isLoading,
   currentUser,
   isDragOverlay = false,
+  columns = [],
+  currentColumnId,
+  onMoveToColumn,
 }: KanbanCardDraggableProps) {
   const [noteOpen, setNoteOpen] = useState(false)
   const [serviceOpen, setServiceOpen] = useState(false)
+  const [moveOpen, setMoveOpen] = useState(false)
   const sla = getSlaStatus(ticket.slaSolutionDate, ticket.slaSolutionDateIsPaused)
   const slaLabel = getTimeUntilSla(ticket.slaSolutionDate)
   const isMyTicket =
@@ -108,17 +116,69 @@ export function KanbanCardDraggable({
             onOpenService={() => setServiceOpen(true)}
           />
           {!isDragOverlay && (
-            <button
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => { e.stopPropagation(); setNoteOpen(true) }}
-              title="Anotações"
-              className="relative flex items-center justify-center p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
-            >
-              <Pencil size={13} />
-              {hasNote && (
-                <span className="absolute top-0 right-0 w-1.5 h-1.5 rounded-full bg-primary" />
+            <div className="flex items-center gap-1">
+              <button
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); setNoteOpen(true) }}
+                title="Anotações"
+                className="relative flex items-center justify-center p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+              >
+                <Pencil size={13} />
+                {hasNote && (
+                  <span className="absolute top-0 right-0 w-1.5 h-1.5 rounded-full bg-primary" />
+                )}
+              </button>
+
+              {columns.length > 0 && onMoveToColumn && (
+                <Popover open={moveOpen} onOpenChange={setMoveOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={(e) => e.stopPropagation()}
+                      title="Mover para lista"
+                      className="flex items-center justify-center p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+                    >
+                      <MoreVertical size={13} />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="end"
+                    className="w-56 p-2"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="px-2 pb-2 text-xs font-medium text-muted-foreground">
+                      Mover para lista
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      {columns.map((column) => {
+                        const isCurrent = column.id === currentColumnId
+                        return (
+                          <button
+                            key={column.id}
+                            type="button"
+                            disabled={isCurrent}
+                            onClick={() => {
+                              onMoveToColumn(ticket.id, column.id)
+                              setMoveOpen(false)
+                            }}
+                            className={`flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
+                              isCurrent
+                                ? 'cursor-default text-primary bg-primary/10'
+                                : 'text-foreground hover:bg-muted'
+                            }`}
+                          >
+                            <span className="truncate">{column.title}</span>
+                            {isCurrent && <Check size={13} />}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </PopoverContent>
+                </Popover>
               )}
-            </button>
+            </div>
           )}
         </div>
       </div>
