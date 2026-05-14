@@ -13,6 +13,7 @@ import { PasswordResetModule } from './password-reset/password-reset.module';
 import { KanbanModule } from './kanban/kanban.module';
 import { NotesModule } from './notes/notes.module';
 import { McpModule } from './mcp/mcp.module';
+import { PreferencesModule } from './preferences/preferences.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { McpModule } from './mcp/mcp.module';
     KanbanModule,
     NotesModule,
     McpModule,
+    PreferencesModule,
   ],
   providers: [DatabaseInitService],
 })

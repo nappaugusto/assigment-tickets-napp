@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Award, ChevronDown, ChevronUp, Gauge, PauseCircle, TrendingDown, TrendingUp, type LucideIcon } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { type TicketMonthlyAnalyticsPayload } from '@/lib/api'
+import { preferencesApi, type MonthlyAnalyticsPreference, type TicketMonthlyAnalyticsPayload } from '@/lib/api'
 
 interface MonthlyAnalyticsProps {
   analytics?: TicketMonthlyAnalyticsPayload
@@ -55,6 +56,7 @@ const MONTHLY_ANALYTICS_COLLAPSED_KEY = 'monthlyAnalyticsCollapsed'
 const MONTHLY_ANALYTICS_SUMMARY_COLLAPSED_KEY = 'monthlyAnalyticsSummaryCollapsed'
 const MONTHLY_ANALYTICS_COLLAPSED_COOKIE = 'monthly_analytics_collapsed'
 const MONTHLY_ANALYTICS_SUMMARY_COLLAPSED_COOKIE = 'monthly_analytics_summary_collapsed'
+const MONTHLY_ANALYTICS_PREFERENCE_QUERY_KEY = ['monthly-analytics-preference']
 
 function readCookieBoolean(name: string) {
   const cookie = document.cookie
@@ -472,6 +474,7 @@ function MonthlyLineChart({ months }: { months: MonthlyChartPoint[] }) {
 }
 
 export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps) {
+  const queryClient = useQueryClient()
   const [isCollapsed, setIsCollapsed] = useState(
     () => readStoredBoolean(MONTHLY_ANALYTICS_COLLAPSED_KEY, MONTHLY_ANALYTICS_COLLAPSED_COOKIE),
   )
@@ -479,19 +482,47 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
     () => readStoredBoolean(MONTHLY_ANALYTICS_SUMMARY_COLLAPSED_KEY, MONTHLY_ANALYTICS_SUMMARY_COLLAPSED_COOKIE),
   )
 
+  const preferenceQuery = useQuery({
+    queryKey: MONTHLY_ANALYTICS_PREFERENCE_QUERY_KEY,
+    queryFn: preferencesApi.monthlyAnalytics,
+    staleTime: Infinity,
+  })
+
+  const preferenceMutation = useMutation({
+    mutationFn: preferencesApi.saveMonthlyAnalytics,
+    onMutate: async (preference) => {
+      await queryClient.cancelQueries({ queryKey: MONTHLY_ANALYTICS_PREFERENCE_QUERY_KEY })
+      queryClient.setQueryData(MONTHLY_ANALYTICS_PREFERENCE_QUERY_KEY, preference)
+    },
+  })
+
+  const storedPreference = preferenceQuery.data
+  const resolvedCollapsed = storedPreference?.collapsed ?? isCollapsed
+  const resolvedSummaryCollapsed = storedPreference?.summaryCollapsed ?? isSummaryCollapsed
+
+  const savePreference = (preference: MonthlyAnalyticsPreference) => {
+    writeStoredBoolean(MONTHLY_ANALYTICS_COLLAPSED_KEY, MONTHLY_ANALYTICS_COLLAPSED_COOKIE, preference.collapsed)
+    writeStoredBoolean(
+      MONTHLY_ANALYTICS_SUMMARY_COLLAPSED_KEY,
+      MONTHLY_ANALYTICS_SUMMARY_COLLAPSED_COOKIE,
+      preference.summaryCollapsed,
+    )
+    setIsCollapsed(preference.collapsed)
+    setIsSummaryCollapsed(preference.summaryCollapsed)
+    preferenceMutation.mutate(preference)
+  }
+
   const toggleCollapsed = () => {
-    setIsCollapsed((value) => {
-      const next = !value
-      writeStoredBoolean(MONTHLY_ANALYTICS_COLLAPSED_KEY, MONTHLY_ANALYTICS_COLLAPSED_COOKIE, next)
-      return next
+    savePreference({
+      collapsed: !resolvedCollapsed,
+      summaryCollapsed: resolvedSummaryCollapsed,
     })
   }
 
   const toggleSummaryCollapsed = () => {
-    setIsSummaryCollapsed((value) => {
-      const next = !value
-      writeStoredBoolean(MONTHLY_ANALYTICS_SUMMARY_COLLAPSED_KEY, MONTHLY_ANALYTICS_SUMMARY_COLLAPSED_COOKIE, next)
-      return next
+    savePreference({
+      collapsed: resolvedCollapsed,
+      summaryCollapsed: !resolvedSummaryCollapsed,
     })
   }
 
@@ -521,13 +552,13 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <CardTitle className="text-xl">Visão mensal da equipe</CardTitle>
-            {!isCollapsed && !isLoading && currentMonth && (
+            {!resolvedCollapsed && !isLoading && currentMonth && (
               <p className="mt-1 text-sm text-muted-foreground">
                 Recorte atual: <strong className="text-foreground">{currentMonth.label}</strong>
               </p>
             )}
           </div>
-          {!isCollapsed && !isLoading && (
+          {!resolvedCollapsed && !isLoading && (
             <div className="flex flex-wrap items-center gap-2 rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs text-amber-100">
               <span>
                 Tickets pausados:{' '}
@@ -547,12 +578,12 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
             className="gap-2 rounded-full"
             onClick={toggleCollapsed}
           >
-            {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
-            {isCollapsed ? 'Expandir' : 'Minimizar'}
+            {resolvedCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+            {resolvedCollapsed ? 'Expandir' : 'Minimizar'}
           </Button>
         </div>
       </CardHeader>
-      {!isCollapsed && (
+      {!resolvedCollapsed && !preferenceQuery.isLoading && (
         <CardContent className="space-y-5">
           {isLoading ? (
             <div className="grid gap-3 md:grid-cols-3">
@@ -566,7 +597,7 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
                 <div>
                   <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Resumo mensal</p>
                   <p className="text-xs text-muted-foreground">
-                    {isSummaryCollapsed ? 'Cards ocultos para priorizar o gráfico.' : 'Indicadores principais e destaques do período.'}
+                    {resolvedSummaryCollapsed ? 'Cards ocultos para priorizar o gráfico.' : 'Indicadores principais e destaques do período.'}
                   </p>
                 </div>
                 <Button
@@ -576,12 +607,12 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
                   className="h-8 gap-2 rounded-md text-xs"
                   onClick={toggleSummaryCollapsed}
                 >
-                  {isSummaryCollapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
-                  {isSummaryCollapsed ? 'Mostrar resumo' : 'Ocultar resumo'}
+                  {resolvedSummaryCollapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+                  {resolvedSummaryCollapsed ? 'Mostrar resumo' : 'Ocultar resumo'}
                 </Button>
               </div>
 
-              {!isSummaryCollapsed && (
+              {!resolvedSummaryCollapsed && (
                 <>
                   <div className="grid gap-3 md:grid-cols-3">
                     <MetricCard

@@ -74,6 +74,15 @@ export class DatabaseInitService implements OnModuleInit {
         updated_at TEXT DEFAULT (datetime('now')),
         UNIQUE(user_id, ticket_id)
       );
+
+      CREATE TABLE IF NOT EXISTS user_preferences (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        key        TEXT NOT NULL,
+        value      TEXT NOT NULL DEFAULT '{}',
+        updated_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(user_id, key)
+      );
     `);
 
     const ticketColumns = this.db

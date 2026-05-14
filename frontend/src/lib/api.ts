@@ -170,6 +170,17 @@ export const kanbanApi = {
     http.put<{ success: boolean }>('/kanban/board', board).then((r) => r.data),
 }
 
+export interface MonthlyAnalyticsPreference {
+  collapsed: boolean
+  summaryCollapsed: boolean
+}
+
+export const preferencesApi = {
+  monthlyAnalytics: () => get<MonthlyAnalyticsPreference>('/preferences/monthly-analytics'),
+  saveMonthlyAnalytics: (preference: MonthlyAnalyticsPreference) =>
+    http.put<{ success: boolean }>('/preferences/monthly-analytics', preference).then((r) => r.data),
+}
+
 // Ticket Notes
 export const notesApi = {
   getNote: (ticketId: number) =>
