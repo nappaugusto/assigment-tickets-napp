@@ -1,12 +1,15 @@
 import { Bot, CalendarDays, Columns3, RefreshCw, Search, Table2, Users, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { type DateFilterField } from '@/hooks/use-ticket-filters'
 
 interface ToolbarProps {
   search: string
   onSearchChange: (v: string) => void
   dateFilter: string
   onDateChange: (v: string) => void
+  dateFilterField: DateFilterField
+  onDateFieldChange: (v: DateFilterField) => void
   agentFilter: string
   onAgentChange: (v: string) => void
   agentOptions: string[]
@@ -28,6 +31,8 @@ export function Toolbar({
   onSearchChange,
   dateFilter,
   onDateChange,
+  dateFilterField,
+  onDateFieldChange,
   agentFilter,
   onAgentChange,
   agentOptions,
@@ -70,7 +75,7 @@ export function Toolbar({
         </div>
       </div>
 
-      <div className="grid gap-2 lg:grid-cols-[minmax(220px,1fr)_180px_240px_auto]">
+      <div className="grid gap-2 lg:grid-cols-[minmax(220px,1fr)_180px_180px_240px_auto]">
         <label className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -99,8 +104,23 @@ export function Toolbar({
             value={dateFilter}
             onChange={(e) => onDateChange(e.target.value)}
             className="h-10 rounded-lg border-border/70 bg-background/70 pl-9 text-sm shadow-inner"
-            aria-label="Filtrar por data SLA"
+            aria-label="Filtrar por data"
           />
+        </label>
+
+        <label className="relative">
+          <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <select
+            value={dateFilterField}
+            onChange={(e) => onDateFieldChange(e.target.value as DateFilterField)}
+            className="h-10 w-full rounded-lg border border-input bg-background/70 pl-9 pr-3 text-sm text-foreground shadow-inner outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring"
+            aria-label="Tipo de data para filtro"
+          >
+            <option value="slaSolutionDate">Vencimento/SLA</option>
+            <option value="opened_at">Abertura</option>
+            <option value="closed_at">Fechamento</option>
+            <option value="last_update">Última atualização</option>
+          </select>
         </label>
 
         <label className="relative">

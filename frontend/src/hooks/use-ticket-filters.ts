@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import { type Ticket } from '@/lib/api'
-import { normalizeText, getSlaStatus, formatDate } from '@/lib/date-utils'
+import { normalizeText, getSlaStatus, formatDate, getBrazilDateKey } from '@/lib/date-utils'
 
 export type QuickFilter =
   | 'all'
@@ -13,6 +13,7 @@ export type QuickFilter =
 
 export type SortKey = 'id' | 'slaSolutionDate' | 'closed_at' | 'responsavel' | ''
 export type SortDir = 'asc' | 'desc'
+export type DateFilterField = 'slaSolutionDate' | 'opened_at' | 'closed_at' | 'last_update'
 
 const STATUS_ALIASES: Record<string, string[]> = {
   new: ['novo', 'new'],
@@ -75,6 +76,7 @@ export function useTicketFilters(
 
   const [search, setSearch] = useState('')
   const [dateFilter, setDateFilter] = useState('')
+  const [dateFilterField, setDateFilterField] = useState<DateFilterField>('slaSolutionDate')
   const [agentFilter, setAgentFilter] = useState('')
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('all')
   const [sortKey, setSortKey] = useState<SortKey>('')
@@ -92,6 +94,7 @@ export function useTicketFilters(
   const clearFilters = () => {
     setSearch('')
     setDateFilter('')
+    setDateFilterField('slaSolutionDate')
     setAgentFilter('')
     setQuickFilter('all')
   }
@@ -123,8 +126,7 @@ export function useTicketFilters(
 
     if (dateFilter) {
       filtered = filtered.filter((t) => {
-        if (!t.slaSolutionDate) return false
-        return t.slaSolutionDate.slice(0, 10) === dateFilter
+        return getBrazilDateKey(t[dateFilterField]) === dateFilter
       })
     }
 
@@ -154,7 +156,7 @@ export function useTicketFilters(
     }
 
     return filtered
-  }, [agentFilter, dateFilter, quickFilter, searchTerms, sortDir, sortKey])
+  }, [agentFilter, dateFilter, dateFilterField, quickFilter, searchTerms, sortDir, sortKey])
 
   const filteredTickets = useMemo(() => filterTickets(tickets), [tickets, filterTickets])
   const filteredNewTickets = useMemo(() => filterTickets(newTickets), [newTickets, filterTickets])
@@ -175,6 +177,7 @@ export function useTicketFilters(
   return {
     search, setSearch,
     dateFilter, setDateFilter,
+    dateFilterField, setDateFilterField,
     agentFilter, setAgentFilter,
     quickFilter, setQuickFilter,
     activeFilterCount,

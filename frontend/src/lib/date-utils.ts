@@ -79,6 +79,19 @@ export function formatDate(isoDate: string | null): string {
   })
 }
 
+export function getBrazilDateKey(isoDate: string | null): string {
+  if (!isoDate) return ''
+  const date = parseDate(isoDate)
+  if (Number.isNaN(date.getTime())) return ''
+
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: BRAZIL_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date)
+}
+
 /** Normalize text: lowercase + remove accents */
 export function normalizeText(s: string): string {
   return s

@@ -103,6 +103,8 @@ export function DashboardPage() {
             onSearchChange={filters.setSearch}
             dateFilter={filters.dateFilter}
             onDateChange={filters.setDateFilter}
+            dateFilterField={filters.dateFilterField}
+            onDateFieldChange={filters.setDateFilterField}
             agentFilter={filters.agentFilter}
             onAgentChange={filters.setAgentFilter}
             agentOptions={agentOptions}
