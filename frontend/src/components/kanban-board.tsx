@@ -14,8 +14,10 @@ import { Plus } from 'lucide-react'
 import { type KanbanBoard as KanbanBoardState, type Ticket } from '@/lib/api'
 import { useKanbanBoard } from '@/hooks/use-kanban-board'
 import { useAuth } from '@/contexts/auth-context'
-import { KanbanColumn } from '@/components/kanban-column'
+import { KanbanColumn, type KanbanColumnDateSort } from '@/components/kanban-column'
 import { KanbanCardDraggable } from '@/components/kanban-card-draggable'
+
+const KANBAN_COLUMN_DATE_SORTS_KEY = 'kanbanColumnDateSorts'
 
 interface KanbanBoardProps {
   tickets: Ticket[]
@@ -41,6 +43,20 @@ export function KanbanBoard({
   const [activeTicket, setActiveTicket] = useState<Ticket | null>(null)
   const [addingColumn, setAddingColumn] = useState(false)
   const [newColumnTitle, setNewColumnTitle] = useState('')
+  const [columnDateSorts, setColumnDateSorts] = useState<Record<string, KanbanColumnDateSort>>(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(KANBAN_COLUMN_DATE_SORTS_KEY) ?? '{}')
+      if (!stored || typeof stored !== 'object') return {}
+
+      return Object.fromEntries(
+        Object.entries(stored).filter(([, value]) =>
+          value === 'manual' || value === 'date_asc' || value === 'date_desc',
+        ),
+      ) as Record<string, KanbanColumnDateSort>
+    } catch {
+      return {}
+    }
+  })
   const inputRef = useRef<HTMLInputElement>(null)
   const scrollLockRef = useRef<{
     scrollX: number
@@ -94,6 +110,29 @@ export function KanbanBoard({
   }, [])
 
   useEffect(() => unlockPageScroll, [unlockPageScroll])
+
+  useEffect(() => {
+    localStorage.setItem(KANBAN_COLUMN_DATE_SORTS_KEY, JSON.stringify(columnDateSorts))
+  }, [columnDateSorts])
+
+  const getTicketDateTime = (ticket: Ticket) => {
+    if (!ticket.slaSolutionDate) return Number.POSITIVE_INFINITY
+    const date = new Date(ticket.slaSolutionDate)
+    const time = date.getTime()
+    return Number.isNaN(time) ? Number.POSITIVE_INFINITY : time
+  }
+
+  const sortTicketsForColumn = (columnId: string, columnTickets: Ticket[]) => {
+    const sort = columnDateSorts[columnId] ?? 'manual'
+    if (sort === 'manual') return columnTickets
+
+    return [...columnTickets].sort((a, b) => {
+      const aTime = getTicketDateTime(a)
+      const bTime = getTicketDateTime(b)
+      if (aTime !== bTime) return sort === 'date_asc' ? aTime - bTime : bTime - aTime
+      return a.id - b.id
+    })
+  }
 
   const getTicketsForColumn = (columnId: string): Ticket[] => {
     if (!board || !Array.isArray(board.columns)) return []
@@ -311,6 +350,15 @@ export function KanbanBoard({
     setNewColumnTitle('')
   }
 
+  const handleColumnDateSortChange = (columnId: string, sort: KanbanColumnDateSort) => {
+    setColumnDateSorts((prev) => {
+      const next = { ...prev }
+      if (sort === 'manual') delete next[columnId]
+      else next[columnId] = sort
+      return next
+    })
+  }
+
   if (boardLoading) {
     return (
       <div className="flex gap-4 overflow-x-auto pb-4">
@@ -344,7 +392,9 @@ export function KanbanBoard({
           <KanbanColumn
             key={col.id}
             column={col}
-            tickets={getTicketsForColumn(col.id)}
+            tickets={sortTicketsForColumn(col.id, getTicketsForColumn(col.id))}
+            dateSort={columnDateSorts[col.id] ?? 'manual'}
+            onDateSortChange={handleColumnDateSortChange}
             agentOptions={agentOptions}
             onAssign={onAssign}
             onUnassign={onUnassign}

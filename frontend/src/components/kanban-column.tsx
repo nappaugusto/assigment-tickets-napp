@@ -1,13 +1,17 @@
 import { useState, useRef } from 'react'
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Trash2 } from 'lucide-react'
 import { type Ticket, type KanbanColumn as KanbanColumnType } from '@/lib/api'
 import { KanbanCardDraggable } from '@/components/kanban-card-draggable'
+
+export type KanbanColumnDateSort = 'manual' | 'date_asc' | 'date_desc'
 
 interface KanbanColumnProps {
   column: KanbanColumnType
   tickets: Ticket[]
+  dateSort: KanbanColumnDateSort
+  onDateSortChange: (columnId: string, sort: KanbanColumnDateSort) => void
   agentOptions: string[]
   onAssign: (id: number, name: string) => void
   onUnassign: (id: number) => void
@@ -19,6 +23,8 @@ interface KanbanColumnProps {
 export function KanbanColumn({
   column,
   tickets,
+  dateSort,
+  onDateSortChange,
   agentOptions,
   onAssign,
   onUnassign,
@@ -32,6 +38,13 @@ export function KanbanColumn({
   const { setNodeRef, isOver } = useDroppable({ id: column.id })
 
   const ticketIds = tickets.map((t) => String(t.id))
+  const SortIcon = dateSort === 'date_asc' ? ArrowUp : dateSort === 'date_desc' ? ArrowDown : ArrowUpDown
+  const sortTitle =
+    dateSort === 'date_asc'
+      ? 'Data mais próxima primeiro'
+      : dateSort === 'date_desc'
+        ? 'Data mais distante primeiro'
+        : 'Ordem manual'
 
   const handleDeleteClick = () => {
     if (confirmDelete) {
@@ -43,6 +56,12 @@ export function KanbanColumn({
     }
   }
 
+  const handleDateSortClick = () => {
+    const nextSort =
+      dateSort === 'manual' ? 'date_asc' : dateSort === 'date_asc' ? 'date_desc' : 'manual'
+    onDateSortChange(column.id, nextSort)
+  }
+
   return (
     <div className="flex flex-col gap-2 w-[280px] shrink-0" data-kanban-column-id={column.id}>
       <div className="flex items-center justify-between px-1">
@@ -50,19 +69,35 @@ export function KanbanColumn({
           <h2 className="font-semibold text-sm">{column.title}</h2>
           <span className="text-xs text-muted-foreground">{tickets.length}</span>
         </div>
-        {!column.isDefault && (
+        <div className="flex items-center gap-1">
           <button
-            onClick={handleDeleteClick}
-            title={confirmDelete ? 'Clique para confirmar exclusão' : 'Deletar lista'}
+            type="button"
+            onClick={handleDateSortClick}
+            title={`Ordenar por vencimento: ${sortTitle}`}
             className={`p-1 rounded transition-colors ${
-              confirmDelete
-                ? 'text-destructive hover:bg-destructive/10'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+              dateSort === 'manual'
+                ? 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                : 'text-primary bg-primary/10 hover:bg-primary/15'
             }`}
+            aria-label={`Ordenar lista por vencimento: ${sortTitle}`}
           >
-            <Trash2 size={14} />
+            <SortIcon size={14} />
           </button>
-        )}
+          {!column.isDefault && (
+            <button
+              type="button"
+              onClick={handleDeleteClick}
+              title={confirmDelete ? 'Clique para confirmar exclusão' : 'Deletar lista'}
+              className={`p-1 rounded transition-colors ${
+                confirmDelete
+                  ? 'text-destructive hover:bg-destructive/10'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+              }`}
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
       </div>
 
       <div
