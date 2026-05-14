@@ -19,6 +19,22 @@ import { KanbanCardDraggable } from '@/components/kanban-card-draggable'
 
 const KANBAN_COLUMN_DATE_SORTS_KEY = 'kanbanColumnDateSorts'
 
+interface ScrollContainerSnapshot {
+  element: HTMLElement
+  scrollTop: number
+  scrollLeft: number
+  overflowX: string
+  overflowY: string
+}
+
+function restoreScrollContainers(containers: ScrollContainerSnapshot[]) {
+  for (const container of containers) {
+    container.element.style.overflowX = container.overflowX
+    container.element.style.overflowY = container.overflowY
+    container.element.scrollTo(container.scrollLeft, container.scrollTop)
+  }
+}
+
 interface KanbanBoardProps {
   tickets: Ticket[]
   newTickets: Ticket[]
@@ -66,6 +82,7 @@ export function KanbanBoard({
     bodyLeft: string
     bodyWidth: string
     bodyOverflow: string
+    scrollContainers: ScrollContainerSnapshot[]
   } | null>(null)
 
   const sensors = useSensors(
@@ -79,6 +96,25 @@ export function KanbanBoard({
   const lockPageScroll = useCallback(() => {
     if (scrollLockRef.current) return
 
+    const scrollContainers = Array.from(document.querySelectorAll<HTMLElement>('body *'))
+      .filter((element) => {
+        const style = window.getComputedStyle(element)
+        const canScrollY = element.scrollHeight > element.clientHeight
+        const canScrollX = element.scrollWidth > element.clientWidth
+        const hasScrollableOverflow =
+          /(auto|scroll|overlay)/.test(style.overflowY) ||
+          /(auto|scroll|overlay)/.test(style.overflowX)
+
+        return hasScrollableOverflow && (canScrollY || canScrollX)
+      })
+      .map((element) => ({
+        element,
+        scrollTop: element.scrollTop,
+        scrollLeft: element.scrollLeft,
+        overflowX: element.style.overflowX,
+        overflowY: element.style.overflowY,
+      }))
+
     scrollLockRef.current = {
       scrollX: window.scrollX,
       scrollY: window.scrollY,
@@ -87,6 +123,7 @@ export function KanbanBoard({
       bodyLeft: document.body.style.left,
       bodyWidth: document.body.style.width,
       bodyOverflow: document.body.style.overflow,
+      scrollContainers,
     }
 
     document.body.style.position = 'fixed'
@@ -94,19 +131,27 @@ export function KanbanBoard({
     document.body.style.left = `-${scrollLockRef.current.scrollX}px`
     document.body.style.width = '100%'
     document.body.style.overflow = 'hidden'
+
+    for (const container of scrollContainers) {
+      container.element.style.overflowY = 'hidden'
+      container.element.style.overflowX = 'hidden'
+    }
   }, [])
 
   const unlockPageScroll = useCallback(() => {
     const lock = scrollLockRef.current
     if (!lock) return
+    scrollLockRef.current = null
 
     document.body.style.position = lock.bodyPosition
     document.body.style.top = lock.bodyTop
     document.body.style.left = lock.bodyLeft
     document.body.style.width = lock.bodyWidth
     document.body.style.overflow = lock.bodyOverflow
+
+    restoreScrollContainers(lock.scrollContainers)
+
     window.scrollTo(lock.scrollX, lock.scrollY)
-    scrollLockRef.current = null
   }, [])
 
   useEffect(() => unlockPageScroll, [unlockPageScroll])
