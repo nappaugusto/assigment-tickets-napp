@@ -281,6 +281,7 @@ export function KanbanBoard({
   return (
     <DndContext
       sensors={sensors}
+      autoScroll={false}
       collisionDetection={closestCorners}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
