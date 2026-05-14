@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Award, ChevronDown, ChevronUp, Gauge, PauseCircle, TrendingDown, TrendingUp, type LucideIcon } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -51,6 +51,8 @@ const CHART_SERIES: ChartSeries[] = [
 ]
 
 const DEFAULT_VISIBLE_SERIES = CHART_SERIES.map((series) => series.key)
+const MONTHLY_ANALYTICS_COLLAPSED_KEY = 'monthlyAnalyticsCollapsed'
+const MONTHLY_ANALYTICS_SUMMARY_COLLAPSED_KEY = 'monthlyAnalyticsSummaryCollapsed'
 
 function formatPercent(value: number | null) {
   if (value === null || Number.isNaN(value)) return '-'
@@ -447,8 +449,20 @@ function MonthlyLineChart({ months }: { months: MonthlyChartPoint[] }) {
 }
 
 export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false)
-  const [isSummaryCollapsed, setIsSummaryCollapsed] = useState(false)
+  const [isCollapsed, setIsCollapsed] = useState(
+    () => localStorage.getItem(MONTHLY_ANALYTICS_COLLAPSED_KEY) === '1',
+  )
+  const [isSummaryCollapsed, setIsSummaryCollapsed] = useState(
+    () => localStorage.getItem(MONTHLY_ANALYTICS_SUMMARY_COLLAPSED_KEY) === '1',
+  )
+
+  useEffect(() => {
+    localStorage.setItem(MONTHLY_ANALYTICS_COLLAPSED_KEY, isCollapsed ? '1' : '0')
+  }, [isCollapsed])
+
+  useEffect(() => {
+    localStorage.setItem(MONTHLY_ANALYTICS_SUMMARY_COLLAPSED_KEY, isSummaryCollapsed ? '1' : '0')
+  }, [isSummaryCollapsed])
 
   const months = useMemo(
     () => (analytics?.months ?? []).map(toChartPoint).filter((item): item is MonthlyChartPoint => item !== null),
