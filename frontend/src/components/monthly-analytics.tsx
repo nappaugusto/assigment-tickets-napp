@@ -53,13 +53,28 @@ const CHART_SERIES: ChartSeries[] = [
 const DEFAULT_VISIBLE_SERIES = CHART_SERIES.map((series) => series.key)
 const MONTHLY_ANALYTICS_COLLAPSED_KEY = 'monthlyAnalyticsCollapsed'
 const MONTHLY_ANALYTICS_SUMMARY_COLLAPSED_KEY = 'monthlyAnalyticsSummaryCollapsed'
+const MONTHLY_ANALYTICS_COLLAPSED_COOKIE = 'monthly_analytics_collapsed'
+const MONTHLY_ANALYTICS_SUMMARY_COLLAPSED_COOKIE = 'monthly_analytics_summary_collapsed'
 
-function readStoredBoolean(key: string) {
-  return localStorage.getItem(key) === '1'
+function readCookieBoolean(name: string) {
+  const cookie = document.cookie
+    .split('; ')
+    .find((item) => item.startsWith(`${name}=`))
+
+  return cookie?.split('=')[1] === '1'
 }
 
-function writeStoredBoolean(key: string, value: boolean) {
+function writeCookieBoolean(name: string, value: boolean) {
+  document.cookie = `${name}=${value ? '1' : '0'}; path=/; max-age=31536000; SameSite=Lax`
+}
+
+function readStoredBoolean(key: string, cookieName: string) {
+  return localStorage.getItem(key) === '1' || readCookieBoolean(cookieName)
+}
+
+function writeStoredBoolean(key: string, cookieName: string, value: boolean) {
   localStorage.setItem(key, value ? '1' : '0')
+  writeCookieBoolean(cookieName, value)
 }
 
 function formatPercent(value: number | null) {
@@ -458,16 +473,16 @@ function MonthlyLineChart({ months }: { months: MonthlyChartPoint[] }) {
 
 export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps) {
   const [isCollapsed, setIsCollapsed] = useState(
-    () => readStoredBoolean(MONTHLY_ANALYTICS_COLLAPSED_KEY),
+    () => readStoredBoolean(MONTHLY_ANALYTICS_COLLAPSED_KEY, MONTHLY_ANALYTICS_COLLAPSED_COOKIE),
   )
   const [isSummaryCollapsed, setIsSummaryCollapsed] = useState(
-    () => readStoredBoolean(MONTHLY_ANALYTICS_SUMMARY_COLLAPSED_KEY),
+    () => readStoredBoolean(MONTHLY_ANALYTICS_SUMMARY_COLLAPSED_KEY, MONTHLY_ANALYTICS_SUMMARY_COLLAPSED_COOKIE),
   )
 
   const toggleCollapsed = () => {
     setIsCollapsed((value) => {
       const next = !value
-      writeStoredBoolean(MONTHLY_ANALYTICS_COLLAPSED_KEY, next)
+      writeStoredBoolean(MONTHLY_ANALYTICS_COLLAPSED_KEY, MONTHLY_ANALYTICS_COLLAPSED_COOKIE, next)
       return next
     })
   }
@@ -475,7 +490,7 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
   const toggleSummaryCollapsed = () => {
     setIsSummaryCollapsed((value) => {
       const next = !value
-      writeStoredBoolean(MONTHLY_ANALYTICS_SUMMARY_COLLAPSED_KEY, next)
+      writeStoredBoolean(MONTHLY_ANALYTICS_SUMMARY_COLLAPSED_KEY, MONTHLY_ANALYTICS_SUMMARY_COLLAPSED_COOKIE, next)
       return next
     })
   }
