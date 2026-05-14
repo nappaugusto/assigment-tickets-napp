@@ -1,5 +1,6 @@
 import { Bot, CalendarDays, Columns3, RefreshCw, Search, Table2, Users, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { type DateFilterField } from '@/hooks/use-ticket-filters'
 
@@ -22,6 +23,8 @@ interface ToolbarProps {
   visibleCount: number
   activeFilterCount: number
   hasActiveFilters: boolean
+  keepFilters: boolean
+  onKeepFiltersChange: (v: boolean) => void
   onClearFilters: () => void
   onOpenMcpDesk?: () => void
 }
@@ -45,6 +48,8 @@ export function Toolbar({
   visibleCount,
   activeFilterCount,
   hasActiveFilters,
+  keepFilters,
+  onKeepFiltersChange,
   onClearFilters,
   onOpenMcpDesk,
 }: ToolbarProps) {
@@ -151,19 +156,30 @@ export function Toolbar({
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex w-fit gap-1 rounded-lg border border-border/60 bg-background/60 p-1">
-          {(['table', 'kanban'] as const).map((m) => (
-            <Button
-              key={m}
-              variant={viewMode === m ? 'default' : 'outline'}
-              size="sm"
-              className="h-8 rounded-md px-3 text-xs"
-              onClick={() => onViewMode(m)}
-            >
-              {m === 'table' ? <Table2 className="h-3.5 w-3.5" /> : <Columns3 className="h-3.5 w-3.5" />}
-              {m === 'table' ? 'Tabela' : 'Kanban'}
-            </Button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex w-fit gap-1 rounded-lg border border-border/60 bg-background/60 p-1">
+            {(['table', 'kanban'] as const).map((m) => (
+              <Button
+                key={m}
+                variant={viewMode === m ? 'default' : 'outline'}
+                size="sm"
+                className="h-8 rounded-md px-3 text-xs"
+                onClick={() => onViewMode(m)}
+              >
+                {m === 'table' ? <Table2 className="h-3.5 w-3.5" /> : <Columns3 className="h-3.5 w-3.5" />}
+                {m === 'table' ? 'Tabela' : 'Kanban'}
+              </Button>
+            ))}
+          </div>
+
+          <label className="flex h-8 items-center gap-2 rounded-lg border border-border/60 bg-background/60 px-3 text-xs text-muted-foreground">
+            <Checkbox
+              checked={keepFilters}
+              onCheckedChange={(checked) => onKeepFiltersChange(checked === true)}
+              aria-label="Manter filtros"
+            />
+            Manter filtros
+          </label>
         </div>
 
         <div className="flex items-center gap-2 sm:justify-end">

@@ -167,15 +167,17 @@ export function KanbanCardDraggable({
         <span className="font-medium text-foreground/85">Vencimento:</span>{' '}
         {ticket.slaSolutionDate ? formatDate(ticket.slaSolutionDate) : '—'}
       </div>
-      <div className="flex items-center justify-between gap-2">
-        <TicketActions
-          ticket={ticket}
+      <div className="flex flex-wrap items-center gap-1">
+        <div className="min-w-0">
+          <TicketActions
+            ticket={ticket}
             agentOptions={agentOptions}
             onAssign={onAssign}
             onUnassign={onUnassign}
             isLoading={isLoading}
             onOpenService={() => setServiceOpen(true)}
           />
+        </div>
           {!isDragOverlay && (
             <div className="flex items-center gap-1">
               <button

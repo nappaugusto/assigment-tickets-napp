@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { type Ticket } from '@/lib/api'
 import { normalizeText, getSlaStatus, formatDate, getBrazilDateKey } from '@/lib/date-utils'
 
@@ -19,6 +19,65 @@ const STATUS_ALIASES: Record<string, string[]> = {
   new: ['novo', 'new'],
   in_progress: ['em atendimento', 'em andamento', 'in progress'],
   waiting: ['aguardando', 'waiting', 'em pausa', 'pausado'],
+}
+
+const KEEP_FILTERS_KEY = 'ticketFiltersKeep'
+const FILTERS_STORAGE_KEY = 'ticketFiltersState'
+
+interface StoredTicketFilters {
+  search: string
+  dateFilter: string
+  dateFilterField: DateFilterField
+  agentFilter: string
+  quickFilter: QuickFilter
+  sortKey: SortKey
+  sortDir: SortDir
+}
+
+const DEFAULT_FILTERS: StoredTicketFilters = {
+  search: '',
+  dateFilter: '',
+  dateFilterField: 'slaSolutionDate',
+  agentFilter: '',
+  quickFilter: 'all',
+  sortKey: '',
+  sortDir: 'asc',
+}
+
+const DATE_FIELDS: DateFilterField[] = ['slaSolutionDate', 'opened_at', 'closed_at', 'last_update']
+const QUICK_FILTERS: QuickFilter[] = ['all', 'new', 'in_progress', 'waiting', 'sla_interrupt', 'due_today', 'unassigned']
+const SORT_KEYS: SortKey[] = ['id', 'slaSolutionDate', 'closed_at', 'responsavel', '']
+const SORT_DIRS: SortDir[] = ['asc', 'desc']
+
+function readInitialFilters() {
+  const keepFilters = localStorage.getItem(KEEP_FILTERS_KEY) === '1'
+  if (!keepFilters) return { keepFilters, filters: DEFAULT_FILTERS }
+
+  try {
+    const stored = JSON.parse(localStorage.getItem(FILTERS_STORAGE_KEY) ?? '{}') as Partial<StoredTicketFilters>
+    return {
+      keepFilters,
+      filters: {
+        search: typeof stored.search === 'string' ? stored.search : DEFAULT_FILTERS.search,
+        dateFilter: typeof stored.dateFilter === 'string' ? stored.dateFilter : DEFAULT_FILTERS.dateFilter,
+        dateFilterField: DATE_FIELDS.includes(stored.dateFilterField as DateFilterField)
+          ? stored.dateFilterField as DateFilterField
+          : DEFAULT_FILTERS.dateFilterField,
+        agentFilter: typeof stored.agentFilter === 'string' ? stored.agentFilter : DEFAULT_FILTERS.agentFilter,
+        quickFilter: QUICK_FILTERS.includes(stored.quickFilter as QuickFilter)
+          ? stored.quickFilter as QuickFilter
+          : DEFAULT_FILTERS.quickFilter,
+        sortKey: SORT_KEYS.includes(stored.sortKey as SortKey)
+          ? stored.sortKey as SortKey
+          : DEFAULT_FILTERS.sortKey,
+        sortDir: SORT_DIRS.includes(stored.sortDir as SortDir)
+          ? stored.sortDir as SortDir
+          : DEFAULT_FILTERS.sortDir,
+      },
+    }
+  } catch {
+    return { keepFilters, filters: DEFAULT_FILTERS }
+  }
 }
 
 function matchesQuickFilter(ticket: Ticket, filter: QuickFilter): boolean {
@@ -73,14 +132,35 @@ export function useTicketFilters(
   newTickets: Ticket[],
 ) {
   const allTickets = useMemo(() => [...tickets, ...newTickets], [tickets, newTickets])
+  const [initialFilters] = useState(readInitialFilters)
 
-  const [search, setSearch] = useState('')
-  const [dateFilter, setDateFilter] = useState('')
-  const [dateFilterField, setDateFilterField] = useState<DateFilterField>('slaSolutionDate')
-  const [agentFilter, setAgentFilter] = useState('')
-  const [quickFilter, setQuickFilter] = useState<QuickFilter>('all')
-  const [sortKey, setSortKey] = useState<SortKey>('')
-  const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const [keepFilters, setKeepFilters] = useState(initialFilters.keepFilters)
+  const [search, setSearch] = useState(initialFilters.filters.search)
+  const [dateFilter, setDateFilter] = useState(initialFilters.filters.dateFilter)
+  const [dateFilterField, setDateFilterField] = useState<DateFilterField>(initialFilters.filters.dateFilterField)
+  const [agentFilter, setAgentFilter] = useState(initialFilters.filters.agentFilter)
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>(initialFilters.filters.quickFilter)
+  const [sortKey, setSortKey] = useState<SortKey>(initialFilters.filters.sortKey)
+  const [sortDir, setSortDir] = useState<SortDir>(initialFilters.filters.sortDir)
+
+  useEffect(() => {
+    if (!keepFilters) {
+      localStorage.removeItem(KEEP_FILTERS_KEY)
+      localStorage.removeItem(FILTERS_STORAGE_KEY)
+      return
+    }
+
+    localStorage.setItem(KEEP_FILTERS_KEY, '1')
+    localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify({
+      search,
+      dateFilter,
+      dateFilterField,
+      agentFilter,
+      quickFilter,
+      sortKey,
+      sortDir,
+    }))
+  }, [agentFilter, dateFilter, dateFilterField, keepFilters, quickFilter, search, sortDir, sortKey])
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -182,6 +262,7 @@ export function useTicketFilters(
     quickFilter, setQuickFilter,
     activeFilterCount,
     hasActiveFilters: activeFilterCount > 0,
+    keepFilters, setKeepFilters,
     clearFilters,
     sortKey, sortDir, toggleSort,
     filteredTickets,

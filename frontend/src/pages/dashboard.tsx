@@ -117,6 +117,8 @@ export function DashboardPage() {
             visibleCount={summary.visible}
             activeFilterCount={filters.activeFilterCount}
             hasActiveFilters={filters.hasActiveFilters}
+            keepFilters={filters.keepFilters}
+            onKeepFiltersChange={filters.setKeepFilters}
             onClearFilters={filters.clearFilters}
             onOpenMcpDesk={() => setMcpDeskOpen(true)}
           />
