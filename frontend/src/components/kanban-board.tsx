@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import {
   closestCorners,
   DndContext,
@@ -42,6 +42,15 @@ export function KanbanBoard({
   const [addingColumn, setAddingColumn] = useState(false)
   const [newColumnTitle, setNewColumnTitle] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  const scrollLockRef = useRef<{
+    scrollX: number
+    scrollY: number
+    bodyPosition: string
+    bodyTop: string
+    bodyLeft: string
+    bodyWidth: string
+    bodyOverflow: string
+  } | null>(null)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -50,6 +59,41 @@ export function KanbanBoard({
   const allTickets = [...tickets, ...newTickets]
 
   const getDefaultColId = () => board?.columns?.find((c) => c.isDefault)?.id ?? 'entrada'
+
+  const lockPageScroll = useCallback(() => {
+    if (scrollLockRef.current) return
+
+    scrollLockRef.current = {
+      scrollX: window.scrollX,
+      scrollY: window.scrollY,
+      bodyPosition: document.body.style.position,
+      bodyTop: document.body.style.top,
+      bodyLeft: document.body.style.left,
+      bodyWidth: document.body.style.width,
+      bodyOverflow: document.body.style.overflow,
+    }
+
+    document.body.style.position = 'fixed'
+    document.body.style.top = `-${scrollLockRef.current.scrollY}px`
+    document.body.style.left = `-${scrollLockRef.current.scrollX}px`
+    document.body.style.width = '100%'
+    document.body.style.overflow = 'hidden'
+  }, [])
+
+  const unlockPageScroll = useCallback(() => {
+    const lock = scrollLockRef.current
+    if (!lock) return
+
+    document.body.style.position = lock.bodyPosition
+    document.body.style.top = lock.bodyTop
+    document.body.style.left = lock.bodyLeft
+    document.body.style.width = lock.bodyWidth
+    document.body.style.overflow = lock.bodyOverflow
+    window.scrollTo(lock.scrollX, lock.scrollY)
+    scrollLockRef.current = null
+  }, [])
+
+  useEffect(() => unlockPageScroll, [unlockPageScroll])
 
   const getTicketsForColumn = (columnId: string): Ticket[] => {
     if (!board || !Array.isArray(board.columns)) return []
@@ -188,6 +232,7 @@ export function KanbanBoard({
   }
 
   const handleDragStart = (event: DragStartEvent) => {
+    lockPageScroll()
     const ticket = allTickets.find((t) => String(t.id) === event.active.id)
     setActiveTicket(ticket ?? null)
   }
@@ -211,6 +256,7 @@ export function KanbanBoard({
 
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveTicket(null)
+    unlockPageScroll()
     const { active, over } = event
     if (!board) return
 
@@ -225,6 +271,11 @@ export function KanbanBoard({
         : false
 
     updateBoard((prev) => moveTicketOnBoard(prev, String(active.id), targetId, insertAfter))
+  }
+
+  const handleDragCancel = () => {
+    setActiveTicket(null)
+    unlockPageScroll()
   }
 
   const handleDeleteColumn = (columnId: string) => {
@@ -286,6 +337,7 @@ export function KanbanBoard({
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
     >
       <div className="flex gap-4 overflow-x-auto pb-4 items-start">
         {board.columns.map((col) => (
