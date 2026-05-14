@@ -17,6 +17,7 @@
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
 import { ClienteMovidesk } from "./cliente-movidesk/api.js";
 
 // Importar schemas e handlers de cada ferramenta
@@ -49,6 +50,106 @@ export function criarServidorMcp(token: string): McpServer {
         version: "1.0.0",
         description: "Servidor MCP para gerenciamento de tickets do Movidesk — Suporte técnico",
     });
+
+    // ============================================================
+    // REGISTRO DOS PROMPTS
+    // ============================================================
+
+    servidor.prompt(
+        "triagem_ticket",
+        "Triagem inteligente com classificação, duplicidade e encaminhamento",
+        {
+            ticket_id: z.string().optional().describe("ID do ticket no Movidesk, se já existir."),
+            contexto: z.string().optional().describe("Descrição do problema, cliente, prints, logs ou observações iniciais."),
+        },
+        ({ ticket_id, contexto }) => ({
+            description: "Triagem inteligente com classificação, duplicidade e encaminhamento",
+            messages: [
+                {
+                    role: "user",
+                    content: {
+                        type: "text",
+                        text:
+                            "Faça a triagem técnica deste chamado Movidesk.\n\n" +
+                            `Ticket: ${ticket_id || "não informado"}\n` +
+                            `Contexto: ${contexto || "não informado"}\n\n` +
+                            "Siga este fluxo:\n" +
+                            "1. Se houver ticket_id, use consultar_ticket antes de concluir.\n" +
+                            "2. Identifique cliente, produto, impacto, urgência, sintomas e evidências faltantes.\n" +
+                            "3. Use buscar_conhecimento para procurar tickets semelhantes e possíveis duplicidades.\n" +
+                            "4. Classifique como incidente, dúvida, solicitação, bug, integração, acesso ou financeiro.\n" +
+                            "5. Informe prioridade sugerida, equipe/responsável sugerido e próximos passos.\n" +
+                            "6. Responda com um resumo objetivo para operação e uma checklist de ações.",
+                    },
+                },
+            ],
+        })
+    );
+
+    servidor.prompt(
+        "responder_cliente",
+        "Gera resposta profissional e empática para o cliente",
+        {
+            ticket_id: z.string().optional().describe("ID do ticket no Movidesk, se já existir."),
+            contexto: z.string().optional().describe("Resumo do caso, diagnóstico, solução aplicada ou atualização disponível."),
+            tom: z.string().optional().describe("Tom desejado: empático, direto, técnico, formal ou breve."),
+        },
+        ({ ticket_id, contexto, tom }) => ({
+            description: "Gera resposta profissional e empática para o cliente",
+            messages: [
+                {
+                    role: "user",
+                    content: {
+                        type: "text",
+                        text:
+                            "Gere uma resposta pronta para enviar ao cliente no Movidesk.\n\n" +
+                            `Ticket: ${ticket_id || "não informado"}\n` +
+                            `Contexto: ${contexto || "não informado"}\n` +
+                            `Tom: ${tom || "profissional, claro e empático"}\n\n` +
+                            "Regras:\n" +
+                            "1. Se houver ticket_id, use consultar_ticket para entender o histórico antes de escrever.\n" +
+                            "2. Seja cordial, humano e objetivo.\n" +
+                            "3. Explique o que foi entendido, o que foi feito ou o que será feito.\n" +
+                            "4. Se faltar informação, peça apenas os dados necessários.\n" +
+                            "5. Não invente prazos, causas ou ações que não estejam confirmadas.\n" +
+                            "6. Entregue somente a mensagem final para o cliente.",
+                    },
+                },
+            ],
+        })
+    );
+
+    servidor.prompt(
+        "resumo_ticket",
+        "Resumo executivo, detalhado ou técnico de um ticket",
+        {
+            ticket_id: z.string().optional().describe("ID do ticket no Movidesk."),
+            contexto: z.string().optional().describe("Informações adicionais ou texto do ticket quando não houver ID."),
+            formato: z.string().optional().describe("Formato desejado: executivo, detalhado ou técnico."),
+        },
+        ({ ticket_id, contexto, formato }) => ({
+            description: "Resumo executivo, detalhado ou técnico de um ticket",
+            messages: [
+                {
+                    role: "user",
+                    content: {
+                        type: "text",
+                        text:
+                            "Resuma este ticket Movidesk para acompanhamento interno.\n\n" +
+                            `Ticket: ${ticket_id || "não informado"}\n` +
+                            `Contexto: ${contexto || "não informado"}\n` +
+                            `Formato: ${formato || "executivo"}\n\n` +
+                            "Siga este fluxo:\n" +
+                            "1. Se houver ticket_id, use consultar_ticket antes de resumir.\n" +
+                            "2. Destaque problema, cliente, status, responsável, impacto e SLA quando disponível.\n" +
+                            "3. Separe histórico relevante, diagnóstico, ações realizadas e pendências.\n" +
+                            "4. Inclua riscos ou bloqueios se existirem.\n" +
+                            "5. Termine com próximos passos recomendados.",
+                    },
+                },
+            ],
+        })
+    );
 
     // ============================================================
     // REGISTRO DAS FERRAMENTAS

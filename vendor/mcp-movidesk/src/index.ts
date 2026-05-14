@@ -71,6 +71,11 @@ async function iniciarServidor(): Promise<void> {
         console.error("   5. listar_tickets_cliente — Listar tickets de um cliente");
         console.error("   6. alterar_status_ticket  — Alterar status de ticket");
         console.error("   7. atribuir_agente        — Atribuir ticket a agente/equipe");
+        console.error("");
+        console.error("💬 Prompts disponíveis:");
+        console.error("   1. triagem_ticket      — Triagem inteligente de chamados");
+        console.error("   2. responder_cliente   — Resposta profissional para cliente");
+        console.error("   3. resumo_ticket       — Resumo executivo/técnico de ticket");
         console.error("═══════════════════════════════════════════════════════════");
     } catch (erro) {
         console.error("❌ Erro fatal ao iniciar o servidor MCP:", erro);

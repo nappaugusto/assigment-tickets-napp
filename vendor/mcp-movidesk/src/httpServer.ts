@@ -156,7 +156,12 @@ async function main(): Promise<void> {
 
     // ── Health check ─────────────────────────────────────────────────────────
     app.get("/health", (_req: Request, res: Response) => {
-        res.json({ status: "ok", server: "movidesk-mcp", version: "1.0.0" });
+        res.json({
+            status: "ok",
+            server: "movidesk-mcp",
+            version: "1.0.0",
+            prompts: ["triagem_ticket", "responder_cliente", "resumo_ticket"],
+        });
     });
 
     // ── Start ────────────────────────────────────────────────────────────────
