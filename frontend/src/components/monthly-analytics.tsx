@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { AlertTriangle, Award, ChevronDown, ChevronUp, Gauge, PauseCircle, TrendingDown, TrendingUp, type LucideIcon } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -53,6 +53,14 @@ const CHART_SERIES: ChartSeries[] = [
 const DEFAULT_VISIBLE_SERIES = CHART_SERIES.map((series) => series.key)
 const MONTHLY_ANALYTICS_COLLAPSED_KEY = 'monthlyAnalyticsCollapsed'
 const MONTHLY_ANALYTICS_SUMMARY_COLLAPSED_KEY = 'monthlyAnalyticsSummaryCollapsed'
+
+function readStoredBoolean(key: string) {
+  return localStorage.getItem(key) === '1'
+}
+
+function writeStoredBoolean(key: string, value: boolean) {
+  localStorage.setItem(key, value ? '1' : '0')
+}
 
 function formatPercent(value: number | null) {
   if (value === null || Number.isNaN(value)) return '-'
@@ -450,19 +458,27 @@ function MonthlyLineChart({ months }: { months: MonthlyChartPoint[] }) {
 
 export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps) {
   const [isCollapsed, setIsCollapsed] = useState(
-    () => localStorage.getItem(MONTHLY_ANALYTICS_COLLAPSED_KEY) === '1',
+    () => readStoredBoolean(MONTHLY_ANALYTICS_COLLAPSED_KEY),
   )
   const [isSummaryCollapsed, setIsSummaryCollapsed] = useState(
-    () => localStorage.getItem(MONTHLY_ANALYTICS_SUMMARY_COLLAPSED_KEY) === '1',
+    () => readStoredBoolean(MONTHLY_ANALYTICS_SUMMARY_COLLAPSED_KEY),
   )
 
-  useEffect(() => {
-    localStorage.setItem(MONTHLY_ANALYTICS_COLLAPSED_KEY, isCollapsed ? '1' : '0')
-  }, [isCollapsed])
+  const toggleCollapsed = () => {
+    setIsCollapsed((value) => {
+      const next = !value
+      writeStoredBoolean(MONTHLY_ANALYTICS_COLLAPSED_KEY, next)
+      return next
+    })
+  }
 
-  useEffect(() => {
-    localStorage.setItem(MONTHLY_ANALYTICS_SUMMARY_COLLAPSED_KEY, isSummaryCollapsed ? '1' : '0')
-  }, [isSummaryCollapsed])
+  const toggleSummaryCollapsed = () => {
+    setIsSummaryCollapsed((value) => {
+      const next = !value
+      writeStoredBoolean(MONTHLY_ANALYTICS_SUMMARY_COLLAPSED_KEY, next)
+      return next
+    })
+  }
 
   const months = useMemo(
     () => (analytics?.months ?? []).map(toChartPoint).filter((item): item is MonthlyChartPoint => item !== null),
@@ -514,7 +530,7 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
             variant="outline"
             size="sm"
             className="gap-2 rounded-full"
-            onClick={() => setIsCollapsed((value) => !value)}
+            onClick={toggleCollapsed}
           >
             {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
             {isCollapsed ? 'Expandir' : 'Minimizar'}
@@ -543,7 +559,7 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
                   variant="outline"
                   size="sm"
                   className="h-8 gap-2 rounded-md text-xs"
-                  onClick={() => setIsSummaryCollapsed((value) => !value)}
+                  onClick={toggleSummaryCollapsed}
                 >
                   {isSummaryCollapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
                   {isSummaryCollapsed ? 'Mostrar resumo' : 'Ocultar resumo'}
