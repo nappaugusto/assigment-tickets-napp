@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Check, MoreVertical, Pencil } from 'lucide-react'
+import { Check, GripVertical, MoreVertical, Pencil } from 'lucide-react'
 import { type KanbanColumn, type Ticket } from '@/lib/api'
 import { formatDate, getSlaStatus, getTimeUntilSla } from '@/lib/date-utils'
 import { Badge } from '@/components/ui/badge'
@@ -64,7 +64,6 @@ export function KanbanCardDraggable({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.4 : 1,
-    cursor: isDragOverlay ? 'grabbing' : 'grab',
   }
 
   return (
@@ -72,11 +71,9 @@ export function KanbanCardDraggable({
       <div
         ref={isDragOverlay ? undefined : setNodeRef}
         style={isDragOverlay ? { cursor: 'grabbing' } : style}
-        {...(isDragOverlay ? {} : attributes)}
-        {...(isDragOverlay ? {} : listeners)}
         className={`rounded-lg border p-3 flex flex-col gap-2 bg-card select-none ${
           isMyTicket ? 'border-primary/40' : 'border-border/40'
-        } ${isDragOverlay ? 'shadow-lg rotate-1' : ''}`}
+        } ${isDragging ? 'ring-1 ring-primary/35' : ''} ${isDragOverlay ? 'shadow-lg rotate-1' : ''}`}
       >
         <div className="flex items-start justify-between gap-2">
           <a
@@ -88,9 +85,23 @@ export function KanbanCardDraggable({
           >
             #{ticket.id}
           </a>
-          <Badge variant={SLA_BADGE_VARIANT[sla]} className="text-xs shrink-0">
-            {sla === 'paused' ? 'Pausado' : sla === 'none' ? '—' : slaLabel}
-          </Badge>
+          <div className="flex items-center gap-1.5">
+            <Badge variant={SLA_BADGE_VARIANT[sla]} className="text-xs shrink-0">
+              {sla === 'paused' ? 'Pausado' : sla === 'none' ? '—' : slaLabel}
+            </Badge>
+            {!isDragOverlay && (
+              <button
+                type="button"
+                title="Arrastar chamado"
+                className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:cursor-grabbing"
+                style={{ touchAction: 'none' }}
+                {...attributes}
+                {...listeners}
+              >
+                <GripVertical size={14} />
+              </button>
+            )}
+          </div>
         </div>
         <p className="text-sm leading-snug line-clamp-3">{ticket.subject || '—'}</p>
       <div className="text-xs text-muted-foreground">

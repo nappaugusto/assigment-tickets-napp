@@ -67,7 +67,11 @@ export function KanbanColumn({
   }
 
   return (
-    <div className="flex flex-col gap-2 w-[280px] shrink-0" data-kanban-column-id={column.id}>
+    <div
+      ref={setNodeRef}
+      className="flex flex-col gap-2 w-[280px] shrink-0"
+      data-kanban-column-id={column.id}
+    >
       <div className="flex items-center justify-between px-1">
         <div className="flex items-baseline gap-2">
           <h2 className="font-semibold text-sm">{column.title}</h2>
@@ -105,7 +109,6 @@ export function KanbanColumn({
       </div>
 
       <div
-        ref={setNodeRef}
         className={`flex flex-col gap-2 min-h-24 rounded-lg p-2 transition-colors ${
           isOver ? 'bg-muted/60' : 'bg-muted/20'
         }`}

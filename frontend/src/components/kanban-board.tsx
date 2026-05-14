@@ -86,7 +86,7 @@ export function KanbanBoard({
   } | null>(null)
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
   )
 
   const allTickets = [...tickets, ...newTickets]
