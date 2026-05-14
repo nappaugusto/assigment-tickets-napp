@@ -1,14 +1,15 @@
 import { useState, useRef } from 'react'
 import {
+  closestCorners,
   DndContext,
   DragOverlay,
   PointerSensor,
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragOverEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
-import { arrayMove } from '@dnd-kit/sortable'
 import { Plus } from 'lucide-react'
 import { type Ticket } from '@/lib/api'
 import { useKanbanBoard } from '@/hooks/use-kanban-board'
@@ -71,12 +72,70 @@ export function KanbanBoard({
       .filter((t): t is Ticket => t !== undefined)
   }
 
-  const findColumnOfTicket = (ticketId: string): string => {
-    if (!board) return getDefaultColId()
-    for (const [colId, ids] of Object.entries(board.columnItems ?? {})) {
-      if (ids.includes(ticketId)) return colId
+  const moveTicketOnBoard = (
+    prev: NonNullable<typeof board>,
+    activeId: string,
+    overId: string,
+    insertAfter = false,
+  ): NonNullable<typeof board> => {
+    if (activeId === overId) return prev
+
+    const defaultColId = prev.columns.find((c) => c.isDefault)?.id ?? 'entrada'
+    const sourceColId =
+      Object.entries(prev.columnItems ?? {}).find(([, ids]) => ids.includes(activeId))?.[0] ??
+      defaultColId
+    const isOverColumn = prev.columns.some((c) => c.id === overId)
+    const targetColId = isOverColumn
+      ? overId
+      : Object.entries(prev.columnItems ?? {}).find(([, ids]) => ids.includes(overId))?.[0] ??
+        defaultColId
+
+    const nextItems = { ...prev.columnItems }
+    const allPlaced = new Set(Object.values(prev.columnItems ?? {}).flat())
+    const unplacedIds = allTickets
+      .map((t) => String(t.id))
+      .filter((id) => !allPlaced.has(id))
+
+    const buildColumnList = (columnId: string, excludeId?: string) => {
+      const explicitIds = nextItems[columnId] ?? []
+      const implicitIds =
+        columnId === defaultColId ? unplacedIds.filter((id) => id !== excludeId) : []
+
+      return [...explicitIds, ...implicitIds].filter((id) => id !== excludeId)
     }
-    return getDefaultColId()
+
+    const sourceList = buildColumnList(sourceColId)
+    if (!sourceList.includes(activeId)) return prev
+
+    if (sourceColId === targetColId) {
+      const oldIndex = sourceList.indexOf(activeId)
+      const targetList = sourceList.filter((id) => id !== activeId)
+      const overIndex = isOverColumn ? targetList.length : targetList.indexOf(overId)
+      const insertAt =
+        overIndex === -1 ? targetList.length : overIndex + (insertAfter ? 1 : 0)
+      const reordered = [
+        ...targetList.slice(0, insertAt),
+        activeId,
+        ...targetList.slice(insertAt),
+      ]
+
+      if (oldIndex === insertAt || sourceList.join('|') === reordered.join('|')) return prev
+      nextItems[sourceColId] = reordered
+      return { ...prev, columnItems: nextItems }
+    }
+
+    nextItems[sourceColId] = sourceList.filter((id) => id !== activeId)
+
+    const targetList = buildColumnList(targetColId, activeId)
+    const overIndex = isOverColumn ? targetList.length : targetList.indexOf(overId)
+    const insertAt = overIndex === -1 ? targetList.length : overIndex + (insertAfter ? 1 : 0)
+    nextItems[targetColId] = [
+      ...targetList.slice(0, insertAt),
+      activeId,
+      ...targetList.slice(insertAt),
+    ]
+
+    return { ...prev, columnItems: nextItems }
   }
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -84,73 +143,33 @@ export function KanbanBoard({
     setActiveTicket(ticket ?? null)
   }
 
+  const handleDragOver = (event: DragOverEvent) => {
+    const { active, over } = event
+    if (!over || !board) return
+
+    const activeRect = active.rect.current.translated
+    const overRect = over.rect
+    const insertAfter =
+      activeRect && !board.columns.some((c) => c.id === String(over.id))
+        ? activeRect.top + activeRect.height / 2 > overRect.top + overRect.height / 2
+        : false
+
+    updateBoard((prev) => moveTicketOnBoard(prev, String(active.id), String(over.id), insertAfter))
+  }
+
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveTicket(null)
     const { active, over } = event
     if (!over || !board) return
 
-    const activeId = String(active.id)
-    const overId = String(over.id)
-    if (activeId === overId) return
+    const activeRect = active.rect.current.translated
+    const overRect = over.rect
+    const insertAfter =
+      activeRect && !board.columns.some((c) => c.id === String(over.id))
+        ? activeRect.top + activeRect.height / 2 > overRect.top + overRect.height / 2
+        : false
 
-    const defaultColId = getDefaultColId()
-    const sourceColId = findColumnOfTicket(activeId)
-    const isOverColumn = board.columns.some((c) => c.id === overId)
-    const targetColId = isOverColumn ? overId : findColumnOfTicket(overId)
-
-    updateBoard((prev) => {
-      const newItems = { ...prev.columnItems }
-
-      // Materialize the full ordered list for source and target columns
-      const allPlaced = new Set(Object.values(prev.columnItems).flat())
-      const unplacedIds = allTickets
-        .map((t) => String(t.id))
-        .filter((id) => !allPlaced.has(id))
-
-      const sourceList = [
-        ...(newItems[sourceColId] ?? []),
-        ...(sourceColId === defaultColId ? unplacedIds : []),
-      ]
-      const targetList =
-        sourceColId === targetColId
-          ? sourceList
-          : [
-              ...(newItems[targetColId] ?? []),
-              ...(targetColId === defaultColId ? unplacedIds.filter((id) => id !== activeId) : []),
-            ]
-
-      // Ensure activeId is in sourceList (handles unplaced tickets)
-      const resolvedSource = sourceList.includes(activeId)
-        ? sourceList
-        : [...sourceList, activeId]
-
-      if (sourceColId === targetColId) {
-        // Within-column reorder
-        const oldIndex = resolvedSource.indexOf(activeId)
-        const newIndex = isOverColumn
-          ? resolvedSource.length - 1
-          : resolvedSource.indexOf(overId)
-        if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return prev
-        newItems[sourceColId] = arrayMove(resolvedSource, oldIndex, newIndex)
-      } else {
-        // Cross-column move
-        newItems[sourceColId] = resolvedSource.filter((id) => id !== activeId)
-        const resolvedTarget = targetList.filter((id) => id !== activeId)
-        if (isOverColumn) {
-          newItems[targetColId] = [...resolvedTarget, activeId]
-        } else {
-          const overIndex = resolvedTarget.indexOf(overId)
-          const insertAt = overIndex === -1 ? resolvedTarget.length : overIndex
-          newItems[targetColId] = [
-            ...resolvedTarget.slice(0, insertAt),
-            activeId,
-            ...resolvedTarget.slice(insertAt),
-          ]
-        }
-      }
-
-      return { ...prev, columnItems: newItems }
-    })
+    updateBoard((prev) => moveTicketOnBoard(prev, String(active.id), String(over.id), insertAfter))
   }
 
   const handleDeleteColumn = (columnId: string) => {
@@ -205,7 +224,13 @@ export function KanbanBoard({
   }
 
   return (
-    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCorners}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragEnd={handleDragEnd}
+    >
       <div className="flex gap-4 overflow-x-auto pb-4 items-start">
         {board.columns.map((col) => (
           <KanbanColumn
