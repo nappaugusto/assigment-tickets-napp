@@ -24,11 +24,13 @@ import {
   useMcpMovideskStatus,
   useMcpMovideskTools,
 } from '@/hooks/use-mcp-movidesk'
+import { useAssignmentPeopleDetails } from '@/hooks/use-tickets'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { AssignAgentCommand } from '@/components/assign-agent-command'
+import { McpAgentSelector } from '@/components/mcp-agent-selector'
 
 interface TicketServiceDrawerProps {
   ticket: Ticket | null
@@ -81,6 +83,7 @@ function TicketServiceDrawerContent({
 
   const statusQuery = useMcpMovideskStatus()
   const toolsQuery = useMcpMovideskTools(open)
+  const peopleQuery = useAssignmentPeopleDetails()
   const mcp = useMcpMovideskActions()
 
   const availableTools = useMemo(
@@ -317,6 +320,15 @@ function TicketServiceDrawerContent({
                 <section className="rounded-lg border border-border/45 bg-card/50 p-3">
                   <PanelTitle icon={<UserRoundCheck size={15} />} title="Responsável" />
                   <div className="mt-3 grid gap-2">
+                    <McpAgentSelector
+                      people={peopleQuery.data?.people ?? []}
+                      onSelect={(person, team) => {
+                        setAgentIdentifier(person.id)
+                        setAgentDisplayName(person.businessName || person.email || person.id)
+                        setAgentTeam(team)
+                      }}
+                      className="h-8 rounded-md border border-input bg-background/70 px-3 text-xs text-foreground outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring"
+                    />
                     <Input
                       value={agentIdentifier}
                       onChange={(event) => setAgentIdentifier(event.target.value)}

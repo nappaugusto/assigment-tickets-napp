@@ -110,6 +110,14 @@ export const ticketsApi = {
 
 export const peopleApi = {
   assignment: () => get<{ people: string[] }>('/people/assignment'),
+  assignmentDetails: () => get<{ people: AssignmentPerson[] }>('/people/assignment/details'),
+}
+
+export interface AssignmentPerson {
+  id: string
+  businessName: string
+  email: string | null
+  teams: string[]
 }
 
 export interface McpMovideskStatus {

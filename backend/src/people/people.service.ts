@@ -7,6 +7,7 @@ import { TicketsService } from '../tickets/tickets.service';
 export class PeopleService {
   private readonly logger = new Logger(PeopleService.name);
   private cachedPeople: string[] = [];
+  private cachedDetailedPeople: AssignmentPersonDto[] = [];
   private cachedAt: Date | null = null;
   private readonly cacheMs: number;
   private readonly apiUrl: string;
@@ -35,70 +36,151 @@ export class PeopleService {
     return Date.now() - this.cachedAt.getTime() < this.cacheMs;
   }
 
+  private getTeamNames(person: Record<string, unknown>): string[] {
+    const teams = (person['teams'] as unknown[]) ?? [];
+    return teams
+      .map((team) => {
+        if (team && typeof team === 'object') {
+          return String((team as Record<string, unknown>)['name'] ?? '').trim();
+        }
+        return String(team ?? '').trim();
+      })
+      .filter(Boolean);
+  }
+
   private matchesTeam(person: Record<string, unknown>): boolean {
     if (this.assignmentTeams.size === 0) return true;
-    const teams = (person['teams'] as unknown[]) ?? [];
-    for (const t of teams) {
-      const name =
-        typeof t === 'object' && t !== null
-          ? String((t as Record<string, unknown>)['name'] ?? '')
-          : String(t ?? '');
+    for (const name of this.getTeamNames(person)) {
       if (this.assignmentTeams.has(name.toLowerCase())) return true;
     }
     return false;
+  }
+
+  private ensureSelectFields(params: Record<string, string>): void {
+    const requiredFields = ['id', 'businessName', 'email', 'profileType', 'isActive', 'teams'];
+    const currentFields = new Set(
+      String(params['$select'] ?? '')
+        .split(',')
+        .map((field) => field.trim())
+        .filter(Boolean),
+    );
+
+    for (const field of requiredFields) {
+      currentFields.add(field);
+    }
+
+    params['$select'] = Array.from(currentFields).join(',');
+  }
+
+  private normalizePerson(person: Record<string, unknown>): AssignmentPersonDto | null {
+    const id = String(person['id'] ?? '').trim();
+    const businessName = String(person['businessName'] ?? '').trim();
+    const email = String(person['email'] ?? person['emails'] ?? '').trim();
+    const teams = this.getTeamNames(person);
+
+    if (!id && !email && !businessName) return null;
+
+    return {
+      id: id || email || businessName,
+      businessName,
+      email: email || null,
+      teams,
+    };
+  }
+
+  private async fetchAssignmentPeopleFromApi(): Promise<AssignmentPersonDto[]> {
+    const pageSize = Number(this.config.get('MOVIDESK_PERSONS_PAGE_SIZE') ?? 200);
+    const maxPages = Number(this.config.get('MOVIDESK_PERSONS_MAX_PAGES') ?? 10);
+    const rawParams = this.config.get<string>('MOVIDESK_PERSONS_QUERY_PARAMS') ?? '';
+
+    const baseParams = this.parseQueryString(rawParams);
+    this.ensureSelectFields(baseParams);
+    baseParams['$top'] = String(pageSize);
+    if (this.token) baseParams['token'] = this.token;
+
+    const people = new Map<string, AssignmentPersonDto>();
+
+    for (let page = 0; page < maxPages; page++) {
+      baseParams['$skip'] = String(page * pageSize);
+      const resp = await axios.get(this.apiUrl, {
+        params: baseParams,
+        timeout: 10000,
+        headers: { accept: 'application/json', 'user-agent': 'NestJS/1.0' },
+      });
+
+      const data = Array.isArray(resp.data) ? (resp.data as Record<string, unknown>[]) : [];
+      if (data.length === 0) break;
+
+      for (const person of data) {
+        const profileType = Number(person['profileType'] ?? 0);
+        const isActive = person['isActive'];
+        if ((profileType === 1 || profileType === 3) && isActive && this.matchesTeam(person)) {
+          const normalized = this.normalizePerson(person);
+          if (normalized) {
+            people.set(normalized.id, normalized);
+          }
+        }
+      }
+
+      if (data.length < pageSize) break;
+    }
+
+    for (const name of this.ticketsService.getAllResponsaveis()) {
+      if (![...people.values()].some((person) => person.businessName === name)) {
+        people.set(name, {
+          id: name,
+          businessName: name,
+          email: null,
+          teams: [],
+        });
+      }
+    }
+
+    return Array.from(people.values()).sort((a, b) =>
+      (a.businessName || a.id).localeCompare(b.businessName || b.id),
+    );
   }
 
   async fetchAssignmentPeople(): Promise<string[]> {
     if (this.isCacheValid()) return this.cachedPeople;
 
     try {
-      const pageSize = Number(this.config.get('MOVIDESK_PERSONS_PAGE_SIZE') ?? 200);
-      const maxPages = Number(this.config.get('MOVIDESK_PERSONS_MAX_PAGES') ?? 10);
-      const rawParams = this.config.get<string>('MOVIDESK_PERSONS_QUERY_PARAMS') ?? '';
-
-      const baseParams = this.parseQueryString(rawParams);
-      baseParams['$top'] = String(pageSize);
-      if (this.token) baseParams['token'] = this.token;
-
-      const people = new Set<string>();
-
-      for (let page = 0; page < maxPages; page++) {
-        baseParams['$skip'] = String(page * pageSize);
-        const resp = await axios.get(this.apiUrl, {
-          params: baseParams,
-          timeout: 10000,
-          headers: { accept: 'application/json', 'user-agent': 'NestJS/1.0' },
-        });
-
-        const data = Array.isArray(resp.data) ? (resp.data as Record<string, unknown>[]) : [];
-        if (data.length === 0) break;
-
-        for (const person of data) {
-          const profileType = Number(person['profileType'] ?? 0);
-          const isActive = person['isActive'];
-          if ((profileType === 1 || profileType === 3) && isActive && this.matchesTeam(person)) {
-            const name = String(person['businessName'] ?? '').trim();
-            if (name) people.add(name);
-          }
-        }
-
-        if (data.length < pageSize) break;
-      }
-
-      // Fallback: names from tickets
-      for (const r of this.ticketsService.getAllResponsaveis()) {
-        people.add(r);
-      }
-
-      const sorted = Array.from(people).sort((a, b) => a.localeCompare(b));
-      this.cachedPeople = sorted;
+      const detailedPeople = await this.fetchAssignmentPeopleFromApi();
+      this.cachedDetailedPeople = detailedPeople;
+      this.cachedPeople = detailedPeople
+        .map((person) => person.businessName || person.email || person.id)
+        .filter(Boolean);
       this.cachedAt = new Date();
-      return sorted;
+      return this.cachedPeople;
     } catch (err) {
       this.logger.error(`Error fetching people: ${(err as Error).message}`);
       // Fallback to ticket responsaveis
       const fallback = this.ticketsService.getAllResponsaveis();
       return fallback;
+    }
+  }
+
+  async fetchAssignmentPeopleDetails(): Promise<AssignmentPersonDto[]> {
+    if (this.isCacheValid() && this.cachedDetailedPeople.length > 0) {
+      return this.cachedDetailedPeople;
+    }
+
+    try {
+      const detailedPeople = await this.fetchAssignmentPeopleFromApi();
+      this.cachedDetailedPeople = detailedPeople;
+      this.cachedPeople = detailedPeople
+        .map((person) => person.businessName || person.email || person.id)
+        .filter(Boolean);
+      this.cachedAt = new Date();
+      return detailedPeople;
+    } catch (err) {
+      this.logger.error(`Error fetching detailed people: ${(err as Error).message}`);
+      return this.ticketsService.getAllResponsaveis().map((name) => ({
+        id: name,
+        businessName: name,
+        email: null,
+        teams: [],
+      }));
     }
   }
 
@@ -113,4 +195,11 @@ export class PeopleService {
     }
     return result;
   }
+}
+
+export interface AssignmentPersonDto {
+  id: string;
+  businessName: string;
+  email: string | null;
+  teams: string[];
 }

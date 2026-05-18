@@ -13,4 +13,12 @@ export class PeopleController {
       people: await this.peopleService.fetchAssignmentPeople(),
     };
   }
+
+  @UseGuards(SessionGuard)
+  @Get('assignment/details')
+  async assignmentPeopleDetails() {
+    return {
+      people: await this.peopleService.fetchAssignmentPeopleDetails(),
+    };
+  }
 }

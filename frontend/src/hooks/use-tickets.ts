@@ -7,6 +7,7 @@ import {
 
 export const TICKETS_QUERY_KEY = ['tickets']
 export const ASSIGNMENT_PEOPLE_QUERY_KEY = ['assignment-people']
+export const ASSIGNMENT_PEOPLE_DETAILS_QUERY_KEY = ['assignment-people-details']
 
 export function useTickets() {
   return useQuery({
@@ -31,6 +32,14 @@ export function useAssignmentPeople() {
   return useQuery({
     queryKey: ASSIGNMENT_PEOPLE_QUERY_KEY,
     queryFn: () => peopleApi.assignment(),
+    staleTime: 5 * 60_000,
+  })
+}
+
+export function useAssignmentPeopleDetails() {
+  return useQuery({
+    queryKey: ASSIGNMENT_PEOPLE_DETAILS_QUERY_KEY,
+    queryFn: () => peopleApi.assignmentDetails(),
     staleTime: 5 * 60_000,
   })
 }
