@@ -1,23 +1,14 @@
 #!/bin/sh
 set -e
 
-# Railway and similar platforms inject $PORT. When they do not, match Dockerfile's EXPOSE.
-export NGINX_PORT=${PORT:-8080}
+# nginx serves the public HTTP port; NestJS always uses the internal 3001 port.
+export NGINX_PORT=${NGINX_PORT:-8080}
 envsubst '${NGINX_PORT}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
 
-# Prefer a mounted persistent Railway volume when available
-export PERSISTENT_DATA_DIR=${PERSISTENT_DATA_DIR:-${RAILWAY_VOLUME_MOUNT_PATH:-/data}}
-if [ -d "$PERSISTENT_DATA_DIR" ] || mkdir -p "$PERSISTENT_DATA_DIR" 2>/dev/null; then
-  export DATABASE_PATH=${DATABASE_PATH:-$PERSISTENT_DATA_DIR/tickets.db}
+if [ -n "$DATABASE_URL" ]; then
+  echo "[docker] PostgreSQL configured via DATABASE_URL"
 else
-  export DATABASE_PATH=${DATABASE_PATH:-/app/backend/data/tickets.db}
-fi
-
-# Ensure persistent data directory exists before NestJS starts
-mkdir -p "$(dirname "$DATABASE_PATH")"
-echo "[docker] Database path resolved to $DATABASE_PATH"
-if [ -n "$RAILWAY_VOLUME_MOUNT_PATH" ]; then
-  echo "[docker] Railway volume mounted at $RAILWAY_VOLUME_MOUNT_PATH"
+  echo "[docker] PostgreSQL configured via POSTGRES_* variables"
 fi
 
 # Use the MCP server bundled in the Docker image unless explicitly overridden.

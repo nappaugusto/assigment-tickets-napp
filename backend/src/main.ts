@@ -1,18 +1,18 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
-import type { Request as ExpressRequest, Response as ExpressResponse } from 'express';
-import Database from 'better-sqlite3';
-import { mkdirSync } from 'fs';
-import { dirname } from 'path';
-import { resolveDatabasePath } from './database/database-path.util';
+import type {
+  Request as ExpressRequest,
+  Response as ExpressResponse,
+} from 'express';
+import { getDatabasePool } from './database/database.module';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const session = require('express-session');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const passport = require('passport');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const BetterSqliteStore = require('better-sqlite3-session-store')(session);
+const PgSession = require('connect-pg-simple')(session);
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -30,14 +30,8 @@ async function bootstrap() {
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
-  const dbPath = resolveDatabasePath(process.env);
-  mkdirSync(dirname(dbPath), { recursive: true });
-  console.log(`[bootstrap] SQLite database path: ${dbPath}`);
-  if (process.env.RAILWAY_VOLUME_MOUNT_PATH) {
-    console.log(
-      `[bootstrap] Railway volume mount path detected: ${process.env.RAILWAY_VOLUME_MOUNT_PATH}`,
-    );
-  }
+  const pool = getDatabasePool();
+  console.log('[bootstrap] PostgreSQL pool initialized');
 
   app.use(
     session({
@@ -49,7 +43,13 @@ async function bootstrap() {
         httpOnly: true,
         sameSite: 'lax',
       },
-      store: new BetterSqliteStore({ client: new Database(dbPath) }),
+      store: new PgSession({
+        pool,
+        createTableIfMissing: true,
+        pruneSessionInterval: Number(
+          process.env.SESSION_PRUNE_INTERVAL_SECONDS ?? 900,
+        ),
+      }),
     }),
   );
 

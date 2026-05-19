@@ -57,7 +57,14 @@ export class PeopleService {
   }
 
   private ensureSelectFields(params: Record<string, string>): void {
-    const requiredFields = ['id', 'businessName', 'email', 'profileType', 'isActive', 'teams'];
+    const requiredFields = [
+      'id',
+      'businessName',
+      'email',
+      'profileType',
+      'isActive',
+      'teams',
+    ];
     const currentFields = new Set(
       String(params['$select'] ?? '')
         .split(',')
@@ -72,7 +79,9 @@ export class PeopleService {
     params['$select'] = Array.from(currentFields).join(',');
   }
 
-  private normalizePerson(person: Record<string, unknown>): AssignmentPersonDto | null {
+  private normalizePerson(
+    person: Record<string, unknown>,
+  ): AssignmentPersonDto | null {
     const id = String(person['id'] ?? '').trim();
     const businessName = String(person['businessName'] ?? '').trim();
     const email = String(person['email'] ?? person['emails'] ?? '').trim();
@@ -89,9 +98,14 @@ export class PeopleService {
   }
 
   private async fetchAssignmentPeopleFromApi(): Promise<AssignmentPersonDto[]> {
-    const pageSize = Number(this.config.get('MOVIDESK_PERSONS_PAGE_SIZE') ?? 200);
-    const maxPages = Number(this.config.get('MOVIDESK_PERSONS_MAX_PAGES') ?? 10);
-    const rawParams = this.config.get<string>('MOVIDESK_PERSONS_QUERY_PARAMS') ?? '';
+    const pageSize = Number(
+      this.config.get('MOVIDESK_PERSONS_PAGE_SIZE') ?? 200,
+    );
+    const maxPages = Number(
+      this.config.get('MOVIDESK_PERSONS_MAX_PAGES') ?? 10,
+    );
+    const rawParams =
+      this.config.get<string>('MOVIDESK_PERSONS_QUERY_PARAMS') ?? '';
 
     const baseParams = this.parseQueryString(rawParams);
     this.ensureSelectFields(baseParams);
@@ -108,13 +122,19 @@ export class PeopleService {
         headers: { accept: 'application/json', 'user-agent': 'NestJS/1.0' },
       });
 
-      const data = Array.isArray(resp.data) ? (resp.data as Record<string, unknown>[]) : [];
+      const data = Array.isArray(resp.data)
+        ? (resp.data as Record<string, unknown>[])
+        : [];
       if (data.length === 0) break;
 
       for (const person of data) {
         const profileType = Number(person['profileType'] ?? 0);
         const isActive = person['isActive'];
-        if ((profileType === 1 || profileType === 3) && isActive && this.matchesTeam(person)) {
+        if (
+          (profileType === 1 || profileType === 3) &&
+          isActive &&
+          this.matchesTeam(person)
+        ) {
           const normalized = this.normalizePerson(person);
           if (normalized) {
             people.set(normalized.id, normalized);
@@ -125,8 +145,10 @@ export class PeopleService {
       if (data.length < pageSize) break;
     }
 
-    for (const name of this.ticketsService.getAllResponsaveis()) {
-      if (![...people.values()].some((person) => person.businessName === name)) {
+    for (const name of await this.ticketsService.getAllResponsaveis()) {
+      if (
+        ![...people.values()].some((person) => person.businessName === name)
+      ) {
         people.set(name, {
           id: name,
           businessName: name,
@@ -155,7 +177,7 @@ export class PeopleService {
     } catch (err) {
       this.logger.error(`Error fetching people: ${(err as Error).message}`);
       // Fallback to ticket responsaveis
-      const fallback = this.ticketsService.getAllResponsaveis();
+      const fallback = await this.ticketsService.getAllResponsaveis();
       return fallback;
     }
   }
@@ -174,8 +196,11 @@ export class PeopleService {
       this.cachedAt = new Date();
       return detailedPeople;
     } catch (err) {
-      this.logger.error(`Error fetching detailed people: ${(err as Error).message}`);
-      return this.ticketsService.getAllResponsaveis().map((name) => ({
+      this.logger.error(
+        `Error fetching detailed people: ${(err as Error).message}`,
+      );
+      const fallback = await this.ticketsService.getAllResponsaveis();
+      return fallback.map((name) => ({
         id: name,
         businessName: name,
         email: null,

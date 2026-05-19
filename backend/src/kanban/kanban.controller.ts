@@ -11,15 +11,15 @@ export class KanbanController {
   constructor(private readonly kanbanService: KanbanService) {}
 
   @Get('board')
-  getBoard(@Req() req: Request) {
+  async getBoard(@Req() req: Request) {
     const user = (req as any).user as User;
     return this.kanbanService.getBoard(user.id);
   }
 
   @Put('board')
-  saveBoard(@Req() req: Request, @Body() dto: SaveBoardDto) {
+  async saveBoard(@Req() req: Request, @Body() dto: SaveBoardDto) {
     const user = (req as any).user as User;
-    this.kanbanService.saveBoard(user.id, dto);
+    await this.kanbanService.saveBoard(user.id, dto);
     return { success: true };
   }
 }

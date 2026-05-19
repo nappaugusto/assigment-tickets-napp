@@ -84,9 +84,8 @@ docker-build: ## Build da imagem Docker de produção
 	docker build -t assigment-tickets-napp .
 
 .PHONY: docker-run
-docker-run: ## Roda o container de produção na porta 80
-	mkdir -p data
-	docker run --rm -p 80:8080 --env-file .env -e PERSISTENT_DATA_DIR=/data -e DATABASE_PATH=/data/tickets.db -v "$(PWD)/data:/data" assigment-tickets-napp
+docker-run: ## Roda apenas o app na porta 80 (requer DATABASE_URL acessível)
+	docker run --rm -p 80:8080 --env-file .env assigment-tickets-napp
 
 .PHONY: docker-up
 docker-up: ## Sobe via docker compose (build + run)

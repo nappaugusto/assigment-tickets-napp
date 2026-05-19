@@ -7,7 +7,7 @@ export class AuthService {
   constructor(private readonly usersService: UsersService) {}
 
   async validateUser(username: string, password: string): Promise<User | null> {
-    const user = this.usersService.findByLoginIdentifier(username);
+    const user = await this.usersService.findByLoginIdentifier(username);
     if (!user) return null;
     const valid = await this.usersService.verifyPassword(user, password);
     return valid ? user : null;
@@ -22,12 +22,18 @@ export class AuthService {
       return { success: false, error: 'Todos os campos são obrigatórios.' };
     }
     if (username.length < 3) {
-      return { success: false, error: 'Usuário deve ter no mínimo 3 caracteres.' };
+      return {
+        success: false,
+        error: 'Usuário deve ter no mínimo 3 caracteres.',
+      };
     }
     if (password.length < 6) {
-      return { success: false, error: 'Senha deve ter no mínimo 6 caracteres.' };
+      return {
+        success: false,
+        error: 'Senha deve ter no mínimo 6 caracteres.',
+      };
     }
-    if (this.usersService.exists(username)) {
+    if (await this.usersService.exists(username)) {
       return { success: false, error: 'Usuário já existe.' };
     }
     const user = await this.usersService.create(name, username, password);

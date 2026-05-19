@@ -47,8 +47,6 @@ RUN apk add --no-cache nginx gettext
 
 # ── Backend runtime ──────────────────────────
 WORKDIR /app/backend
-RUN mkdir -p /app/backend/data
-RUN mkdir -p /data
 
 # Only install production dependencies
 COPY backend/package.json backend/pnpm-lock.yaml ./
@@ -71,9 +69,6 @@ COPY nginx.conf /etc/nginx/nginx.conf.template
 # ── Startup script ───────────────────────────
 COPY docker-start.sh /app/docker-start.sh
 RUN chmod +x /app/docker-start.sh
-
-ENV PERSISTENT_DATA_DIR=/data
-ENV DATABASE_PATH=/data/tickets.db
 
 EXPOSE 8080
 

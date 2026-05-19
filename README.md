@@ -6,7 +6,7 @@ Sistema de atribuição e acompanhamento de tickets integrado com a API do Movid
 
 ```
 /
-├── backend/          # API REST — NestJS + TypeScript + SQLite
+├── backend/          # API REST — NestJS + TypeScript + PostgreSQL
 ├── frontend/         # SPA — React + Vite + TypeScript + shadcn/ui
 ├── Dockerfile        # Build multi-stage (frontend + backend + nginx)
 ├── docker-compose.yml
@@ -18,9 +18,9 @@ Sistema de atribuição e acompanhamento de tickets integrado com a API do Movid
 
 | Camada    | Tecnologia                                             |
 |-----------|--------------------------------------------------------|
-| Backend   | NestJS 11, Passport (sessão), better-sqlite3, bcrypt   |
+| Backend   | NestJS 11, Passport (sessão), pg, bcrypt               |
 | Frontend  | React 19, Vite 8, TypeScript, Tailwind CSS v4, shadcn  |
-| Banco     | SQLite (WAL mode, persistido em volume no Docker)      |
+| Banco     | PostgreSQL com pool de conexões                        |
 | Auth      | Sessão por cookie (express-session)                    |
 | Infra     | Docker, nginx, docker-compose                          |
 | Pacotes   | pnpm                                                   |
@@ -44,16 +44,16 @@ Variáveis obrigatórias:
 | Variável                    | Descrição                                            |
 |-----------------------------|------------------------------------------------------|
 | `SESSION_SECRET`            | Segredo para assinar cookies de sessão               |
-| `DATABASE_PATH`             | Caminho do SQLite; em produção use diretório persistente |
-| `PERSISTENT_DATA_DIR`       | Diretório persistente opcional; ex.: `/data` em volumes |
+| `DATABASE_URL`              | URL de conexão do PostgreSQL                         |
+| `DATABASE_POOL_MAX`         | Máximo de conexões do pool Postgres                  |
 | `MOVIDESK_API_TOKEN`        | Token da API pública do Movidesk                     |
 | `MOVIDESK_API_QUERY_PARAMS` | Query de busca de tickets, incluindo campos de SLA e fechamento |
 | `MOVIDESK_DEBUG_DATE_FIELDS` | Quando `true`, loga amostras do payload bruto de datas retornado pela API |
 | `MOVIDESK_DEBUG_DATE_FIELDS_SAMPLE_SIZE` | Quantidade de tickets amostrados nos logs de diagnóstico |
 | `ASSIGNMENT_TEAM_NAMES`     | Nomes das equipes para o seletor de atribuição       |
-| `MAIL_SERVER`               | Servidor SMTP para recuperação de senha              |
-| `MAIL_USERNAME`             | Usuário SMTP                                         |
-| `MAIL_PASSWORD`             | Senha SMTP                                           |
+| `MAIL_HOST`                 | Servidor SMTP para recuperação de senha              |
+| `MAIL_USER`                 | Usuário SMTP                                         |
+| `MAIL_PASS`                 | Senha SMTP                                           |
 | `VITE_MOVIDESK_BASE_URL`    | URL base da instância do Movidesk para abrir tickets |
 
 ### MCP Movidesk
@@ -74,7 +74,7 @@ Depois ajuste o `.env` deste app:
 
 ```bash
 MOVIDESK_MCP_COMMAND=node
-MOVIDESK_MCP_ARGS=/caminho/absoluto/para/MCP_MOVIDESK/dist/index.js
+MOVIDESK_MCP_ARGS=["/caminho/absoluto/para/MCP_MOVIDESK/dist/index.js"]
 MOVIDESK_TOKEN=seu-token-movidesk
 ```
 
@@ -140,18 +140,13 @@ make docker-down  # para e remove
 ```
 
 A imagem Docker inclui nginx na porta 8080 servindo o frontend e fazendo proxy das rotas de API para o NestJS interno.
-No fluxo Docker, o banco é salvo em `./data/tickets.db` no host e montado como volume persistente dentro do container.
+No fluxo Docker Compose, o Postgres roda no serviço `postgres` e persiste dados no volume nomeado `postgres-data`.
 
-Em plataformas de deploy com volume, a recomendação é montar o volume em `/data` e usar:
-
-```bash
-DATABASE_PATH=/data/tickets.db
-```
-
-Ou, se preferir deixar o nome do arquivo a cargo da aplicação:
+Em plataformas de deploy, use um PostgreSQL gerenciado e configure:
 
 ```bash
-PERSISTENT_DATA_DIR=/data
+DATABASE_URL=postgres://usuario:senha@host:5432/banco
+DATABASE_SSL=true # quando o provedor exigir TLS
 ```
 
 ### Outros targets
@@ -167,11 +162,12 @@ make clean-all   # clean + node_modules
 
 ## Docker — detalhes
 
-O `Dockerfile` usa **3 stages** (`node:20-alpine`):
+O `Dockerfile` usa **4 stages** (`node:20-alpine`):
 
 1. **`frontend-builder`** — `pnpm build` do Vite → gera `frontend/dist/`
 2. **`backend-builder`** — `nest build` → gera `backend/dist/`
-3. **`production`** — instala apenas deps de produção, copia os artefatos, adiciona nginx
+3. **`mcp-builder`** — `npm run build` do MCP Movidesk empacotado
+4. **`production`** — instala apenas deps de produção, copia os artefatos, adiciona nginx
 
 O `docker-start.sh` orquestra a inicialização dentro do container:
 - Inicia o NestJS em background
@@ -184,10 +180,8 @@ O `nginx.conf` faz:
 - Gzip habilitado
 - Cache de 1 ano para assets estáticos (JS/CSS/fontes)
 
-O `docker-compose.yml` monta o volume `./data` para persistir o banco SQLite fora do container.
-O target `make docker-run` também cria e monta `./data`, evitando perda do banco mesmo sem `docker compose`.
-
-Como usuários, sessões e notas ficam no mesmo arquivo SQLite, persistir `tickets.db` também preserva login e dados locais entre deploys.
+O `docker-compose.yml` sobe um Postgres 16 com healthcheck e só inicia o app depois que o banco estiver pronto.
+Usuários, sessões, notas, kanban, preferências e cache local de tickets ficam no Postgres.
 
 ---
 
@@ -208,7 +202,7 @@ Como usuários, sessões e notas ficam no mesmo arquivo SQLite, persistir `ticke
 ```
 backend/src/
 ├── auth/              # Autenticação (Passport local + sessão)
-├── database/          # Módulo SQLite + inicialização do schema
+├── database/          # Pool PostgreSQL + inicialização do schema
 ├── email/             # Envio de e-mails via SMTP
 ├── password-reset/    # Fluxo de recuperação de senha
 ├── people/            # Busca de agentes via API Movidesk

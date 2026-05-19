@@ -18,13 +18,14 @@ export class PasswordResetController {
     await this.passwordResetService.requestReset(dto.username);
     return {
       success: true,
-      message: 'Se o email existe, você receberá um link para redefinir a senha.',
+      message:
+        'Se o email existe, você receberá um link para redefinir a senha.',
     };
   }
 
   @Get('reset-password/:token')
-  validateToken(@Param('token') token: string) {
-    const { valid } = this.passwordResetService.validateToken(token);
+  async validateToken(@Param('token') token: string) {
+    const { valid } = await this.passwordResetService.validateToken(token);
     return { valid };
   }
 
@@ -36,7 +37,10 @@ export class PasswordResetController {
     if (dto.password !== dto.confirm_password) {
       throw new BadRequestException('As senhas não coincidem.');
     }
-    const result = await this.passwordResetService.resetPassword(token, dto.password);
+    const result = await this.passwordResetService.resetPassword(
+      token,
+      dto.password,
+    );
     if (!result.success) {
       throw new BadRequestException(result.error);
     }

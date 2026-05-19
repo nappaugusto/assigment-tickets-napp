@@ -32,9 +32,8 @@ export class TicketsController {
     const force = manual === '1' || manual === 'true';
     await this.syncService.sync(force);
 
-    const tickets = this.ticketsService.getActive();
-    const newTickets = this.ticketsService.getNewToday();
-    const monthlyAnalytics = this.ticketsService.getMonthlyAnalytics();
+    const { tickets, newTickets, monthlyAnalytics } =
+      await this.ticketsService.getDashboardSnapshot();
     const currentMonth = monthlyAnalytics.current_month;
 
     if (force && currentMonth) {
@@ -60,7 +59,7 @@ export class TicketsController {
 
   @UseGuards(SessionGuard)
   @Get('tickets/analytics/monthly')
-  monthlyAnalytics(@Query('months') months?: string) {
+  async monthlyAnalytics(@Query('months') months?: string) {
     const parsedMonths = months ? Number(months) : undefined;
     return this.ticketsService.getMonthlyAnalytics(parsedMonths);
   }
@@ -80,13 +79,13 @@ export class TicketsController {
       return { success: false, message: 'Responsável é obrigatório.' };
     }
 
-    const ticket = this.ticketsService.findById(id);
+    const ticket = await this.ticketsService.findById(id);
     if (!ticket) {
       throw new NotFoundException('Ticket não encontrado.');
     }
 
     const trimmedResponsavel = responsavel.trim();
-    this.ticketsService.assign(id, trimmedResponsavel);
+    await this.ticketsService.assign(id, trimmedResponsavel);
 
     return {
       success: true,
@@ -100,12 +99,12 @@ export class TicketsController {
   @UseGuards(SessionGuard)
   @Post('desatribuir/:id')
   async unassign(@Param('id', ParseIntPipe) id: number) {
-    const ticket = this.ticketsService.findById(id);
+    const ticket = await this.ticketsService.findById(id);
     if (!ticket) {
       throw new NotFoundException('Ticket não encontrado.');
     }
 
-    this.ticketsService.unassign(id);
+    await this.ticketsService.unassign(id);
 
     return {
       success: true,

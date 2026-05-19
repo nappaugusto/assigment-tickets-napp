@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import Database from 'better-sqlite3';
+import { Pool } from 'pg';
 import { DB_TOKEN } from '../database/database.module';
 
 interface NoteRow {
@@ -8,38 +8,47 @@ interface NoteRow {
 
 @Injectable()
 export class NotesService {
-  constructor(@Inject(DB_TOKEN) private readonly db: Database.Database) {}
+  constructor(@Inject(DB_TOKEN) private readonly db: Pool) {}
 
-  getNote(userId: number, ticketId: number): string {
-    const row = this.db
-      .prepare('SELECT content FROM ticket_notes WHERE user_id = ? AND ticket_id = ?')
-      .get(userId, ticketId) as NoteRow | undefined;
+  async getNote(userId: number, ticketId: number): Promise<string> {
+    const result = await this.db.query<NoteRow>(
+      'SELECT content FROM ticket_notes WHERE user_id = $1 AND ticket_id = $2',
+      [userId, ticketId],
+    );
+    const row = result.rows[0];
     return row?.content ?? '';
   }
 
-  saveNote(userId: number, ticketId: number, content: string): void {
-    this.db
-      .prepare(`
+  async saveNote(
+    userId: number,
+    ticketId: number,
+    content: string,
+  ): Promise<void> {
+    await this.db.query(
+      `
         INSERT INTO ticket_notes (user_id, ticket_id, content, updated_at)
-        VALUES (?, ?, ?, datetime('now'))
+        VALUES ($1, $2, $3, now())
         ON CONFLICT(user_id, ticket_id) DO UPDATE SET
           content = excluded.content,
           updated_at = excluded.updated_at
-      `)
-      .run(userId, ticketId, content);
+      `,
+      [userId, ticketId, content],
+    );
   }
 
-  hasNote(userId: number, ticketId: number): boolean {
-    const row = this.db
-      .prepare("SELECT 1 FROM ticket_notes WHERE user_id = ? AND ticket_id = ? AND content != ''")
-      .get(userId, ticketId);
-    return row !== undefined;
+  async hasNote(userId: number, ticketId: number): Promise<boolean> {
+    const result = await this.db.query(
+      "SELECT 1 FROM ticket_notes WHERE user_id = $1 AND ticket_id = $2 AND content <> ''",
+      [userId, ticketId],
+    );
+    return result.rows.length > 0;
   }
 
-  getTicketsWithNotes(userId: number): number[] {
-    const rows = this.db
-      .prepare("SELECT ticket_id FROM ticket_notes WHERE user_id = ? AND content != ''")
-      .all(userId) as { ticket_id: number }[];
-    return rows.map((r) => r.ticket_id);
+  async getTicketsWithNotes(userId: number): Promise<number[]> {
+    const result = await this.db.query<{ ticket_id: number }>(
+      "SELECT ticket_id FROM ticket_notes WHERE user_id = $1 AND content <> ''",
+      [userId],
+    );
+    return result.rows.map((r) => r.ticket_id);
   }
 }

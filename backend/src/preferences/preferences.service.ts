@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import Database from 'better-sqlite3';
+import { Pool } from 'pg';
 import { DB_TOKEN } from '../database/database.module';
 import {
   MonthlyAnalyticsPreferenceDto,
@@ -13,22 +13,29 @@ const DEFAULT_MONTHLY_ANALYTICS_PREFERENCE: MonthlyAnalyticsPreferenceDto = {
 };
 
 interface PreferenceRow {
-  value: string;
+  value: unknown;
 }
 
 @Injectable()
 export class PreferencesService {
-  constructor(@Inject(DB_TOKEN) private readonly db: Database.Database) {}
+  constructor(@Inject(DB_TOKEN) private readonly db: Pool) {}
 
-  getMonthlyAnalytics(userId: number): MonthlyAnalyticsPreferenceDto {
-    const row = this.db
-      .prepare('SELECT value FROM user_preferences WHERE user_id = ? AND key = ?')
-      .get(userId, MONTHLY_ANALYTICS_KEY) as PreferenceRow | undefined;
+  async getMonthlyAnalytics(
+    userId: number,
+  ): Promise<MonthlyAnalyticsPreferenceDto> {
+    const result = await this.db.query<PreferenceRow>(
+      'SELECT value FROM user_preferences WHERE user_id = $1 AND key = $2',
+      [userId, MONTHLY_ANALYTICS_KEY],
+    );
+    const row = result.rows[0];
 
     if (!row) return DEFAULT_MONTHLY_ANALYTICS_PREFERENCE;
 
     try {
-      const parsed = JSON.parse(row.value) as Partial<MonthlyAnalyticsPreferenceDto>;
+      const parsed =
+        typeof row.value === 'string'
+          ? (JSON.parse(row.value) as Partial<MonthlyAnalyticsPreferenceDto>)
+          : (row.value as Partial<MonthlyAnalyticsPreferenceDto>);
       return {
         collapsed:
           typeof parsed.collapsed === 'boolean'
@@ -44,15 +51,19 @@ export class PreferencesService {
     }
   }
 
-  saveMonthlyAnalytics(userId: number, dto: SaveMonthlyAnalyticsPreferenceDto): void {
-    this.db
-      .prepare(`
+  async saveMonthlyAnalytics(
+    userId: number,
+    dto: SaveMonthlyAnalyticsPreferenceDto,
+  ): Promise<void> {
+    await this.db.query(
+      `
         INSERT INTO user_preferences (user_id, key, value, updated_at)
-        VALUES (?, ?, ?, datetime('now'))
+        VALUES ($1, $2, $3::jsonb, now())
         ON CONFLICT(user_id, key) DO UPDATE SET
           value = excluded.value,
           updated_at = excluded.updated_at
-      `)
-      .run(userId, MONTHLY_ANALYTICS_KEY, JSON.stringify(dto));
+      `,
+      [userId, MONTHLY_ANALYTICS_KEY, JSON.stringify(dto)],
+    );
   }
 }

@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import Database from 'better-sqlite3';
+import { Pool } from 'pg';
 import { DB_TOKEN } from '../database/database.module';
 import {
   Ticket,
@@ -30,7 +30,9 @@ function normalize(s: string): string {
 function isFinal(status: string | null): boolean {
   if (!status) return false;
   const normalizedStatus = normalize(status);
-  return FINAL_STATUS_KEYWORDS.some((keyword) => normalizedStatus.includes(keyword));
+  return FINAL_STATUS_KEYWORDS.some((keyword) =>
+    normalizedStatus.includes(keyword),
+  );
 }
 
 function isActive(ticket: Ticket): boolean {
@@ -81,7 +83,9 @@ function getBrazilDateParts(date: Date): CalendarDateParts {
   return { year, month, day };
 }
 
-function parseCalendarDateParts(value: string | null): CalendarDateParts | null {
+function parseCalendarDateParts(
+  value: string | null,
+): CalendarDateParts | null {
   if (!value) return null;
 
   const trimmed = value.trim();
@@ -116,7 +120,10 @@ function parseCalendarDateParts(value: string | null): CalendarDateParts | null 
   return Number.isNaN(parsed.getTime()) ? null : getBrazilDateParts(parsed);
 }
 
-function compareCalendarDateParts(a: CalendarDateParts, b: CalendarDateParts): number {
+function compareCalendarDateParts(
+  a: CalendarDateParts,
+  b: CalendarDateParts,
+): number {
   if (a.year !== b.year) return a.year - b.year;
   if (a.month !== b.month) return a.month - b.month;
   return a.day - b.day;
@@ -137,7 +144,10 @@ function createBrazilMonthLabel(year: number, month: number): string {
   }).format(new Date(Date.UTC(year, month - 1, 1, 12, 0, 0)));
 }
 
-function addMonthsToParts(parts: CalendarDateParts, delta: number): CalendarDateParts {
+function addMonthsToParts(
+  parts: CalendarDateParts,
+  delta: number,
+): CalendarDateParts {
   const date = new Date(parts.year, parts.month - 1 + delta, 1);
   return {
     year: date.getFullYear(),
@@ -168,8 +178,16 @@ function parseTicketDateTime(value: string | null): Date | null {
     /^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?)?$/,
   );
   if (isoMatch) {
-    const [, year, month, day, hours = '00', minutes = '00', seconds = '00', fraction = '0'] =
-      isoMatch;
+    const [
+      ,
+      year,
+      month,
+      day,
+      hours = '00',
+      minutes = '00',
+      seconds = '00',
+      fraction = '0',
+    ] = isoMatch;
     const milliseconds = Number(fraction.padEnd(3, '0').slice(0, 3));
     const parsed = new Date(
       Number(year),
@@ -187,7 +205,8 @@ function parseTicketDateTime(value: string | null): Date | null {
     /^(\d{2})\/(\d{2})\/(\d{4})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/,
   );
   if (brMatch) {
-    const [, day, month, year, hours = '00', minutes = '00', seconds = '00'] = brMatch;
+    const [, day, month, year, hours = '00', minutes = '00', seconds = '00'] =
+      brMatch;
     const parsed = new Date(
       Number(year),
       Number(month) - 1,
@@ -205,83 +224,65 @@ function parseTicketDateTime(value: string | null): Date | null {
 
 @Injectable()
 export class TicketsService {
-  constructor(@Inject(DB_TOKEN) private readonly db: Database.Database) {}
+  constructor(@Inject(DB_TOKEN) private readonly db: Pool) {}
 
-  getAll(): TicketDto[] {
-    const rows = this.db
-      .prepare(`SELECT * FROM tickets ORDER BY id DESC`)
-      .all() as Ticket[];
-    return rows.map(toDto);
+  async getAll(): Promise<TicketDto[]> {
+    const result = await this.db.query<Ticket>(
+      `SELECT * FROM tickets ORDER BY id DESC`,
+    );
+    return result.rows.map(toDto);
   }
 
-  getActive(): TicketDto[] {
-    const rows = this.db
-      .prepare(`SELECT * FROM tickets ORDER BY id DESC`)
-      .all() as Ticket[];
-    return rows
+  async getActive(): Promise<TicketDto[]> {
+    const result = await this.db.query<Ticket>(
+      `SELECT * FROM tickets ORDER BY id DESC`,
+    );
+    return result.rows
       .filter((t) => isActive(t) && !isToday(t.opened_at))
       .map(toDto);
   }
 
-  getNewToday(): TicketDto[] {
-    const rows = this.db
-      .prepare(`SELECT * FROM tickets ORDER BY id DESC`)
-      .all() as Ticket[];
-    return rows.filter((t) => isActive(t) && isToday(t.opened_at)).map(toDto);
+  async getNewToday(): Promise<TicketDto[]> {
+    const result = await this.db.query<Ticket>(
+      `SELECT * FROM tickets ORDER BY id DESC`,
+    );
+    return result.rows
+      .filter((t) => isActive(t) && isToday(t.opened_at))
+      .map(toDto);
   }
 
-  findById(id: number): TicketDto | undefined {
-    const t = this.db
-      .prepare(`SELECT * FROM tickets WHERE id = ? LIMIT 1`)
-      .get(id) as Ticket | undefined;
+  async findById(id: number): Promise<TicketDto | undefined> {
+    const result = await this.db.query<Ticket>(
+      `SELECT * FROM tickets WHERE id = $1 LIMIT 1`,
+      [id],
+    );
+    const t = result.rows[0];
     return t ? toDto(t) : undefined;
   }
 
-  assign(id: number, responsavel: string): void {
-    this.db
-      .prepare(
-        `UPDATE tickets
-         SET responsavel = ?, assigned_at = datetime('now'), assignment_override = ?, updated_at = datetime('now')
-         WHERE id = ?`,
-      )
-      .run(responsavel, responsavel, id);
+  async assign(id: number, responsavel: string): Promise<void> {
+    await this.db.query(
+      `UPDATE tickets
+         SET responsavel = $1, assigned_at = now(), assignment_override = $2, updated_at = now()
+         WHERE id = $3`,
+      [responsavel, responsavel, id],
+    );
   }
 
-  unassign(id: number): void {
-    this.db
-      .prepare(
-        `UPDATE tickets
-         SET responsavel = NULL, assigned_at = NULL, assignment_override = NULL, updated_at = datetime('now')
-         WHERE id = ?`,
-      )
-      .run(id);
+  async unassign(id: number): Promise<void> {
+    await this.db.query(
+      `UPDATE tickets
+         SET responsavel = NULL, assigned_at = NULL, assignment_override = NULL, updated_at = now()
+         WHERE id = $1`,
+      [id],
+    );
   }
 
-  upsertMany(tickets: Partial<Ticket>[]): void {
-    const upsert = this.db.prepare(`
-      INSERT INTO tickets (id, subject, status, ownerTeam, slaSolutionDate, slaSolutionDateIsPaused, opened_at, closed_at, last_update, responsavel, assigned_at, updated_at)
-      VALUES (@id, @subject, @status, @ownerTeam, @slaSolutionDate, @slaSolutionDateIsPaused, @opened_at, @closed_at, @last_update, @responsavel, @assigned_at, datetime('now'))
-      ON CONFLICT(id) DO UPDATE SET
-        subject = excluded.subject,
-        status = excluded.status,
-        ownerTeam = excluded.ownerTeam,
-        slaSolutionDate = excluded.slaSolutionDate,
-        slaSolutionDateIsPaused = excluded.slaSolutionDateIsPaused,
-        opened_at = excluded.opened_at,
-        closed_at = excluded.closed_at,
-        last_update = excluded.last_update,
-        responsavel = COALESCE(tickets.assignment_override, excluded.responsavel),
-        assigned_at = CASE
-          WHEN tickets.assignment_override IS NOT NULL THEN tickets.assigned_at
-          ELSE excluded.assigned_at
-        END,
-        updated_at = datetime('now')
-    `);
+  async upsertMany(tickets: Partial<Ticket>[]): Promise<void> {
+    const client = await this.db.connect();
 
-    const selectStoredTickets = this.db.prepare(`SELECT id, status, opened_at FROM tickets`);
-    const deleteById = this.db.prepare(`DELETE FROM tickets WHERE id = ?`);
-
-    this.db.transaction(() => {
+    try {
+      await client.query('BEGIN');
       const syncedIds = new Set<number>();
 
       for (const t of tickets) {
@@ -289,59 +290,114 @@ export class TicketsService {
           syncedIds.add(t.id);
         }
 
-        upsert.run({
-          id: t.id,
-          subject: t.subject ?? null,
-          status: t.status ?? null,
-          ownerTeam: t.ownerTeam ?? null,
-          slaSolutionDate: t.slaSolutionDate ?? null,
-          slaSolutionDateIsPaused: t.slaSolutionDateIsPaused ? 1 : 0,
-          opened_at: t.opened_at ?? null,
-          closed_at: t.closed_at ?? null,
-          last_update: t.last_update ?? null,
-          responsavel: t.responsavel ?? null,
-          assigned_at: t.assigned_at ?? null,
-        });
+        await client.query(
+          `
+          INSERT INTO tickets (
+            id, subject, status, "ownerTeam", "slaSolutionDate", "slaSolutionDateIsPaused",
+            opened_at, closed_at, last_update, responsavel, assigned_at, updated_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
+          ON CONFLICT(id) DO UPDATE SET
+            subject = excluded.subject,
+            status = excluded.status,
+            "ownerTeam" = excluded."ownerTeam",
+            "slaSolutionDate" = excluded."slaSolutionDate",
+            "slaSolutionDateIsPaused" = excluded."slaSolutionDateIsPaused",
+            opened_at = excluded.opened_at,
+            closed_at = excluded.closed_at,
+            last_update = excluded.last_update,
+            responsavel = COALESCE(tickets.assignment_override, excluded.responsavel),
+            assigned_at = CASE
+              WHEN tickets.assignment_override IS NOT NULL THEN tickets.assigned_at
+              ELSE excluded.assigned_at
+            END,
+            updated_at = now()
+          `,
+          [
+            t.id,
+            t.subject ?? null,
+            t.status ?? null,
+            t.ownerTeam ?? null,
+            t.slaSolutionDate ?? null,
+            !!t.slaSolutionDateIsPaused,
+            t.opened_at ?? null,
+            t.closed_at ?? null,
+            t.last_update ?? null,
+            t.responsavel ?? null,
+            t.assigned_at ?? null,
+          ],
+        );
       }
+
       const oldestMonthToKeep = getOldestMonthToKeep(TICKET_RETENTION_MONTHS);
-      const storedTickets = selectStoredTickets.all() as Pick<
-        Ticket,
-        'id' | 'status' | 'opened_at'
-      >[];
-      for (const ticket of storedTickets) {
+      const storedTickets = await client.query<
+        Pick<Ticket, 'id' | 'status' | 'opened_at'>
+      >(`SELECT id, status, opened_at FROM tickets`);
+
+      for (const ticket of storedTickets.rows) {
         const openedAt = parseCalendarDateParts(ticket.opened_at);
         if (openedAt && monthKeyFromParts(openedAt) < oldestMonthToKeep) {
-          deleteById.run(ticket.id);
+          await client.query(`DELETE FROM tickets WHERE id = $1`, [ticket.id]);
           continue;
         }
 
         if (!isFinal(ticket.status) && !syncedIds.has(ticket.id)) {
-          deleteById.run(ticket.id);
+          await client.query(`DELETE FROM tickets WHERE id = $1`, [ticket.id]);
         }
       }
-    })();
+
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
-  getAllResponsaveis(): string[] {
-    const rows = this.db
-      .prepare(
-        `SELECT DISTINCT responsavel FROM tickets WHERE responsavel IS NOT NULL ORDER BY responsavel`,
-      )
-      .all() as { responsavel: string }[];
-    return rows.map((r) => r.responsavel);
+  async getAllResponsaveis(): Promise<string[]> {
+    const result = await this.db.query<{ responsavel: string }>(
+      `SELECT DISTINCT responsavel FROM tickets WHERE responsavel IS NOT NULL ORDER BY responsavel`,
+    );
+    return result.rows.map((r) => r.responsavel);
   }
 
-  getAllRaw(): Ticket[] {
-    return this.db
-      .prepare(`SELECT * FROM tickets ORDER BY id DESC`)
-      .all() as Ticket[];
+  async getAllRaw(): Promise<Ticket[]> {
+    const result = await this.db.query<Ticket>(
+      `SELECT * FROM tickets ORDER BY id DESC`,
+    );
+    return result.rows;
   }
 
-  getMonthlyAnalytics(months = DEFAULT_ANALYTICS_MONTHS): TicketMonthlyAnalyticsDto {
+  async getDashboardSnapshot(): Promise<{
+    tickets: TicketDto[];
+    newTickets: TicketDto[];
+    monthlyAnalytics: TicketMonthlyAnalyticsDto;
+  }> {
+    const rows = await this.getAllRaw();
+    return {
+      tickets: rows
+        .filter((t) => isActive(t) && !isToday(t.opened_at))
+        .map(toDto),
+      newTickets: rows
+        .filter((t) => isActive(t) && isToday(t.opened_at))
+        .map(toDto),
+      monthlyAnalytics: this.buildMonthlyAnalytics(rows),
+    };
+  }
+
+  async getMonthlyAnalytics(
+    months = DEFAULT_ANALYTICS_MONTHS,
+  ): Promise<TicketMonthlyAnalyticsDto> {
+    const rows = await this.getAllRaw();
+    return this.buildMonthlyAnalytics(rows, months);
+  }
+
+  private buildMonthlyAnalytics(
+    rows: Ticket[],
+    months = DEFAULT_ANALYTICS_MONTHS,
+  ): TicketMonthlyAnalyticsDto {
     const totalMonths = Math.max(1, Math.min(months, 12));
-    const rows = this.db
-      .prepare(`SELECT * FROM tickets ORDER BY id DESC`)
-      .all() as Ticket[];
 
     const today = getBrazilDateParts(new Date());
     const anchorMonth = { year: today.year, month: today.month, day: 1 };

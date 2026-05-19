@@ -1,36 +1,38 @@
 import { Injectable, Inject } from '@nestjs/common';
-import Database from 'better-sqlite3';
+import { Pool } from 'pg';
 import * as bcrypt from 'bcrypt';
 import { DB_TOKEN } from '../database/database.module';
 import { User, PublicUser } from './user.entity';
 
 @Injectable()
 export class UsersService {
-  constructor(@Inject(DB_TOKEN) private readonly db: Database.Database) {}
+  constructor(@Inject(DB_TOKEN) private readonly db: Pool) {}
 
-  findByUsername(username: string): User | undefined {
-    return this.db
-      .prepare(
-        `SELECT * FROM users WHERE lower(username) = lower(?) LIMIT 1`,
-      )
-      .get(username) as User | undefined;
+  async findByUsername(username: string): Promise<User | undefined> {
+    const result = await this.db.query<User>(
+      `SELECT * FROM users WHERE lower(username) = lower($1) LIMIT 1`,
+      [username],
+    );
+    return result.rows[0];
   }
 
-  findById(id: number): User | undefined {
-    return this.db
-      .prepare(`SELECT * FROM users WHERE id = ? LIMIT 1`)
-      .get(id) as User | undefined;
+  async findById(id: number): Promise<User | undefined> {
+    const result = await this.db.query<User>(
+      `SELECT * FROM users WHERE id = $1 LIMIT 1`,
+      [id],
+    );
+    return result.rows[0];
   }
 
-  findByLoginIdentifier(identifier: string): User | undefined {
-    return this.db
-      .prepare(
-        `SELECT * FROM users
-         WHERE lower(username) = lower(?)
-            OR lower(username) = lower(?)
+  async findByLoginIdentifier(identifier: string): Promise<User | undefined> {
+    const result = await this.db.query<User>(
+      `SELECT * FROM users
+         WHERE lower(username) = lower($1)
+            OR lower(username) = lower($2)
          LIMIT 1`,
-      )
-      .get(identifier, identifier) as User | undefined;
+      [identifier, identifier],
+    );
+    return result.rows[0];
   }
 
   async create(
@@ -39,35 +41,39 @@ export class UsersService {
     password: string,
   ): Promise<PublicUser> {
     const hash = await bcrypt.hash(password, 12);
-    const result = this.db
-      .prepare(
-        `INSERT INTO users (name, username, password) VALUES (?, ?, ?)`,
-      )
-      .run(name, username, hash);
-    return { id: result.lastInsertRowid as number, name, username, created_at: new Date().toISOString() };
+    const result = await this.db.query<PublicUser>(
+      `INSERT INTO users (name, username, password)
+       VALUES ($1, $2, $3)
+       RETURNING id, name, username, created_at`,
+      [name, username, hash],
+    );
+    return result.rows[0];
   }
 
   async verifyPassword(user: User, password: string): Promise<boolean> {
     return bcrypt.compare(password, user.password);
   }
 
-  exists(username: string): boolean {
-    const row = this.db
-      .prepare(`SELECT id FROM users WHERE lower(username) = lower(?) LIMIT 1`)
-      .get(username);
-    return !!row;
+  async exists(username: string): Promise<boolean> {
+    const result = await this.db.query(
+      `SELECT id FROM users WHERE lower(username) = lower($1) LIMIT 1`,
+      [username],
+    );
+    return result.rows.length > 0;
   }
 
   async updatePassword(userId: number, newPassword: string): Promise<void> {
     const hash = await bcrypt.hash(newPassword, 12);
-    this.db
-      .prepare(`UPDATE users SET password = ? WHERE id = ?`)
-      .run(hash, userId);
+    await this.db.query(`UPDATE users SET password = $1 WHERE id = $2`, [
+      hash,
+      userId,
+    ]);
   }
 
-  getAll(): Pick<User, 'id' | 'name'>[] {
-    return this.db
-      .prepare(`SELECT id, name FROM users ORDER BY name`)
-      .all() as Pick<User, 'id' | 'name'>[];
+  async getAll(): Promise<Pick<User, 'id' | 'name'>[]> {
+    const result = await this.db.query<Pick<User, 'id' | 'name'>>(
+      `SELECT id, name FROM users ORDER BY name`,
+    );
+    return result.rows;
   }
 }

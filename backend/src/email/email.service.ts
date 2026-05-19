@@ -22,7 +22,11 @@ export class EmailService {
     });
   }
 
-  async sendPasswordReset(email: string, name: string, token: string): Promise<void> {
+  async sendPasswordReset(
+    email: string,
+    name: string,
+    token: string,
+  ): Promise<void> {
     const baseUrl =
       this.config.get<string>('APP_BASE_URL') ??
       `http://127.0.0.1:${this.config.get('PORT') ?? 3001}`;
@@ -75,7 +79,9 @@ export class EmailService {
         html,
       });
     } catch (err) {
-      this.logger.error(`Failed to send password-changed email: ${(err as Error).message}`);
+      this.logger.error(
+        `Failed to send password-changed email: ${(err as Error).message}`,
+      );
     }
   }
 }

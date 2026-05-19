@@ -1,0 +1,33 @@
+image: atlassian/default-image:4
+
+options:
+  docker: true
+
+pipelines:
+  default:
+    - step:
+        name: Build Docker image
+        services:
+          - docker
+        caches:
+          - docker
+        script:
+          - git submodule update --init --recursive
+          - docker build -t assigment-tickets-napp:${BITBUCKET_COMMIT} .
+
+  pull-requests:
+    "**":
+      - step:
+          name: Validate Docker image
+          services:
+            - docker
+          caches:
+            - docker
+          script:
+            - git submodule update --init --recursive
+            - docker build -t assigment-tickets-napp:pr-${BITBUCKET_PR_ID} .
+
+definitions:
+  services:
+    docker:
+      memory: 3072

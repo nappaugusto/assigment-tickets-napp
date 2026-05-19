@@ -29,7 +29,8 @@ export class SyncService {
     this.apiUrl = config.get<string>('MOVIDESK_API_URL') ?? '';
     this.apiToken = config.get<string>('MOVIDESK_API_TOKEN') ?? '';
     this.debugDateFields =
-      String(config.get('MOVIDESK_DEBUG_DATE_FIELDS') ?? '').toLowerCase() === 'true';
+      String(config.get('MOVIDESK_DEBUG_DATE_FIELDS') ?? '').toLowerCase() ===
+      'true';
     this.debugDateFieldsSampleSize = Math.max(
       1,
       Number(config.get('MOVIDESK_DEBUG_DATE_FIELDS_SAMPLE_SIZE') ?? 5),
@@ -50,7 +51,10 @@ export class SyncService {
       result[key] = value;
     }
 
-    if (result['$select'] && !result['$select'].split(',').includes('lastUpdate')) {
+    if (
+      result['$select'] &&
+      !result['$select'].split(',').includes('lastUpdate')
+    ) {
       result['$select'] = `${result['$select']},lastUpdate`;
     }
 
@@ -62,14 +66,19 @@ export class SyncService {
       let current: unknown = obj;
       let found = true;
       for (const key of path.split('.')) {
-        if (current && typeof current === 'object' && key in (current as object)) {
+        if (current && typeof current === 'object' && key in current) {
           current = (current as Record<string, unknown>)[key];
         } else {
           found = false;
           break;
         }
       }
-      if (found && current !== null && current !== undefined && current !== '') {
+      if (
+        found &&
+        current !== null &&
+        current !== undefined &&
+        current !== ''
+      ) {
         return current;
       }
     }
@@ -85,7 +94,10 @@ export class SyncService {
       }
     }
     if (Array.isArray(value)) {
-      return (value as unknown[]).map((v) => this.extractName(v)).filter(Boolean).join(', ');
+      return (value as unknown[])
+        .map((v) => this.extractName(v))
+        .filter(Boolean)
+        .join(', ');
     }
     return String(value).trim();
   }
@@ -99,7 +111,9 @@ export class SyncService {
 
   private isFinalStatus(status: string): boolean {
     const normalized = this.normalizeStatus(status);
-    return FINAL_STATUS_KEYWORDS.some((keyword) => normalized.includes(keyword));
+    return FINAL_STATUS_KEYWORDS.some((keyword) =>
+      normalized.includes(keyword),
+    );
   }
 
   private resolveClosedAt(ticket: RawTicket): string | null {
@@ -123,25 +137,46 @@ export class SyncService {
     if (isNaN(numId)) return null;
 
     const status = this.extractName(
-      this.getNested(ticket, 'status', 'status.name', 'statusName', 'baseStatus'),
+      this.getNested(
+        ticket,
+        'status',
+        'status.name',
+        'statusName',
+        'baseStatus',
+      ),
     );
     const ownerTeam = this.extractName(
-      this.getNested(ticket, 'ownerTeam', 'ownerTeam.name', 'ownerTeam.businessName', 'team.name'),
+      this.getNested(
+        ticket,
+        'ownerTeam',
+        'ownerTeam.name',
+        'ownerTeam.businessName',
+        'team.name',
+      ),
     );
-    const subject = String(this.getNested(ticket, 'subject', 'title') ?? '').trim();
+    const subject = String(
+      this.getNested(ticket, 'subject', 'title') ?? '',
+    ).trim();
     const slaSolutionDate = this.resolveSolutionDueDate(ticket);
 
-    const slaPausedRaw = this.getNested(ticket, 'slaSolutionDateIsPaused', 'sla.isPaused');
+    const slaPausedRaw = this.getNested(
+      ticket,
+      'slaSolutionDateIsPaused',
+      'sla.isPaused',
+    );
     const slaSolutionDateIsPaused =
       typeof slaPausedRaw === 'boolean'
         ? slaPausedRaw
         : String(slaPausedRaw ?? '').toLowerCase() === 'true';
 
-    const openedAt = (
-      String(this.getNested(ticket, 'createdDate', 'createdDateTime', 'createdAt') ?? '')
-    ).trim() || null;
+    const openedAt =
+      String(
+        this.getNested(ticket, 'createdDate', 'createdDateTime', 'createdAt') ??
+          '',
+      ).trim() || null;
     const closedAt = this.resolveClosedAt(ticket);
-    const lastUpdate = String(this.getNested(ticket, 'lastUpdate') ?? '').trim() || null;
+    const lastUpdate =
+      String(this.getNested(ticket, 'lastUpdate') ?? '').trim() || null;
 
     const isFinalStatus = this.isFinalStatus(status);
 
@@ -190,7 +225,11 @@ export class SyncService {
     if (explicitString) return explicitString;
 
     const slaObject = this.getNested(ticket, 'sla');
-    if (slaObject && typeof slaObject === 'object' && !Array.isArray(slaObject)) {
+    if (
+      slaObject &&
+      typeof slaObject === 'object' &&
+      !Array.isArray(slaObject)
+    ) {
       const entries = Object.entries(slaObject as Record<string, unknown>);
       const preferredEntry = entries.find(([key, value]) => {
         const normalizedKey = this.normalizeStatus(key);
@@ -213,7 +252,13 @@ export class SyncService {
     const snapshot: Record<string, unknown> = {
       id: this.getNested(ticket, 'id'),
       status: this.extractName(
-        this.getNested(ticket, 'status', 'status.name', 'statusName', 'baseStatus'),
+        this.getNested(
+          ticket,
+          'status',
+          'status.name',
+          'statusName',
+          'baseStatus',
+        ),
       ),
       available_keys: Object.keys(ticket).sort(),
       createdDate: this.getNested(ticket, 'createdDate'),
@@ -229,7 +274,10 @@ export class SyncService {
       slaSolutionDateTime: this.getNested(ticket, 'slaSolutionDateTime'),
       solutionDate: this.getNested(ticket, 'solutionDate'),
       solutionDateTime: this.getNested(ticket, 'solutionDateTime'),
-      slaSolutionDateIsPaused: this.getNested(ticket, 'slaSolutionDateIsPaused'),
+      slaSolutionDateIsPaused: this.getNested(
+        ticket,
+        'slaSolutionDateIsPaused',
+      ),
       raw_sla: this.getNested(ticket, 'sla'),
     };
 
@@ -314,7 +362,7 @@ export class SyncService {
 
     const tickets = await this.fetchFromApi();
     if (tickets.length > 0) {
-      this.ticketsService.upsertMany(tickets as any);
+      await this.ticketsService.upsertMany(tickets as any);
       this.lastSyncAt = now;
       this.logger.log(`Sync complete: ${tickets.length} tickets upserted`);
     }

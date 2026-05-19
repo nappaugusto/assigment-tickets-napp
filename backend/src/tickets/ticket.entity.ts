@@ -4,7 +4,7 @@ export interface Ticket {
   status: string | null;
   ownerTeam: string | null;
   slaSolutionDate: string | null;
-  slaSolutionDateIsPaused: number;
+  slaSolutionDateIsPaused: boolean;
   opened_at: string | null;
   closed_at: string | null;
   last_update: string | null;

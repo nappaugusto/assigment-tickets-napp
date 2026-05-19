@@ -11,18 +11,18 @@ export class PreferencesController {
   constructor(private readonly preferencesService: PreferencesService) {}
 
   @Get('monthly-analytics')
-  getMonthlyAnalytics(@Req() req: Request) {
+  async getMonthlyAnalytics(@Req() req: Request) {
     const user = (req as any).user as User;
     return this.preferencesService.getMonthlyAnalytics(user.id);
   }
 
   @Put('monthly-analytics')
-  saveMonthlyAnalytics(
+  async saveMonthlyAnalytics(
     @Req() req: Request,
     @Body() dto: SaveMonthlyAnalyticsPreferenceDto,
   ) {
     const user = (req as any).user as User;
-    this.preferencesService.saveMonthlyAnalytics(user.id, dto);
+    await this.preferencesService.saveMonthlyAnalytics(user.id, dto);
     return { success: true };
   }
 }

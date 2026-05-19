@@ -79,7 +79,7 @@ export class AuthController {
       throw new BadRequestException(result.error);
     }
 
-    const fullUser = this.usersService.findByUsername(dto.username);
+    const fullUser = await this.usersService.findByUsername(dto.username);
     if (!fullUser) {
       throw new BadRequestException('Erro ao criar usuário.');
     }
@@ -93,7 +93,10 @@ export class AuthController {
 
     await this.saveSession(req);
 
-    return { success: true, user: { id: result.user.id, name: result.user.name } };
+    return {
+      success: true,
+      user: { id: result.user.id, name: result.user.name },
+    };
   }
 
   @UseGuards(SessionGuard)

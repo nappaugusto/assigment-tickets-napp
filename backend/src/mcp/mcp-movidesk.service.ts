@@ -58,7 +58,9 @@ export class McpMovideskService implements OnModuleDestroy {
   }
 
   private isConfigured(): boolean {
-    return !!this.getCommand() && this.getArgs().length > 0 && !!this.getToken();
+    return (
+      !!this.getCommand() && this.getArgs().length > 0 && !!this.getToken()
+    );
   }
 
   private getCommand(): string {
@@ -74,16 +76,23 @@ export class McpMovideskService implements OnModuleDestroy {
     if (raw.startsWith('[')) {
       try {
         const parsed = JSON.parse(raw) as unknown;
-        if (Array.isArray(parsed) && parsed.every((item) => typeof item === 'string')) {
+        if (
+          Array.isArray(parsed) &&
+          parsed.every((item) => typeof item === 'string')
+        ) {
           return this.resolveMcpArgs(parsed);
         }
       } catch {
-        throw new BadRequestException('MOVIDESK_MCP_ARGS deve ser um JSON array válido.');
+        throw new BadRequestException(
+          'MOVIDESK_MCP_ARGS deve ser um JSON array válido.',
+        );
       }
     }
 
     const args =
-      raw.match(/"[^"]+"|'[^']+'|\S+/g)?.map((arg) => arg.replace(/^['"]|['"]$/g, '')) ?? [];
+      raw
+        .match(/"[^"]+"|'[^']+'|\S+/g)
+        ?.map((arg) => arg.replace(/^['"]|['"]$/g, '')) ?? [];
     return this.resolveMcpArgs(args);
   }
 
@@ -94,7 +103,11 @@ export class McpMovideskService implements OnModuleDestroy {
     }
 
     const entrypoint = args[0];
-    if (entrypoint.startsWith('/') && !existsSync(entrypoint) && existsSync(bundledPath)) {
+    if (
+      entrypoint.startsWith('/') &&
+      !existsSync(entrypoint) &&
+      existsSync(bundledPath)
+    ) {
       this.logger.warn(
         `MOVIDESK_MCP_ARGS aponta para arquivo inexistente (${entrypoint}); usando MCP empacotado.`,
       );
@@ -172,8 +185,12 @@ export class McpMovideskService implements OnModuleDestroy {
       return this.connection;
     } catch (error) {
       await transport.close().catch(() => undefined);
-      this.logger.error(`Erro ao conectar no MCP Movidesk: ${(error as Error).message}`);
-      throw new InternalServerErrorException('Não foi possível conectar ao MCP Movidesk.');
+      this.logger.error(
+        `Erro ao conectar no MCP Movidesk: ${(error as Error).message}`,
+      );
+      throw new InternalServerErrorException(
+        'Não foi possível conectar ao MCP Movidesk.',
+      );
     }
   }
 
