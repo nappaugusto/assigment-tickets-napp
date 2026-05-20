@@ -29,6 +29,30 @@ interface TrelloListResponse {
   closed: boolean;
 }
 
+interface MovideskAttachment {
+  fileName?: string;
+  path?: string;
+  url?: string;
+  uri?: string;
+  href?: string;
+}
+
+interface MovideskAction {
+  id?: number;
+  description?: string;
+  htmlDescription?: string;
+  attachments?: MovideskAttachment[] | null;
+}
+
+interface MovideskTicketDetails {
+  actions?: MovideskAction[] | null;
+}
+
+interface ImageAttachment {
+  name: string;
+  url: string;
+}
+
 export interface TrelloCardResponse {
   id: string;
   name: string;
@@ -41,6 +65,7 @@ export class TrelloService {
   private readonly logger = new Logger(TrelloService.name);
   private readonly trelloTextLimit = 16000;
   private readonly client: AxiosInstance;
+  private readonly movideskClient: AxiosInstance;
 
   constructor(
     private readonly config: ConfigService,
@@ -50,6 +75,10 @@ export class TrelloService {
     this.client = axios.create({
       baseURL: 'https://api.trello.com/1',
       timeout: Number(config.get('TRELLO_API_TIMEOUT') ?? 10000),
+      headers: { accept: 'application/json' },
+    });
+    this.movideskClient = axios.create({
+      timeout: Number(config.get('MOVIDESK_API_TIMEOUT') ?? 10000),
       headers: { accept: 'application/json' },
     });
   }
@@ -137,6 +166,7 @@ export class TrelloService {
     const name = (dto.name || this.defaultCardName(ticket)).trim();
     const mcpContent = await this.buildMcpTicketContent(ticket);
     const [desc, ...comments] = this.splitForTrello(mcpContent);
+    const images = await this.getTicketImages(ticket.id, mcpContent);
 
     const response = await this.client.post<TrelloCardResponse>(
       '/cards',
@@ -154,6 +184,7 @@ export class TrelloService {
 
     const card = response.data;
     await this.addCardComments(card.id, comments);
+    await this.addCardImageAttachments(card.id, images);
 
     const updatedTicket = await this.ticketsService.attachTrelloCard(
       ticket.id,
@@ -224,6 +255,215 @@ export class TrelloService {
         },
       );
     }
+  }
+
+  private async addCardImageAttachments(
+    cardId: string,
+    images: ImageAttachment[],
+  ) {
+    if (images.length === 0) return;
+
+    const failures: string[] = [];
+    for (const image of images) {
+      try {
+        await this.client.post(
+          `/cards/${encodeURIComponent(cardId)}/attachments`,
+          null,
+          {
+            params: {
+              ...this.authParams(),
+              name: image.name,
+              url: image.url,
+            },
+          },
+        );
+      } catch (error) {
+        failures.push(image.name);
+        this.logger.warn(
+          `Erro ao anexar imagem ${image.name} no card Trello ${cardId}: ${(error as Error).message}`,
+        );
+      }
+    }
+
+    if (failures.length > 0) {
+      await this.addCardComments(cardId, [
+        [
+          'Algumas imagens do chamado nao puderam ser anexadas automaticamente ao Trello:',
+          ...failures.map((name) => `- ${name}`),
+        ].join('\n'),
+      ]);
+    }
+  }
+
+  private async getTicketImages(
+    ticketId: number,
+    mcpContent: string,
+  ): Promise<ImageAttachment[]> {
+    const images = new Map<string, ImageAttachment>();
+    const add = (image: ImageAttachment) => {
+      if (!image.url || images.has(image.url)) return;
+      images.set(image.url, image);
+    };
+
+    for (const image of this.extractImageUrlsFromText(mcpContent)) {
+      add(image);
+    }
+
+    const movideskTicket = await this.fetchMovideskTicketDetails(ticketId);
+    for (const action of movideskTicket?.actions ?? []) {
+      for (const image of this.extractImageUrlsFromText(
+        `${action.description ?? ''}\n${action.htmlDescription ?? ''}`,
+      )) {
+        add(image);
+      }
+
+      for (const attachment of action.attachments ?? []) {
+        const image = this.imageFromMovideskAttachment(attachment);
+        if (image) add(image);
+      }
+    }
+
+    return [...images.values()];
+  }
+
+  private async fetchMovideskTicketDetails(
+    ticketId: number,
+  ): Promise<MovideskTicketDetails | null> {
+    const apiUrl = this.getEnv('MOVIDESK_API_URL');
+    const token =
+      this.getEnv('MOVIDESK_API_TOKEN') || this.getEnv('MOVIDESK_TOKEN');
+    if (!apiUrl || !token) return null;
+
+    try {
+      const response = await this.movideskClient.get<MovideskTicketDetails>(
+        apiUrl,
+        {
+          params: {
+            token,
+            id: ticketId,
+            $select: 'id,actions',
+            $expand: 'actions',
+          },
+        },
+      );
+      return response.data;
+    } catch (error) {
+      this.logger.warn(
+        `Erro ao buscar anexos do ticket #${ticketId} no Movidesk: ${(error as Error).message}`,
+      );
+      return null;
+    }
+  }
+
+  private extractImageUrlsFromText(text: string): ImageAttachment[] {
+    const result: ImageAttachment[] = [];
+    const patterns = [
+      /<img[^>]*src=["']([^"']+)["'][^>]*alt=["']([^"']*)["'][^>]*>/gi,
+      /<img[^>]*alt=["']([^"']*)["'][^>]*src=["']([^"']+)["'][^>]*>/gi,
+      /<img[^>]*src=["']([^"']+)["'][^>]*>/gi,
+      /!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/gi,
+    ];
+
+    for (const pattern of patterns) {
+      let match: RegExpExecArray | null;
+      while ((match = pattern.exec(text))) {
+        const [first, second] = [match[1], match[2]];
+        const url = first?.startsWith('http') ? first : second;
+        const alt = first?.startsWith('http') ? second : first;
+        const resolvedUrl = url ? this.resolveMovideskInlineUrl(url) : '';
+        if (resolvedUrl) {
+          result.push({
+            name: this.imageNameFromUrl(resolvedUrl, alt),
+            url: resolvedUrl,
+          });
+        }
+      }
+    }
+
+    return result;
+  }
+
+  private imageFromMovideskAttachment(
+    attachment: MovideskAttachment,
+  ): ImageAttachment | null {
+    const rawUrl =
+      attachment.url ||
+      attachment.uri ||
+      attachment.href ||
+      attachment.path ||
+      '';
+    const name = attachment.fileName || this.imageNameFromUrl(rawUrl);
+    if (!this.isImageName(name) && !this.isImageUrl(rawUrl)) return null;
+
+    const url = this.resolveMovideskAttachmentUrl(rawUrl);
+    if (!url) return null;
+
+    return { name, url };
+  }
+
+  private resolveMovideskInlineUrl(rawUrl: string): string {
+    const value = this.decodeHtmlEntities(rawUrl.trim());
+    if (!value) return '';
+    if (/^https?:\/\//i.test(value)) return value;
+    if (value.startsWith('//')) return `https:${value}`;
+
+    const movideskBaseUrl =
+      this.getEnv('VITE_MOVIDESK_BASE_URL') ||
+      'https://atendimento.nappsolutions.com';
+
+    if (value.startsWith('/')) {
+      return `${movideskBaseUrl.replace(/\/$/, '')}${value}`;
+    }
+
+    return '';
+  }
+
+  private resolveMovideskAttachmentUrl(rawUrl: string): string {
+    const value = this.decodeHtmlEntities(rawUrl.trim());
+    if (!value) return '';
+    if (/^https?:\/\//i.test(value)) return value;
+
+    const template = this.getEnv('MOVIDESK_ATTACHMENT_URL_TEMPLATE');
+    if (template) {
+      return template
+        .replace('{path}', encodeURIComponent(value))
+        .replace('{rawPath}', value);
+    }
+
+    return '';
+  }
+
+  private isImageUrl(url: string): boolean {
+    try {
+      const parsed = new URL(this.decodeHtmlEntities(url));
+      return this.isImageName(parsed.pathname);
+    } catch {
+      return this.isImageName(url);
+    }
+  }
+
+  private isImageName(name: string): boolean {
+    return /\.(apng|avif|gif|jpe?g|png|webp|bmp|tiff?|svg)(\?.*)?$/i.test(name);
+  }
+
+  private imageNameFromUrl(url: string, fallback?: string): string {
+    if (fallback?.trim()) return fallback.trim();
+    try {
+      const parsed = new URL(this.decodeHtmlEntities(url));
+      const fileName = parsed.pathname.split('/').filter(Boolean).pop();
+      return fileName || 'imagem-do-chamado';
+    } catch {
+      return url.split('/').filter(Boolean).pop() || 'imagem-do-chamado';
+    }
+  }
+
+  private decodeHtmlEntities(text: string): string {
+    return text
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'");
   }
 
   private splitForTrello(text: string): string[] {
