@@ -35,6 +35,9 @@ interface MovideskAttachment {
   url?: string;
   uri?: string;
   href?: string;
+  size?: number;
+  length?: number;
+  contentLength?: number;
 }
 
 interface MovideskAction {
@@ -314,10 +317,11 @@ export class TrelloService {
     const movideskTicket = await this.fetchMovideskTicketDetails(ticketId);
     for (const action of movideskTicket?.actions ?? []) {
       const actionText = `${action.description ?? ''}\n${action.htmlDescription ?? ''}`;
-      if (
+      const skipAction =
         this.looksLikeSignature(actionText) ||
-        this.looksLikeSystemInteraction(actionText)
-      ) {
+        this.looksLikeSystemInteraction(actionText);
+
+      if (skipAction) {
         continue;
       }
 
@@ -326,7 +330,7 @@ export class TrelloService {
       }
 
       for (const attachment of action.attachments ?? []) {
-        const image = this.imageFromMovideskAttachment(attachment);
+        const image = this.imageFromMovideskAttachment(attachment, actionText);
         if (image) add(image);
       }
     }
@@ -396,6 +400,7 @@ export class TrelloService {
 
   private imageFromMovideskAttachment(
     attachment: MovideskAttachment,
+    context = '',
   ): ImageAttachment | null {
     const rawUrl =
       attachment.url ||
@@ -406,6 +411,7 @@ export class TrelloService {
     const name = attachment.fileName || this.imageNameFromUrl(rawUrl);
     if (!this.isImageName(name) && !this.isImageUrl(rawUrl)) return null;
     if (this.looksLikeSignature(`${name} ${rawUrl}`)) return null;
+    if (this.looksLikeSignatureImage(attachment, context)) return null;
 
     const url = this.resolveMovideskAttachmentUrl(rawUrl);
     if (!url) return null;
@@ -535,6 +541,38 @@ export class TrelloService {
       normalized.includes('plataforma');
 
     return hasBrand || (hasAgentIdentity && hasSignatureHint);
+  }
+
+  private looksLikeSignatureImage(
+    attachment: MovideskAttachment,
+    context: string,
+  ): boolean {
+    const rawUrl =
+      attachment.url ||
+      attachment.uri ||
+      attachment.href ||
+      attachment.path ||
+      '';
+    const name = attachment.fileName || this.imageNameFromUrl(rawUrl);
+    const normalizedName = this.normalizeForSignatureCheck(name);
+    const normalizedContext = this.normalizeForSignatureCheck(context);
+    const size =
+      attachment.size ?? attachment.length ?? attachment.contentLength ?? null;
+    const looksLikeHashName = /^[a-f0-9]{24,}$/i.test(name.replace(/\W/g, ''));
+    const contextHasAgentSignature =
+      normalizedContext.includes('napp solutions') ||
+      normalizedContext.includes('kaue torres') ||
+      normalizedContext.includes('kaue.torres') ||
+      normalizedContext.includes('suporte plataforma') ||
+      normalizedContext.includes('inteligencia de dados');
+
+    return (
+      normalizedName.includes('assinatura') ||
+      normalizedName.includes('signature') ||
+      normalizedName.includes('napp') ||
+      (contextHasAgentSignature &&
+        (looksLikeHashName || size === null || size < 250000))
+    );
   }
 
   private normalizeForSignatureCheck(text: string): string {
