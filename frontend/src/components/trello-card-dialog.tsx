@@ -39,6 +39,7 @@ function TrelloCardDialogContent({ ticket, open, onClose }: TrelloCardDialogProp
   const lists = useTrelloLists(boardId || undefined, canLoadLists)
   const [listId, setListId] = useState('')
   const [name, setName] = useState('')
+  const [createNew, setCreateNew] = useState(false)
   const createCard = useCreateTrelloCard(ticket.id)
 
   useEffect(() => {
@@ -47,6 +48,7 @@ function TrelloCardDialogContent({ ticket, open, onClose }: TrelloCardDialogProp
 
   useEffect(() => {
     if (!open) return
+    setCreateNew(false)
     setName(defaultCardName(ticket))
     setBoardId(status.data?.defaultBoardId ?? '')
     setListId(status.data?.defaultListId ?? '')
@@ -61,21 +63,24 @@ function TrelloCardDialogContent({ ticket, open, onClose }: TrelloCardDialogProp
 
   const description = useMemo(() => defaultCardDescription(ticket), [ticket])
   const existingUrl = ticket.trello_card_url
-  const selectedListMissing = !existingUrl && !listId
+  const showCreateForm = !existingUrl || createNew
+  const selectedListMissing = showCreateForm && !listId
   const isBusy = createCard.isPending || status.isLoading || boards.isLoading || lists.isLoading
 
-  const handleSubmit = async () => {
+  const handleOpenExisting = () => {
     if (existingUrl) {
       window.open(existingUrl, '_blank', 'noreferrer')
       onClose()
-      return
     }
+  }
 
+  const handleCreateNew = async () => {
     const result = await createCard.mutateAsync({
       boardId: boardId || undefined,
       listId,
       name,
       description,
+      forceNew: !!existingUrl,
     })
 
     if (result.card.url) {
@@ -110,18 +115,29 @@ function TrelloCardDialogContent({ ticket, open, onClose }: TrelloCardDialogProp
           </div>
 
           <div className="flex-1 overflow-y-auto p-4">
-            {existingUrl ? (
-              <div className="rounded-md border border-border/50 bg-muted/25 p-3 text-sm">
-                <p className="font-medium">{ticket.trello_card_name || 'Card no Trello'}</p>
-                <a
-                  href={existingUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            {existingUrl && !createNew ? (
+              <div className="space-y-3">
+                <div className="rounded-md border border-border/50 bg-muted/25 p-3 text-sm">
+                  <p className="font-medium">{ticket.trello_card_name || 'Card no Trello'}</p>
+                  <a
+                    href={existingUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                  >
+                    Abrir card existente
+                    <ExternalLink size={12} />
+                  </a>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-center"
+                  onClick={() => setCreateNew(true)}
                 >
-                  Abrir card
-                  <ExternalLink size={12} />
-                </a>
+                  Criar novo card
+                </Button>
               </div>
             ) : status.data && !status.data.configured ? (
               <div className="rounded-md border border-yellow-700/35 bg-yellow-700/10 p-3 text-sm">
@@ -189,13 +205,18 @@ function TrelloCardDialogContent({ ticket, open, onClose }: TrelloCardDialogProp
             <Button variant="ghost" size="sm" onClick={onClose}>
               Cancelar
             </Button>
+            {existingUrl && !createNew && (
+              <Button variant="outline" size="sm" onClick={handleOpenExisting}>
+                Abrir antigo
+              </Button>
+            )}
             <Button
               size="sm"
-              onClick={handleSubmit}
+              onClick={existingUrl && !createNew ? () => setCreateNew(true) : handleCreateNew}
               disabled={isBusy || selectedListMissing || status.data?.configured === false}
             >
               {createCard.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              {existingUrl ? 'Abrir no Trello' : 'Criar card'}
+              {existingUrl && !createNew ? 'Criar novo' : 'Criar card'}
             </Button>
           </div>
         </Dialog.Content>

@@ -147,7 +147,7 @@ export class TrelloService {
       throw new NotFoundException('Ticket não encontrado.');
     }
 
-    if (ticket.trello_card_id && ticket.trello_card_url) {
+    if (!dto.forceNew && ticket.trello_card_id && ticket.trello_card_url) {
       return {
         card: {
           id: ticket.trello_card_id,

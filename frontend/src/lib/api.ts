@@ -234,6 +234,7 @@ export interface CreateTrelloCardPayload {
   listId?: string
   name?: string
   description?: string
+  forceNew?: boolean
 }
 
 export const trelloApi = {

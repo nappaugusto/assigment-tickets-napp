@@ -1,4 +1,4 @@
-import { IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsOptional, IsString } from 'class-validator';
 
 export interface TrelloBoardDto {
   id: string;
@@ -34,4 +34,8 @@ export class CreateTrelloCardDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  forceNew?: boolean;
 }
