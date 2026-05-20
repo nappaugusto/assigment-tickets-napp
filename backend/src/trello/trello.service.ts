@@ -135,10 +135,7 @@ export class TrelloService {
     }
 
     const name = (dto.name || this.defaultCardName(ticket)).trim();
-    const mcpContent = await this.buildMcpTicketContent(
-      ticket,
-      dto.description,
-    );
+    const mcpContent = await this.buildMcpTicketContent(ticket);
     const [desc, ...comments] = this.splitForTrello(mcpContent);
 
     const response = await this.client.post<TrelloCardResponse>(
@@ -173,21 +170,17 @@ export class TrelloService {
     };
   }
 
-  private async buildMcpTicketContent(
-    ticket: TicketDto,
-    requestedDescription?: string,
-  ): Promise<string> {
+  private async buildMcpTicketContent(ticket: TicketDto): Promise<string> {
     try {
-      const [summaryPrompt, ticketDetails] = await Promise.all([
-        this.mcpMovidesk.getPrompt('resumo_ticket', {
-          ticket_id: String(ticket.id),
-          contexto: this.defaultCardDescription(ticket),
-          formato: 'técnico detalhado',
-        }),
-        this.mcpMovidesk.callTool('consultar_ticket', { ticketId: ticket.id }),
-      ]);
-
-      const promptText = this.promptResultToText(summaryPrompt);
+      await this.mcpMovidesk.getPrompt('resumo_ticket', {
+        ticket_id: String(ticket.id),
+        contexto: this.defaultCardDescription(ticket),
+        formato: 'técnico detalhado',
+      });
+      const ticketDetails = await this.mcpMovidesk.callTool(
+        'consultar_ticket',
+        { ticketId: ticket.id },
+      );
       const detailsText = this.mcpResultToText(ticketDetails);
       if (!detailsText.trim()) {
         throw new ServiceUnavailableException(
@@ -199,12 +192,6 @@ export class TrelloService {
         `# Ticket Movidesk #${ticket.id}`,
         '',
         this.defaultCardDescription(ticket),
-        requestedDescription?.trim()
-          ? `\n## Observação enviada pelo app\n${requestedDescription.trim()}`
-          : null,
-        promptText.trim()
-          ? `\n## Prompt MCP usado: resumo_ticket\n${promptText.trim()}`
-          : null,
         `\n## Conteúdo completo do chamado via MCP consultar_ticket\n${detailsText.trim()}`,
       ]
         .filter((section): section is string => Boolean(section))
@@ -285,38 +272,6 @@ export class TrelloService {
       return JSON.stringify(payload.structuredContent, null, 2);
     }
     return JSON.stringify(result, null, 2);
-  }
-
-  private promptResultToText(result: unknown): string {
-    const payload = result as {
-      messages?: Array<{
-        role?: string;
-        content?: {
-          type?: string;
-          text?: string;
-          resource?: { text?: string };
-        };
-      }>;
-    };
-
-    return (
-      payload.messages
-        ?.map((message) => {
-          const content = message.content;
-          if (content?.type === 'text' && typeof content.text === 'string') {
-            return `${message.role || 'user'}: ${content.text}`;
-          }
-          if (
-            content?.type === 'resource' &&
-            typeof content.resource?.text === 'string'
-          ) {
-            return `${message.role || 'user'}: ${content.resource.text}`;
-          }
-          return '';
-        })
-        .filter(Boolean)
-        .join('\n\n') || ''
-    );
   }
 
   private isConfigured(): boolean {
