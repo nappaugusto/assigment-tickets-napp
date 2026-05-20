@@ -306,11 +306,9 @@ export class TicketsService {
             opened_at = excluded.opened_at,
             closed_at = excluded.closed_at,
             last_update = excluded.last_update,
-            responsavel = COALESCE(tickets.assignment_override, excluded.responsavel),
-            assigned_at = CASE
-              WHEN tickets.assignment_override IS NOT NULL THEN tickets.assigned_at
-              ELSE excluded.assigned_at
-            END,
+            responsavel = excluded.responsavel,
+            assigned_at = excluded.assigned_at,
+            assignment_override = NULL,
             updated_at = now()
           `,
           [
