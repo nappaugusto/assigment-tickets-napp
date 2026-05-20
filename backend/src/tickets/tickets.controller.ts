@@ -11,6 +11,7 @@ import {
   forwardRef,
   Logger,
   NotFoundException,
+  BadGatewayException,
 } from '@nestjs/common';
 import { SessionGuard } from '../auth/auth.guard';
 import { TicketsService } from './tickets.service';
@@ -30,7 +31,13 @@ export class TicketsController {
   @Get('tickets/refresh')
   async refresh(@Query('manual') manual?: string) {
     const force = manual === '1' || manual === 'true';
-    await this.syncService.sync(force);
+    try {
+      await this.syncService.sync(force);
+    } catch (error) {
+      throw new BadGatewayException(
+        `Não foi possível sincronizar com o Movidesk: ${(error as Error).message}`,
+      );
+    }
 
     const { tickets, newTickets, monthlyAnalytics } =
       await this.ticketsService.getDashboardSnapshot();

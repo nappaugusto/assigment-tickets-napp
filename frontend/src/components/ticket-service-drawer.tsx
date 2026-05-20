@@ -37,7 +37,6 @@ interface TicketServiceDrawerProps {
   open: boolean
   onClose: () => void
   agentOptions: string[]
-  onAssignLocal?: (id: number, responsavel: string) => void
 }
 
 const STATUS_OPTIONS = ['Novo', 'Em atendimento', 'Parado', 'Resolvido', 'Cancelado', 'Fechado']
@@ -47,7 +46,6 @@ export function TicketServiceDrawer({
   open,
   onClose,
   agentOptions,
-  onAssignLocal,
 }: TicketServiceDrawerProps) {
   if (!ticket) return null
 
@@ -57,7 +55,6 @@ export function TicketServiceDrawer({
       open={open}
       onClose={onClose}
       agentOptions={agentOptions}
-      onAssignLocal={onAssignLocal}
     />
   )
 }
@@ -67,7 +64,6 @@ function TicketServiceDrawerContent({
   open,
   onClose,
   agentOptions,
-  onAssignLocal,
 }: TicketServiceDrawerProps & { ticket: Ticket }) {
   const [detailText, setDetailText] = useState('')
   const [detailJson, setDetailJson] = useState<unknown>(null)
@@ -164,7 +160,6 @@ function TicketServiceDrawerContent({
         agentDisplayName.trim() || identifier,
         agentTeam.trim() || undefined,
       )
-      onAssignLocal?.(ticket.id, agentDisplayName.trim() || identifier)
       setAssignOpen(false)
       await loadTicketDetails()
     } catch (error) {

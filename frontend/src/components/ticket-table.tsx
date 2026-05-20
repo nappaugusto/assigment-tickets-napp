@@ -148,7 +148,6 @@ function TicketRow({ ticket, agentOptions, onAssign, onUnassign, isLoading, curr
         open={serviceOpen}
         onClose={() => setServiceOpen(false)}
         agentOptions={agentOptions}
-        onAssignLocal={onAssign}
       />
     </>
   )

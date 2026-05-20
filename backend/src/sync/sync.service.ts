@@ -345,11 +345,11 @@ export class SyncService {
       return normalized;
     } catch (err) {
       this.logger.error(`Error fetching tickets: ${(err as Error).message}`);
-      return [];
+      throw err;
     }
   }
 
-  async sync(force = false): Promise<void> {
+  async sync(force = false): Promise<{ synced: boolean; skipped: boolean }> {
     const now = new Date();
     if (
       !force &&
@@ -357,14 +357,22 @@ export class SyncService {
       now.getTime() - this.lastSyncAt.getTime() < this.minIntervalMs
     ) {
       this.logger.debug('Sync skipped (too soon)');
-      return;
+      return { synced: false, skipped: true };
     }
 
-    const tickets = await this.fetchFromApi();
-    if (tickets.length > 0) {
-      await this.ticketsService.upsertMany(tickets as any);
+    try {
+      const tickets = await this.fetchFromApi();
+      if (tickets.length > 0) {
+        await this.ticketsService.upsertMany(tickets as any);
+      }
       this.lastSyncAt = now;
       this.logger.log(`Sync complete: ${tickets.length} tickets upserted`);
+      return { synced: true, skipped: false };
+    } catch (err) {
+      if (force) {
+        throw err;
+      }
+      return { synced: false, skipped: false };
     }
   }
 }

@@ -206,7 +206,6 @@ export function KanbanCardDraggable({
         open={serviceOpen}
         onClose={() => setServiceOpen(false)}
         agentOptions={agentOptions}
-        onAssignLocal={onAssign}
       />
     </>
   )
