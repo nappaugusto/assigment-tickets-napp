@@ -212,7 +212,7 @@ export class TrelloService {
         'consultar_ticket',
         { ticketId: ticket.id },
       );
-      const detailsText = this.removeSignatureContent(
+      const detailsText = this.removeUnwantedSystemContent(
         this.mcpResultToText(ticketDetails),
       );
       if (!detailsText.trim()) {
@@ -314,7 +314,12 @@ export class TrelloService {
     const movideskTicket = await this.fetchMovideskTicketDetails(ticketId);
     for (const action of movideskTicket?.actions ?? []) {
       const actionText = `${action.description ?? ''}\n${action.htmlDescription ?? ''}`;
-      if (this.looksLikeSignature(actionText)) continue;
+      if (
+        this.looksLikeSignature(actionText) ||
+        this.looksLikeSystemInteraction(actionText)
+      ) {
+        continue;
+      }
 
       for (const image of this.extractImageUrlsFromText(actionText)) {
         add(image);
@@ -473,10 +478,14 @@ export class TrelloService {
       .replace(/&#39;/g, "'");
   }
 
-  private removeSignatureContent(text: string): string {
+  private removeUnwantedSystemContent(text: string): string {
     return text
       .split(/\n---\n/g)
-      .filter((block) => !this.looksLikeSignature(block))
+      .filter(
+        (block) =>
+          !this.looksLikeSignature(block) &&
+          !this.looksLikeSystemInteraction(block),
+      )
       .join('\n---\n')
       .replace(
         /!\[[^\]]*(?:napp|assinatura|signature|suporte|plataforma|kaue|kauê)[^\]]*\]\([^)]+\)/gi,
@@ -488,6 +497,17 @@ export class TrelloService {
       )
       .replace(/\n{3,}/g, '\n\n')
       .trim();
+  }
+
+  private looksLikeSystemInteraction(text: string): boolean {
+    const normalized = this.normalizeForSignatureCheck(text);
+    if (!normalized) return false;
+
+    return (
+      /(?:interna|publica)\s+por\s+sistema\s+em/.test(normalized) ||
+      /por\s+sistema\s+em\s+\d{2}\/\d{2}\/\d{4}/.test(normalized) ||
+      normalized.includes('por sistema em')
+    );
   }
 
   private looksLikeSignature(text: string): boolean {
