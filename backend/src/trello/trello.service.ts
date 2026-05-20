@@ -52,8 +52,8 @@ export class TrelloService {
   getStatus(): TrelloStatusDto {
     return {
       configured: this.isConfigured(),
-      defaultBoardId: this.config.get<string>('TRELLO_DEFAULT_BOARD_ID') || null,
-      defaultListId: this.config.get<string>('TRELLO_DEFAULT_LIST_ID') || null,
+      defaultBoardId: this.getEnv('TRELLO_DEFAULT_BOARD_ID') || null,
+      defaultListId: this.getEnv('TRELLO_DEFAULT_LIST_ID') || null,
     };
   }
 
@@ -79,7 +79,7 @@ export class TrelloService {
 
   async listBoardLists(boardId?: string): Promise<TrelloListDto[]> {
     this.ensureConfigured();
-    const id = boardId || this.config.get<string>('TRELLO_DEFAULT_BOARD_ID');
+    const id = boardId || this.getEnv('TRELLO_DEFAULT_BOARD_ID');
     if (!id?.trim()) {
       throw new BadRequestException('Board do Trello não informado.');
     }
@@ -124,7 +124,7 @@ export class TrelloService {
       };
     }
 
-    const listId = dto.listId || this.config.get<string>('TRELLO_DEFAULT_LIST_ID');
+    const listId = dto.listId || this.getEnv('TRELLO_DEFAULT_LIST_ID');
     if (!listId?.trim()) {
       throw new BadRequestException('Lista do Trello não informada.');
     }
@@ -157,8 +157,7 @@ export class TrelloService {
 
   private isConfigured(): boolean {
     return Boolean(
-      this.config.get<string>('TRELLO_API_KEY')?.trim() &&
-        this.config.get<string>('TRELLO_API_TOKEN')?.trim(),
+      this.getEnv('TRELLO_API_KEY') && this.getEnv('TRELLO_API_TOKEN'),
     );
   }
 
@@ -172,9 +171,17 @@ export class TrelloService {
 
   private authParams() {
     return {
-      key: this.config.get<string>('TRELLO_API_KEY')?.trim(),
-      token: this.config.get<string>('TRELLO_API_TOKEN')?.trim(),
+      key: this.getEnv('TRELLO_API_KEY'),
+      token: this.getEnv('TRELLO_API_TOKEN'),
     };
+  }
+
+  private getEnv(key: string): string {
+    return (
+      process.env[key]?.trim() ||
+      this.config.get<string>(key)?.trim() ||
+      ''
+    );
   }
 
   private defaultCardName(ticket: TicketDto): string {

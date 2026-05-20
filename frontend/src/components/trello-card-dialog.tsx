@@ -42,6 +42,10 @@ function TrelloCardDialogContent({ ticket, open, onClose }: TrelloCardDialogProp
   const createCard = useCreateTrelloCard(ticket.id)
 
   useEffect(() => {
+    if (open) void status.refetch()
+  }, [open, status.refetch])
+
+  useEffect(() => {
     if (!open) return
     setName(defaultCardName(ticket))
     setBoardId(status.data?.defaultBoardId ?? '')

@@ -18,7 +18,8 @@ export function useTrelloStatus() {
   return useQuery({
     queryKey: TRELLO_STATUS_QUERY_KEY,
     queryFn: trelloApi.status,
-    staleTime: 60_000,
+    staleTime: 0,
+    refetchOnMount: 'always',
   })
 }
 
