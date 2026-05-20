@@ -14,6 +14,7 @@ import { KanbanModule } from './kanban/kanban.module';
 import { NotesModule } from './notes/notes.module';
 import { McpModule } from './mcp/mcp.module';
 import { PreferencesModule } from './preferences/preferences.module';
+import { TrelloModule } from './trello/trello.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { PreferencesModule } from './preferences/preferences.module';
     NotesModule,
     McpModule,
     PreferencesModule,
+    TrelloModule,
   ],
   providers: [DatabaseInitService],
 })

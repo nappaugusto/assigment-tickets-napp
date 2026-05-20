@@ -35,6 +35,10 @@ export class DatabaseInitService implements OnModuleInit {
         responsavel                 TEXT,
         assigned_at                 TIMESTAMPTZ,
         assignment_override         TEXT,
+        trello_card_id              TEXT,
+        trello_card_url             TEXT,
+        trello_card_name            TEXT,
+        trello_card_created_at      TIMESTAMPTZ,
         created_at                  TIMESTAMPTZ NOT NULL DEFAULT now(),
         updated_at                  TIMESTAMPTZ NOT NULL DEFAULT now()
       );
@@ -96,6 +100,16 @@ export class DatabaseInitService implements OnModuleInit {
         WHERE content <> '';
       CREATE INDEX IF NOT EXISTS user_preferences_user_key_idx
         ON user_preferences (user_id, key);
+    `);
+
+    await this.db.query(`
+      ALTER TABLE tickets
+        ADD COLUMN IF NOT EXISTS trello_card_id TEXT,
+        ADD COLUMN IF NOT EXISTS trello_card_url TEXT,
+        ADD COLUMN IF NOT EXISTS trello_card_name TEXT,
+        ADD COLUMN IF NOT EXISTS trello_card_created_at TIMESTAMPTZ;
+
+      CREATE INDEX IF NOT EXISTS tickets_trello_card_id_idx ON tickets (trello_card_id);
     `);
 
     this.logger.log('Database schema initialized');

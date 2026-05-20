@@ -61,6 +61,10 @@ export interface Ticket {
   last_update: string | null
   responsavel: string | null
   assigned_at: string | null
+  trello_card_id: string | null
+  trello_card_url: string | null
+  trello_card_name: string | null
+  trello_card_created_at: string | null
 }
 
 export interface TicketMonthlyAnalyticsItem {
@@ -197,4 +201,46 @@ export const notesApi = {
     http.put<{ success: boolean }>(`/notes/${ticketId}`, { content }).then((r) => r.data),
   getTicketsWithNotes: () =>
     get<{ ticketIds: number[] }>('/notes/tickets-with-notes'),
+}
+
+// Trello
+export interface TrelloStatus {
+  configured: boolean
+  defaultBoardId: string | null
+  defaultListId: string | null
+}
+
+export interface TrelloBoard {
+  id: string
+  name: string
+  url: string
+}
+
+export interface TrelloList {
+  id: string
+  name: string
+  closed: boolean
+}
+
+export interface TrelloCard {
+  id: string
+  name: string
+  url: string
+  shortUrl?: string
+}
+
+export interface CreateTrelloCardPayload {
+  boardId?: string
+  listId?: string
+  name?: string
+  description?: string
+}
+
+export const trelloApi = {
+  status: () => get<TrelloStatus>('/trello/status'),
+  boards: () => get<TrelloBoard[]>('/trello/boards'),
+  lists: (boardId?: string) =>
+    get<TrelloList[]>(`/trello/lists${boardId ? `?boardId=${encodeURIComponent(boardId)}` : ''}`),
+  createCardFromTicket: (ticketId: number, payload: CreateTrelloCardPayload) =>
+    post<{ card: TrelloCard; ticket: Ticket }>(`/trello/tickets/${ticketId}/cards`, payload),
 }

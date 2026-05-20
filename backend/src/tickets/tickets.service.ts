@@ -52,6 +52,10 @@ function toDto(t: Ticket): TicketDto {
     last_update: t.last_update,
     responsavel: t.responsavel,
     assigned_at: t.assigned_at,
+    trello_card_id: t.trello_card_id,
+    trello_card_url: t.trello_card_url,
+    trello_card_name: t.trello_card_name,
+    trello_card_created_at: t.trello_card_created_at,
   };
 }
 
@@ -276,6 +280,26 @@ export class TicketsService {
          WHERE id = $1`,
       [id],
     );
+  }
+
+  async attachTrelloCard(
+    id: number,
+    card: { id: string; url: string; name: string },
+  ): Promise<TicketDto | undefined> {
+    const result = await this.db.query<Ticket>(
+      `UPDATE tickets
+         SET trello_card_id = $1,
+             trello_card_url = $2,
+             trello_card_name = $3,
+             trello_card_created_at = now(),
+             updated_at = now()
+         WHERE id = $4
+         RETURNING *`,
+      [card.id, card.url, card.name, id],
+    );
+
+    const ticket = result.rows[0];
+    return ticket ? toDto(ticket) : undefined;
   }
 
   async upsertMany(tickets: Partial<Ticket>[]): Promise<void> {

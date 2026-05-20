@@ -11,6 +11,10 @@ export interface Ticket {
   responsavel: string | null;
   assigned_at: string | null;
   assignment_override: string | null;
+  trello_card_id: string | null;
+  trello_card_url: string | null;
+  trello_card_name: string | null;
+  trello_card_created_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -27,6 +31,10 @@ export interface TicketDto {
   last_update: string | null;
   responsavel: string | null;
   assigned_at: string | null;
+  trello_card_id: string | null;
+  trello_card_url: string | null;
+  trello_card_name: string | null;
+  trello_card_created_at: string | null;
 }
 
 export interface TicketMonthlyAnalyticsItem {

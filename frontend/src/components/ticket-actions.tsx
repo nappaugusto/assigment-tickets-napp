@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Bot, Link2, UserCheck, UserX } from 'lucide-react'
+import { Bot, ExternalLink, Link2, SquareKanban, UserCheck, UserX } from 'lucide-react'
 import { toast } from 'sonner'
 import { type Ticket } from '@/lib/api'
 import { useAuth } from '@/contexts/auth-context'
@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { AssignAgentCommand } from '@/components/assign-agent-command'
 import { getTicketUrl } from '@/lib/utils'
+import { TrelloCardDialog } from '@/components/trello-card-dialog'
 
 interface TicketActionsProps {
   ticket: Ticket
@@ -20,6 +21,7 @@ interface TicketActionsProps {
 export function TicketActions({ ticket, agentOptions, onAssign, onUnassign, isLoading, onOpenService }: TicketActionsProps) {
   const { user } = useAuth()
   const [open, setOpen] = useState(false)
+  const [trelloOpen, setTrelloOpen] = useState(false)
 
   const copyLink = () => {
     const url = getTicketUrl(ticket.id)
@@ -52,6 +54,20 @@ export function TicketActions({ ticket, agentOptions, onAssign, onUnassign, isLo
         onClick={copyLink}
       >
         <Link2 className="h-3.5 w-3.5" />
+      </Button>
+
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7"
+        title={ticket.trello_card_url ? 'Abrir no Trello' : 'Enviar para o Trello'}
+        onClick={() => setTrelloOpen(true)}
+      >
+        {ticket.trello_card_url ? (
+          <ExternalLink className="h-3.5 w-3.5" />
+        ) : (
+          <SquareKanban className="h-3.5 w-3.5" />
+        )}
       </Button>
 
       {user?.name && (
@@ -97,6 +113,12 @@ export function TicketActions({ ticket, agentOptions, onAssign, onUnassign, isLo
           <UserX className="h-3.5 w-3.5" />
         </Button>
       )}
+
+      <TrelloCardDialog
+        ticket={trelloOpen ? ticket : null}
+        open={trelloOpen}
+        onClose={() => setTrelloOpen(false)}
+      />
     </div>
   )
 }

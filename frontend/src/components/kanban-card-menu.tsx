@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { MoreHorizontal, Link2, UserCheck, UserX, StickyNote, ChevronLeft, User, Bot } from 'lucide-react'
+import { MoreHorizontal, Link2, UserCheck, UserX, StickyNote, ChevronLeft, User, Bot, SquareKanban, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { AssignAgentCommand } from '@/components/assign-agent-command'
@@ -7,6 +7,7 @@ import { type Ticket } from '@/lib/api'
 import { useAuth } from '@/contexts/auth-context'
 import { useTicketsWithNotes } from '@/hooks/use-ticket-note'
 import { getTicketUrl } from '@/lib/utils'
+import { TrelloCardDialog } from '@/components/trello-card-dialog'
 
 interface KanbanCardMenuProps {
   ticket: Ticket
@@ -31,6 +32,7 @@ export function KanbanCardMenu({
 }: KanbanCardMenuProps) {
   const { user } = useAuth()
   const [open, setOpen] = useState(false)
+  const [trelloOpen, setTrelloOpen] = useState(false)
   const [view, setView] = useState<MenuView>('main')
   const { data: ticketsWithNotes } = useTicketsWithNotes()
   const hasNote = ticketsWithNotes?.has(ticket.id) ?? false
@@ -94,6 +96,14 @@ export function KanbanCardMenu({
               Anotações
             </MenuItem>
 
+            <MenuItem
+              icon={ticket.trello_card_url ? <ExternalLink size={13} /> : <SquareKanban size={13} />}
+              onClick={() => { setTrelloOpen(true); close() }}
+              indicator={!!ticket.trello_card_url}
+            >
+              {ticket.trello_card_url ? 'Abrir Trello' : 'Enviar ao Trello'}
+            </MenuItem>
+
             <div className="h-px bg-border/40 my-0.5" />
 
             <MenuItem icon={<Link2 size={13} />} onClick={copyLink}>
@@ -150,6 +160,12 @@ export function KanbanCardMenu({
           </div>
         )}
       </PopoverContent>
+
+      <TrelloCardDialog
+        ticket={trelloOpen ? ticket : null}
+        open={trelloOpen}
+        onClose={() => setTrelloOpen(false)}
+      />
     </Popover>
   )
 }
