@@ -17,6 +17,19 @@ export class McpController {
     return this.mcpMovidesk.listTools();
   }
 
+  @Get('prompts')
+  listPrompts() {
+    return this.mcpMovidesk.listPrompts();
+  }
+
+  @Post('prompts/:name/get')
+  getPrompt(
+    @Param('name') name: string,
+    @Body('arguments') args?: Record<string, unknown>,
+  ) {
+    return this.mcpMovidesk.getPrompt(name, args ?? {});
+  }
+
   @Post('tools/:name/call')
   callTool(
     @Param('name') name: string,

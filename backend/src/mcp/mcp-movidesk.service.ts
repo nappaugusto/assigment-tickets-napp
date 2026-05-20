@@ -45,6 +45,23 @@ export class McpMovideskService implements OnModuleDestroy {
     return client.listTools();
   }
 
+  async listPrompts() {
+    const client = await this.getClient();
+    return client.listPrompts();
+  }
+
+  async getPrompt(name: string, args: JsonRecord = {}) {
+    if (!name?.trim()) {
+      throw new BadRequestException('Nome do prompt MCP é obrigatório.');
+    }
+
+    const client = await this.getClient();
+    return client.getPrompt({
+      name: name.trim(),
+      arguments: args as Record<string, string>,
+    });
+  }
+
   async callTool(name: string, args: JsonRecord = {}) {
     if (!name?.trim()) {
       throw new BadRequestException('Nome da ferramenta MCP é obrigatório.');
