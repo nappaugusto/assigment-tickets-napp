@@ -10,7 +10,7 @@ COPY frontend/package.json frontend/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 COPY frontend/ ./
-RUN pnpm run build
+RUN pnpm exec vite build
 
 # ─────────────────────────────────────────────
 # Stage 2: Build backend (NestJS)
