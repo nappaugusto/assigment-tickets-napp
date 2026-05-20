@@ -212,7 +212,9 @@ export class TrelloService {
         'consultar_ticket',
         { ticketId: ticket.id },
       );
-      const detailsText = this.mcpResultToText(ticketDetails);
+      const detailsText = this.removeSignatureContent(
+        this.mcpResultToText(ticketDetails),
+      );
       if (!detailsText.trim()) {
         throw new ServiceUnavailableException(
           'MCP consultar_ticket não retornou conteúdo para o chamado.',
@@ -311,9 +313,10 @@ export class TrelloService {
 
     const movideskTicket = await this.fetchMovideskTicketDetails(ticketId);
     for (const action of movideskTicket?.actions ?? []) {
-      for (const image of this.extractImageUrlsFromText(
-        `${action.description ?? ''}\n${action.htmlDescription ?? ''}`,
-      )) {
+      const actionText = `${action.description ?? ''}\n${action.htmlDescription ?? ''}`;
+      if (this.looksLikeSignature(actionText)) continue;
+
+      for (const image of this.extractImageUrlsFromText(actionText)) {
         add(image);
       }
 
@@ -371,7 +374,10 @@ export class TrelloService {
         const url = first?.startsWith('http') ? first : second;
         const alt = first?.startsWith('http') ? second : first;
         const resolvedUrl = url ? this.resolveMovideskInlineUrl(url) : '';
-        if (resolvedUrl) {
+        if (
+          resolvedUrl &&
+          !this.looksLikeSignature(`${alt ?? ''} ${resolvedUrl}`)
+        ) {
           result.push({
             name: this.imageNameFromUrl(resolvedUrl, alt),
             url: resolvedUrl,
@@ -394,6 +400,7 @@ export class TrelloService {
       '';
     const name = attachment.fileName || this.imageNameFromUrl(rawUrl);
     if (!this.isImageName(name) && !this.isImageUrl(rawUrl)) return null;
+    if (this.looksLikeSignature(`${name} ${rawUrl}`)) return null;
 
     const url = this.resolveMovideskAttachmentUrl(rawUrl);
     if (!url) return null;
@@ -464,6 +471,61 @@ export class TrelloService {
       .replace(/&gt;/g, '>')
       .replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'");
+  }
+
+  private removeSignatureContent(text: string): string {
+    return text
+      .split(/\n---\n/g)
+      .filter((block) => !this.looksLikeSignature(block))
+      .join('\n---\n')
+      .replace(
+        /!\[[^\]]*(?:napp|assinatura|signature|suporte|plataforma|kaue|kauê)[^\]]*\]\([^)]+\)/gi,
+        '',
+      )
+      .replace(
+        /<img[^>]+(?:napp|assinatura|signature|suporte|plataforma|kaue|kauê)[^>]*>/gi,
+        '',
+      )
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
+  private looksLikeSignature(text: string): boolean {
+    const normalized = this.normalizeForSignatureCheck(text);
+    if (!normalized) return false;
+
+    const hasBrand =
+      normalized.includes('napp solutions') ||
+      normalized.includes('nappsolutions') ||
+      normalized.includes('inteligencia de dados') ||
+      normalized.includes('suporte plataforma');
+
+    const hasAgentIdentity =
+      normalized.includes('kaue torres') ||
+      normalized.includes('kaue.torres') ||
+      normalized.includes('kauetorres') ||
+      normalized.includes('kaue@') ||
+      normalized.includes('nappsolution');
+
+    const hasSignatureHint =
+      normalized.includes('assinatura') ||
+      normalized.includes('signature') ||
+      normalized.includes('cid:') ||
+      normalized.includes('suporte') ||
+      normalized.includes('plataforma');
+
+    return hasBrand || (hasAgentIdentity && hasSignatureHint);
+  }
+
+  private normalizeForSignatureCheck(text: string): string {
+    return this.decodeHtmlEntities(text)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .toLowerCase()
+      .trim();
   }
 
   private splitForTrello(text: string): string[] {
