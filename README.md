@@ -55,6 +55,23 @@ Variáveis obrigatórias:
 | `MAIL_USER`                 | Usuário SMTP                                         |
 | `MAIL_PASS`                 | Senha SMTP                                           |
 | `VITE_MOVIDESK_BASE_URL`    | URL base da instância do Movidesk para abrir tickets |
+| `TRELLO_API_KEY`            | API key da integração Trello                         |
+| `TRELLO_API_TOKEN`          | Token secreto da integração Trello                   |
+| `TRELLO_DEFAULT_BOARD_ID`   | Board padrão para criação de cards                   |
+| `TRELLO_DEFAULT_LIST_ID`    | Lista padrão para criação de cards                   |
+
+> Importante: variáveis `VITE_*` entram no bundle público do frontend. Não coloque
+> tokens, senhas, chaves de API, JWTs ou segredos nelas. Integrações com Movidesk,
+> Trello, SMTP, banco e MCP devem ficar somente no backend.
+
+Antes de enviar para o Bitbucket, rode:
+
+```bash
+make security-scan
+```
+
+Esse target bloqueia `.env` reais versionados, variáveis `VITE_*` com nomes de
+segredo e padrões comuns de tokens hard-coded.
 
 ### MCP Movidesk
 

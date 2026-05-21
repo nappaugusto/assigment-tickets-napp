@@ -136,7 +136,7 @@ function TrelloCardDialogContent({ ticket, open, onClose }: TrelloCardDialogProp
                   className="w-full justify-center"
                   onClick={() => setCreateNew(true)}
                 >
-                  Criar novo card
+                  Enviar novamente ao Trello
                 </Button>
               </div>
             ) : status.data && !status.data.configured ? (
@@ -207,7 +207,7 @@ function TrelloCardDialogContent({ ticket, open, onClose }: TrelloCardDialogProp
             </Button>
             {existingUrl && !createNew && (
               <Button variant="outline" size="sm" onClick={handleOpenExisting}>
-                Abrir antigo
+                Abrir no Trello
               </Button>
             )}
             <Button
@@ -216,7 +216,7 @@ function TrelloCardDialogContent({ ticket, open, onClose }: TrelloCardDialogProp
               disabled={isBusy || selectedListMissing || status.data?.configured === false}
             >
               {createCard.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              {existingUrl && !createNew ? 'Criar novo' : 'Criar card'}
+              {existingUrl ? 'Enviar novamente' : 'Criar card'}
             </Button>
           </div>
         </Dialog.Content>

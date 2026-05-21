@@ -106,6 +106,10 @@ typecheck: ## Verificação de tipos TypeScript
 	cd backend && $(PNPM) exec tsc --noEmit
 	cd frontend && $(PNPM) exec tsc --noEmit
 
+.PHONY: security-scan
+security-scan: ## Verifica vazamento de tokens/segredos antes do push
+	./scripts/security-scan.sh
+
 # ─── Limpeza ──────────────────────────────────────────────────────────────────
 .PHONY: clean
 clean: ## Remove artefatos de build

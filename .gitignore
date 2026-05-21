@@ -1,5 +1,13 @@
-# Environment
+# Environment / secrets
 .env
+.env.*
+!.env.example
+frontend/.env
+frontend/.env.*
+backend/.env
+backend/.env.*
+vendor/**/.env
+vendor/**/.env.*
 
 # SQLite databases
 *.db

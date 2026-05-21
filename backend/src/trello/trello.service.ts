@@ -30,7 +30,13 @@ interface TrelloListResponse {
 }
 
 interface MovideskAttachment {
+  id?: string | number;
+  hash?: string;
+  guid?: string;
+  storageFileGuid?: string;
+  name?: string;
   fileName?: string;
+  originalFileName?: string;
   path?: string;
   url?: string;
   uri?: string;
@@ -38,6 +44,8 @@ interface MovideskAttachment {
   size?: number;
   length?: number;
   contentLength?: number;
+  contentType?: string;
+  type?: string;
 }
 
 interface MovideskAction {
@@ -49,6 +57,8 @@ interface MovideskAction {
 
 interface MovideskTicketDetails {
   actions?: MovideskAction[] | null;
+  attachments?: MovideskAttachment[] | null;
+  customFieldValues?: unknown[] | null;
 }
 
 interface ImageAttachment {
@@ -271,17 +281,7 @@ export class TrelloService {
     const failures: string[] = [];
     for (const image of images) {
       try {
-        await this.client.post(
-          `/cards/${encodeURIComponent(cardId)}/attachments`,
-          null,
-          {
-            params: {
-              ...this.authParams(),
-              name: image.name,
-              url: image.url,
-            },
-          },
-        );
+        await this.uploadImageAttachmentToTrello(cardId, image);
       } catch (error) {
         failures.push(image.name);
         this.logger.warn(
@@ -289,6 +289,7 @@ export class TrelloService {
         );
       }
     }
+    await this.clearCardCover(cardId);
 
     if (failures.length > 0) {
       await this.addCardComments(cardId, [
@@ -297,6 +298,52 @@ export class TrelloService {
           ...failures.map((name) => `- ${name}`),
         ].join('\n'),
       ]);
+    }
+  }
+
+  private async uploadImageAttachmentToTrello(
+    cardId: string,
+    image: ImageAttachment,
+  ) {
+    const response = await this.movideskClient.get<ArrayBuffer>(image.url, {
+      responseType: 'arraybuffer',
+    });
+    const contentType =
+      response.headers['content-type']?.toString() ||
+      this.contentTypeFromImageName(image.name);
+    const form = new FormData();
+    form.append('name', image.name);
+    form.append(
+      'file',
+      new globalThis.Blob([response.data], { type: contentType }),
+      image.name,
+    );
+
+    await this.client.post(
+      `/cards/${encodeURIComponent(cardId)}/attachments`,
+      form,
+      {
+        params: {
+          ...this.authParams(),
+          setCover: false,
+        },
+      },
+    );
+  }
+
+  private async clearCardCover(cardId: string) {
+    try {
+      await this.client.put(
+        `/cards/${encodeURIComponent(cardId)}`,
+        { idAttachmentCover: null },
+        {
+          params: this.authParams(),
+        },
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Erro ao remover capa do card Trello ${cardId}: ${(error as Error).message}`,
+      );
     }
   }
 
@@ -315,6 +362,18 @@ export class TrelloService {
     }
 
     const movideskTicket = await this.fetchMovideskTicketDetails(ticketId);
+    for (const attachment of movideskTicket?.attachments ?? []) {
+      const image = this.imageFromMovideskAttachment(attachment);
+      if (image) add(image);
+    }
+
+    for (const attachment of this.extractMovideskAttachmentsFromUnknown(
+      movideskTicket?.customFieldValues,
+    )) {
+      const image = this.imageFromMovideskAttachment(attachment);
+      if (image) add(image);
+    }
+
     for (const action of movideskTicket?.actions ?? []) {
       const actionText = `${action.description ?? ''}\n${action.htmlDescription ?? ''}`;
       const skipAction =
@@ -330,6 +389,13 @@ export class TrelloService {
       }
 
       for (const attachment of action.attachments ?? []) {
+        const image = this.imageFromMovideskAttachment(attachment, actionText);
+        if (image) add(image);
+      }
+
+      for (const attachment of this.extractMovideskAttachmentsFromUnknown(
+        action,
+      )) {
         const image = this.imageFromMovideskAttachment(attachment, actionText);
         if (image) add(image);
       }
@@ -353,7 +419,7 @@ export class TrelloService {
           params: {
             token,
             id: ticketId,
-            $select: 'id,actions',
+            $select: 'id,actions,attachments,customFieldValues',
             $expand: 'actions',
           },
         },
@@ -407,8 +473,16 @@ export class TrelloService {
       attachment.uri ||
       attachment.href ||
       attachment.path ||
+      attachment.storageFileGuid ||
+      attachment.guid ||
+      attachment.hash ||
+      (attachment.id !== undefined ? String(attachment.id) : '') ||
       '';
-    const name = attachment.fileName || this.imageNameFromUrl(rawUrl);
+    const name =
+      attachment.fileName ||
+      attachment.originalFileName ||
+      attachment.name ||
+      this.imageNameFromUrl(rawUrl);
     if (!this.isImageName(name) && !this.isImageUrl(rawUrl)) return null;
     if (this.looksLikeSignature(`${name} ${rawUrl}`)) return null;
     if (this.looksLikeSignatureImage(attachment, context)) return null;
@@ -417,6 +491,64 @@ export class TrelloService {
     if (!url) return null;
 
     return { name, url };
+  }
+
+  private extractMovideskAttachmentsFromUnknown(
+    value: unknown,
+  ): MovideskAttachment[] {
+    const attachments: MovideskAttachment[] = [];
+    const visited = new WeakSet<object>();
+
+    const visit = (item: unknown) => {
+      if (!item || typeof item !== 'object') return;
+      if (visited.has(item)) return;
+      visited.add(item);
+
+      if (Array.isArray(item)) {
+        for (const child of item) visit(child);
+        return;
+      }
+
+      const record = item as Record<string, unknown>;
+      const nestedAttachments =
+        record.attachments ||
+        record.files ||
+        record.fileAttachments ||
+        record.value ||
+        record.items;
+
+      if (this.looksLikeMovideskAttachment(record)) {
+        attachments.push(record as MovideskAttachment);
+      }
+
+      visit(nestedAttachments);
+    };
+
+    visit(value);
+    return attachments;
+  }
+
+  private looksLikeMovideskAttachment(record: Record<string, unknown>): boolean {
+    const name =
+      this.pickString(record.fileName) ||
+      this.pickString(record.originalFileName) ||
+      this.pickString(record.name);
+    const locator =
+      this.pickString(record.url) ||
+      this.pickString(record.uri) ||
+      this.pickString(record.href) ||
+      this.pickString(record.path) ||
+      this.pickString(record.storageFileGuid) ||
+      this.pickString(record.guid) ||
+      this.pickString(record.hash) ||
+      this.pickString(record.id);
+
+    return Boolean(
+      locator &&
+        (this.isImageName(name) ||
+          this.isImageUrl(locator) ||
+          this.isLikelyMovideskStorageHash(locator)),
+    );
   }
 
   private resolveMovideskInlineUrl(rawUrl: string): string {
@@ -448,7 +580,30 @@ export class TrelloService {
         .replace('{rawPath}', value);
     }
 
+    if (this.isLikelyMovideskStorageHash(value)) {
+      const token =
+        this.getEnv('MOVIDESK_API_TOKEN') || this.getEnv('MOVIDESK_TOKEN');
+      if (!token) return '';
+
+      const apiUrl = this.getEnv('MOVIDESK_API_URL');
+      let origin = 'https://api.movidesk.com';
+      try {
+        if (apiUrl) {
+          const parsed = new URL(apiUrl);
+          origin = `${parsed.protocol}//${parsed.host}`;
+        }
+      } catch {
+        origin = 'https://api.movidesk.com';
+      }
+
+      return `${origin}/public/v1/storage/download?token=${encodeURIComponent(token)}&id=${encodeURIComponent(value)}`;
+    }
+
     return '';
+  }
+
+  private isLikelyMovideskStorageHash(value: string): boolean {
+    return /^[a-z0-9][a-z0-9_-]{16,}$/i.test(value);
   }
 
   private isImageUrl(url: string): boolean {
@@ -473,6 +628,24 @@ export class TrelloService {
     } catch {
       return url.split('/').filter(Boolean).pop() || 'imagem-do-chamado';
     }
+  }
+
+  private contentTypeFromImageName(name: string): string {
+    const normalized = name.toLowerCase();
+    if (normalized.endsWith('.png')) return 'image/png';
+    if (normalized.endsWith('.jpg') || normalized.endsWith('.jpeg')) {
+      return 'image/jpeg';
+    }
+    if (normalized.endsWith('.gif')) return 'image/gif';
+    if (normalized.endsWith('.webp')) return 'image/webp';
+    if (normalized.endsWith('.svg')) return 'image/svg+xml';
+    return 'application/octet-stream';
+  }
+
+  private pickString(value: unknown): string {
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number') return String(value);
+    return '';
   }
 
   private decodeHtmlEntities(text: string): string {
@@ -556,13 +729,17 @@ export class TrelloService {
     const name = attachment.fileName || this.imageNameFromUrl(rawUrl);
     const normalizedName = this.normalizeForSignatureCheck(name);
     const normalizedContext = this.normalizeForSignatureCheck(context);
+    const normalizedRawUrl = this.normalizeForSignatureCheck(rawUrl);
     const size =
       attachment.size ?? attachment.length ?? attachment.contentLength ?? null;
     const looksLikeHashName = /^[a-f0-9]{24,}$/i.test(name.replace(/\W/g, ''));
     const contextHasAgentSignature =
       normalizedContext.includes('napp solutions') ||
+      normalizedContext.includes('nappsolutions') ||
       normalizedContext.includes('kaue torres') ||
+      normalizedContext.includes('kauetorres') ||
       normalizedContext.includes('kaue.torres') ||
+      normalizedContext.includes('kaue@') ||
       normalizedContext.includes('suporte plataforma') ||
       normalizedContext.includes('inteligencia de dados');
 
@@ -570,6 +747,10 @@ export class TrelloService {
       normalizedName.includes('assinatura') ||
       normalizedName.includes('signature') ||
       normalizedName.includes('napp') ||
+      normalizedRawUrl.includes('assinatura') ||
+      normalizedRawUrl.includes('signature') ||
+      normalizedRawUrl.includes('napp') ||
+      normalizedRawUrl.includes('kaue') ||
       (contextHasAgentSignature &&
         (looksLikeHashName || size === null || size < 250000))
     );

@@ -14,6 +14,28 @@ const passport = require('passport');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const PgSession = require('connect-pg-simple')(session);
 
+function isProduction() {
+  return process.env.NODE_ENV === 'production';
+}
+
+function getSessionSecret(): string {
+  const secret = process.env.SESSION_SECRET?.trim();
+  const weakDefaults = new Set([
+    '',
+    'changeme',
+    'changeme-super-secret-key',
+    'change-me',
+  ]);
+
+  if (isProduction() && (!secret || weakDefaults.has(secret))) {
+    throw new Error(
+      'SESSION_SECRET deve ser definido com um valor forte antes de iniciar em produção.',
+    );
+  }
+
+  return secret || 'dev-only-session-secret-change-me';
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
@@ -33,15 +55,22 @@ async function bootstrap() {
   const pool = getDatabasePool();
   console.log('[bootstrap] PostgreSQL pool initialized');
 
+  if (isProduction()) {
+    app.getHttpAdapter().getInstance().set('trust proxy', 1);
+  }
+
   app.use(
     session({
-      secret: process.env.SESSION_SECRET ?? 'changeme',
+      secret: getSessionSecret(),
       resave: false,
       saveUninitialized: false,
       cookie: {
         maxAge: 30 * 24 * 60 * 60 * 1000,
         httpOnly: true,
         sameSite: 'lax',
+        secure:
+          process.env.COOKIE_SECURE === 'true' ||
+          (isProduction() && process.env.COOKIE_SECURE !== 'false'),
       },
       store: new PgSession({
         pool,

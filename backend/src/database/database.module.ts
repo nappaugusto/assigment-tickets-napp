@@ -10,6 +10,19 @@ function readBoolean(value: string | undefined): boolean {
 }
 
 function createPoolConfig(env: NodeJS.ProcessEnv): PoolConfig {
+  const isProduction = env.NODE_ENV === 'production';
+
+  if (
+    isProduction &&
+    !env.DATABASE_URL?.trim() &&
+    (!env.POSTGRES_PASSWORD ||
+      env.POSTGRES_PASSWORD === 'assignment_tickets')
+  ) {
+    throw new Error(
+      'Defina DATABASE_URL ou POSTGRES_PASSWORD forte para rodar em produção.',
+    );
+  }
+
   const ssl =
     readBoolean(env.DATABASE_SSL) || readBoolean(env.POSTGRES_SSL)
       ? { rejectUnauthorized: !readBoolean(env.DATABASE_SSL_ALLOW_SELF_SIGNED) }
