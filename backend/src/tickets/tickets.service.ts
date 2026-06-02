@@ -302,6 +302,23 @@ export class TicketsService {
     return ticket ? toDto(ticket) : undefined;
   }
 
+  async detachTrelloCard(id: number): Promise<TicketDto | undefined> {
+    const result = await this.db.query<Ticket>(
+      `UPDATE tickets
+         SET trello_card_id = NULL,
+             trello_card_url = NULL,
+             trello_card_name = NULL,
+             trello_card_created_at = NULL,
+             updated_at = now()
+         WHERE id = $1
+         RETURNING *`,
+      [id],
+    );
+
+    const ticket = result.rows[0];
+    return ticket ? toDto(ticket) : undefined;
+  }
+
   async upsertMany(tickets: Partial<Ticket>[]): Promise<void> {
     const client = await this.db.connect();
 

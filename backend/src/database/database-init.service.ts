@@ -2,9 +2,48 @@ import { Injectable, Inject, OnModuleInit, Logger } from '@nestjs/common';
 import { Pool } from 'pg';
 import { DB_TOKEN } from './database.module';
 
+function readPositiveInteger(value: string | undefined, fallback: number) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isRetryableConnectionError(error: unknown) {
+  const message = getErrorMessage(error).toLowerCase();
+  const cause =
+    error instanceof Error && error.cause
+      ? getErrorMessage(error.cause).toLowerCase()
+      : '';
+  const code =
+    error && typeof error === 'object' && 'code' in error
+      ? String(error.code)
+      : '';
+
+  return (
+    ['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', '57P01'].includes(
+      code,
+    ) ||
+    message.includes('connection terminated') ||
+    message.includes('connection timeout') ||
+    cause.includes('connection terminated') ||
+    cause.includes('connection timeout')
+  );
+}
+
 @Injectable()
 export class DatabaseInitService implements OnModuleInit {
   private readonly logger = new Logger(DatabaseInitService.name);
+  private readonly maxAttempts = readPositiveInteger(
+    process.env.DATABASE_INIT_MAX_ATTEMPTS,
+    12,
+  );
+  private readonly retryDelayMs = readPositiveInteger(
+    process.env.DATABASE_INIT_RETRY_DELAY_MS,
+    5_000,
+  );
 
   constructor(@Inject(DB_TOKEN) private readonly db: Pool) {}
 
@@ -13,6 +52,28 @@ export class DatabaseInitService implements OnModuleInit {
   }
 
   private async initSchema() {
+    for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
+      try {
+        await this.createSchema();
+        this.logger.log('Database schema initialized');
+        return;
+      } catch (error) {
+        if (
+          attempt >= this.maxAttempts ||
+          !isRetryableConnectionError(error)
+        ) {
+          throw error;
+        }
+
+        this.logger.warn(
+          `Database schema initialization failed (${attempt}/${this.maxAttempts}): ${getErrorMessage(error)}. Retrying in ${this.retryDelayMs}ms`,
+        );
+        await this.sleep(this.retryDelayMs);
+      }
+    }
+  }
+
+  private async createSchema() {
     await this.db.query(`
       CREATE TABLE IF NOT EXISTS users (
         id         INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -111,7 +172,9 @@ export class DatabaseInitService implements OnModuleInit {
 
       CREATE INDEX IF NOT EXISTS tickets_trello_card_id_idx ON tickets (trello_card_id);
     `);
+  }
 
-    this.logger.log('Database schema initialized');
+  private sleep(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

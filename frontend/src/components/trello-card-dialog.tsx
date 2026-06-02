@@ -16,9 +16,10 @@ interface TrelloCardDialogProps {
   ticket: Ticket | null
   open: boolean
   onClose: () => void
+  startCreateNew?: boolean
 }
 
-export function TrelloCardDialog({ ticket, open, onClose }: TrelloCardDialogProps) {
+export function TrelloCardDialog({ ticket, open, onClose, startCreateNew }: TrelloCardDialogProps) {
   if (!ticket) return null
 
   return (
@@ -26,11 +27,17 @@ export function TrelloCardDialog({ ticket, open, onClose }: TrelloCardDialogProp
       ticket={ticket}
       open={open}
       onClose={onClose}
+      startCreateNew={startCreateNew}
     />
   )
 }
 
-function TrelloCardDialogContent({ ticket, open, onClose }: TrelloCardDialogProps & { ticket: Ticket }) {
+function TrelloCardDialogContent({
+  ticket,
+  open,
+  onClose,
+  startCreateNew,
+}: TrelloCardDialogProps & { ticket: Ticket }) {
   const status = useTrelloStatus()
   const canLoadTrello = open && status.data?.configured
   const boards = useTrelloBoards(!!canLoadTrello)
@@ -48,11 +55,11 @@ function TrelloCardDialogContent({ ticket, open, onClose }: TrelloCardDialogProp
 
   useEffect(() => {
     if (!open) return
-    setCreateNew(false)
+    setCreateNew(!!startCreateNew)
     setName(defaultCardName(ticket))
     setBoardId(status.data?.defaultBoardId ?? '')
     setListId(status.data?.defaultListId ?? '')
-  }, [open, status.data?.defaultBoardId, status.data?.defaultListId, ticket])
+  }, [open, startCreateNew, status.data?.defaultBoardId, status.data?.defaultListId, ticket])
 
   useEffect(() => {
     if (!open || !lists.data?.length) return
@@ -231,7 +238,7 @@ function defaultCardName(ticket: Ticket): string {
 
 function defaultCardDescription(ticket: Ticket): string {
   return [
-    `Ticket Movidesk: #${ticket.id}`,
+    `Ticket: #${ticket.id}`,
     '',
     ticket.subject ? `Assunto: ${ticket.subject}` : null,
     ticket.status ? `Status: ${ticket.status}` : null,

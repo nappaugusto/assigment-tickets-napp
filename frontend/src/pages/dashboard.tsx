@@ -50,7 +50,10 @@ export function DashboardPage() {
   const handleSync = () => {
     syncMutation.mutate(undefined, {
       onSuccess: () => toast.success('Tickets sincronizados!'),
-      onError: () => toast.error('Erro ao sincronizar'),
+      onError: (error) =>
+        toast.error(
+          error instanceof Error ? error.message : 'Erro ao sincronizar',
+        ),
     })
   }
 

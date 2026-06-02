@@ -34,6 +34,7 @@ interface MovideskAttachment {
   hash?: string;
   guid?: string;
   storageFileGuid?: string;
+  source?: string;
   name?: string;
   fileName?: string;
   originalFileName?: string;
@@ -50,20 +51,29 @@ interface MovideskAttachment {
 
 interface MovideskAction {
   id?: number;
+  type?: number;
   description?: string;
   htmlDescription?: string;
+  createdDate?: string;
+  createdBy?: {
+    businessName?: string;
+    name?: string;
+  } | null;
   attachments?: MovideskAttachment[] | null;
 }
 
 interface MovideskTicketDetails {
   actions?: MovideskAction[] | null;
   attachments?: MovideskAttachment[] | null;
+  assets?: unknown[] | null;
   customFieldValues?: unknown[] | null;
 }
 
 interface ImageAttachment {
   name: string;
   url: string;
+  source?: string;
+  context?: string;
 }
 
 export interface TrelloCardResponse {
@@ -77,6 +87,10 @@ export interface TrelloCardResponse {
 export class TrelloService {
   private readonly logger = new Logger(TrelloService.name);
   private readonly trelloTextLimit = 16000;
+  private readonly signatureImageHashes = new Set([
+    'addf9f0cec78bae06fb09f2cd65ebb5c',
+    'b279a5cb852c0e241765d0575336ae3f',
+  ]);
   private readonly client: AxiosInstance;
   private readonly movideskClient: AxiosInstance;
 
@@ -179,7 +193,10 @@ export class TrelloService {
     const name = (dto.name || this.defaultCardName(ticket)).trim();
     const mcpContent = await this.buildMcpTicketContent(ticket);
     const [desc, ...comments] = this.splitForTrello(mcpContent);
-    const images = await this.getTicketImages(ticket.id, mcpContent);
+    const images = await this.getTicketImages(ticket.id);
+    this.logger.log(
+      `Ticket #${ticket.id}: ${images.length} anexo(s) de campo do chamado encontrado(s) para o Trello: ${images.map((image) => `${image.name}${image.source ? ` (${image.source})` : ''}`).join(', ') || 'nenhum'}.`,
+    );
 
     const response = await this.client.post<TrelloCardResponse>(
       '/cards',
@@ -214,42 +231,107 @@ export class TrelloService {
     };
   }
 
+  async detachCardFromTicket(ticketId: number): Promise<{ ticket: TicketDto }> {
+    const ticket = await this.ticketsService.findById(ticketId);
+    if (!ticket) {
+      throw new NotFoundException('Ticket não encontrado.');
+    }
+
+    const updatedTicket = await this.ticketsService.detachTrelloCard(ticketId);
+    return { ticket: updatedTicket ?? ticket };
+  }
+
   private async buildMcpTicketContent(ticket: TicketDto): Promise<string> {
     try {
-      await this.mcpMovidesk.getPrompt('resumo_ticket', {
-        ticket_id: String(ticket.id),
-        contexto: this.defaultCardDescription(ticket),
-        formato: 'técnico detalhado',
-      });
-      const ticketDetails = await this.mcpMovidesk.callTool(
-        'consultar_ticket',
-        { ticketId: ticket.id },
-      );
-      const detailsText = this.removeUnwantedSystemContent(
-        this.mcpResultToText(ticketDetails),
-      );
-      if (!detailsText.trim()) {
-        throw new ServiceUnavailableException(
-          'MCP consultar_ticket não retornou conteúdo para o chamado.',
+      let detailsText = '';
+
+      try {
+        await this.mcpMovidesk.getPrompt('resumo_ticket', {
+          ticket_id: String(ticket.id),
+          contexto: this.defaultCardDescription(ticket),
+          formato: 'técnico detalhado',
+        });
+        const ticketDetails = await this.mcpMovidesk.callTool(
+          'consultar_ticket',
+          { ticketId: ticket.id },
+        );
+        detailsText = this.removeUnwantedSystemContent(
+          this.mcpResultToText(ticketDetails),
+        );
+      } catch (error) {
+        this.logger.warn(
+          `MCP consultar_ticket falhou para o ticket #${ticket.id}; usando fallback Movidesk/local: ${(error as Error).message}`,
         );
       }
 
+      if (!detailsText.trim()) {
+        this.logger.warn(
+          `MCP consultar_ticket nao retornou conteudo util para o ticket #${ticket.id}; usando fallback Movidesk/local.`,
+        );
+        return this.buildFallbackTicketContent(ticket);
+      }
+
       return [
-        `# Ticket Movidesk #${ticket.id}`,
+        `# Ticket #${ticket.id}`,
         '',
         this.defaultCardDescription(ticket),
-        `\n## Conteúdo completo do chamado via MCP consultar_ticket\n${detailsText.trim()}`,
+        `\n## Conteudo Completo\n${detailsText.trim()}`,
       ]
         .filter((section): section is string => Boolean(section))
         .join('\n');
     } catch (error) {
       this.logger.error(
-        `Erro ao montar conteúdo MCP do ticket #${ticket.id}: ${(error as Error).message}`,
+        `Erro ao montar conteúdo do ticket #${ticket.id}: ${(error as Error).message}`,
       );
       throw new ServiceUnavailableException(
-        'Não foi possível obter o resumo/conversa do chamado via MCP. O card do Trello não foi criado.',
+        'Não foi possível montar o conteúdo do chamado. O card do Trello não foi criado.',
       );
     }
+  }
+
+  private async buildFallbackTicketContent(ticket: TicketDto): Promise<string> {
+    const movideskTicket = await this.fetchMovideskTicketDetails(ticket.id);
+    const actionText = this.formatMovideskActions(movideskTicket);
+
+    return [
+      `# Ticket #${ticket.id}`,
+      '',
+      this.defaultCardDescription(ticket),
+      actionText ? `\n## Ultimas Interacoes\n${actionText}` : null,
+    ]
+      .filter((section): section is string => Boolean(section))
+      .join('\n');
+  }
+
+  private formatMovideskActions(ticket: MovideskTicketDetails | null): string {
+    if (!ticket?.actions?.length) return '';
+
+    const visibleActions = ticket.actions
+      .filter((action) =>
+        `${action.description ?? ''}\n${action.htmlDescription ?? ''}`.trim(),
+      )
+      .slice(-5);
+
+    return visibleActions
+      .map((action) => this.formatMovideskAction(action))
+      .filter(Boolean)
+      .join('\n\n---\n\n');
+  }
+
+  private formatMovideskAction(action: MovideskAction): string {
+    const body = this.htmlToPlainText(
+      action.description || action.htmlDescription || '',
+    );
+    if (!body) return '';
+
+    const visibility = action.type === 2 ? 'Publica' : 'Interna';
+    const author =
+      action.createdBy?.businessName || action.createdBy?.name || 'Sistema';
+    const date = action.createdDate ? ` em ${action.createdDate}` : '';
+
+    return [`**Acao ${visibility}** - por ${author}${date}`, '', body].join(
+      '\n',
+    );
   }
 
   private async addCardComments(cardId: string, comments: string[]) {
@@ -257,7 +339,7 @@ export class TrelloService {
       const text =
         comments.length === 1
           ? comments[index]
-          : `Conteúdo completo do chamado via MCP (${index + 1}/${comments.length})\n\n${comments[index]}`;
+          : `Conteudo Completo (${index + 1}/${comments.length})\n\n${comments[index]}`;
 
       await this.client.post(
         `/cards/${encodeURIComponent(cardId)}/actions/comments`,
@@ -279,9 +361,11 @@ export class TrelloService {
     if (images.length === 0) return;
 
     const failures: string[] = [];
+    let uploaded = 0;
     for (const image of images) {
       try {
         await this.uploadImageAttachmentToTrello(cardId, image);
+        uploaded += 1;
       } catch (error) {
         failures.push(image.name);
         this.logger.warn(
@@ -290,6 +374,9 @@ export class TrelloService {
       }
     }
     await this.clearCardCover(cardId);
+    this.logger.log(
+      `Card Trello ${cardId}: ${uploaded}/${images.length} imagem(ns) anexada(s).`,
+    );
 
     if (failures.length > 0) {
       await this.addCardComments(cardId, [
@@ -305,26 +392,14 @@ export class TrelloService {
     cardId: string,
     image: ImageAttachment,
   ) {
-    const response = await this.movideskClient.get<ArrayBuffer>(image.url, {
-      responseType: 'arraybuffer',
-    });
-    const contentType =
-      response.headers['content-type']?.toString() ||
-      this.contentTypeFromImageName(image.name);
-    const form = new FormData();
-    form.append('name', image.name);
-    form.append(
-      'file',
-      new globalThis.Blob([response.data], { type: contentType }),
-      image.name,
-    );
-
     await this.client.post(
       `/cards/${encodeURIComponent(cardId)}/attachments`,
-      form,
+      null,
       {
         params: {
           ...this.authParams(),
+          name: image.name,
+          url: image.url,
           setCover: false,
         },
       },
@@ -347,58 +422,25 @@ export class TrelloService {
     }
   }
 
-  private async getTicketImages(
-    ticketId: number,
-    mcpContent: string,
-  ): Promise<ImageAttachment[]> {
+  private async getTicketImages(ticketId: number): Promise<ImageAttachment[]> {
     const images = new Map<string, ImageAttachment>();
     const add = (image: ImageAttachment) => {
       if (!image.url || images.has(image.url)) return;
       images.set(image.url, image);
     };
 
-    for (const image of this.extractImageUrlsFromText(mcpContent)) {
+    const movideskTicket = await this.fetchMovideskTicketDetails(ticketId);
+    for (const attachment of this.extractTicketOpeningAttachments(movideskTicket)) {
+      const image = this.imageFromMovideskAttachment(attachment);
+      if (image) add(image);
+    }
+
+    for (const image of this.extractConversationImages(movideskTicket)) {
       add(image);
     }
 
-    const movideskTicket = await this.fetchMovideskTicketDetails(ticketId);
-    for (const attachment of movideskTicket?.attachments ?? []) {
-      const image = this.imageFromMovideskAttachment(attachment);
-      if (image) add(image);
-    }
-
-    for (const attachment of this.extractMovideskAttachmentsFromUnknown(
-      movideskTicket?.customFieldValues,
-    )) {
-      const image = this.imageFromMovideskAttachment(attachment);
-      if (image) add(image);
-    }
-
-    for (const action of movideskTicket?.actions ?? []) {
-      const actionText = `${action.description ?? ''}\n${action.htmlDescription ?? ''}`;
-      const skipAction =
-        this.looksLikeSignature(actionText) ||
-        this.looksLikeSystemInteraction(actionText);
-
-      if (skipAction) {
-        continue;
-      }
-
-      for (const image of this.extractImageUrlsFromText(actionText)) {
-        add(image);
-      }
-
-      for (const attachment of action.attachments ?? []) {
-        const image = this.imageFromMovideskAttachment(attachment, actionText);
-        if (image) add(image);
-      }
-
-      for (const attachment of this.extractMovideskAttachmentsFromUnknown(
-        action,
-      )) {
-        const image = this.imageFromMovideskAttachment(attachment, actionText);
-        if (image) add(image);
-      }
+    if (images.size === 0) {
+      this.logMovideskAttachmentDiagnostics(ticketId, movideskTicket);
     }
 
     return [...images.values()];
@@ -419,17 +461,33 @@ export class TrelloService {
           params: {
             token,
             id: ticketId,
-            $select: 'id,actions,attachments,customFieldValues',
-            $expand: 'actions',
+            $expand: 'actions,attachments,clients,owner',
           },
         },
       );
       return response.data;
     } catch (error) {
       this.logger.warn(
-        `Erro ao buscar anexos do ticket #${ticketId} no Movidesk: ${(error as Error).message}`,
+        `Erro ao buscar detalhes expandidos do ticket #${ticketId} no Movidesk: ${(error as Error).message}`,
       );
-      return null;
+
+      try {
+        const response = await this.movideskClient.get<MovideskTicketDetails>(
+          apiUrl,
+          {
+            params: {
+              token,
+              id: ticketId,
+            },
+          },
+        );
+        return response.data;
+      } catch (fallbackError) {
+        this.logger.warn(
+          `Erro ao buscar detalhes simples do ticket #${ticketId} no Movidesk: ${(fallbackError as Error).message}`,
+        );
+        return null;
+      }
     }
   }
 
@@ -449,19 +507,63 @@ export class TrelloService {
         const url = first?.startsWith('http') ? first : second;
         const alt = first?.startsWith('http') ? second : first;
         const resolvedUrl = url ? this.resolveMovideskInlineUrl(url) : '';
-        if (
-          resolvedUrl &&
-          !this.looksLikeSignature(`${alt ?? ''} ${resolvedUrl}`)
-        ) {
+        const localContext = this.textWindowAroundMatch(text, match.index);
+        if (resolvedUrl) {
           result.push({
             name: this.imageNameFromUrl(resolvedUrl, alt),
             url: resolvedUrl,
+            context: localContext,
           });
         }
       }
     }
 
     return result;
+  }
+
+  private extractConversationImages(
+    ticket: MovideskTicketDetails | null,
+  ): ImageAttachment[] {
+    if (!ticket?.actions?.length) return [];
+
+    const images: ImageAttachment[] = [];
+    for (const action of ticket.actions) {
+      const actionText = `${action.description ?? ''}\n${action.htmlDescription ?? ''}`;
+      if (this.looksLikeSystemInteraction(actionText)) {
+        continue;
+      }
+
+      const candidates = this.extractImageUrlsFromText(actionText);
+      let accepted = 0;
+      let rejected = 0;
+      for (const image of candidates) {
+        if (this.looksLikeSignatureConversationImage(image, actionText)) {
+          rejected += 1;
+          continue;
+        }
+
+        accepted += 1;
+        images.push({
+          ...image,
+          source: action.id ? `actions.${action.id}` : 'actions',
+        });
+      }
+
+      if (candidates.length > 0) {
+        this.logger.log(
+          `Acao Movidesk ${action.id ?? 'sem-id'}: ${accepted}/${candidates.length} imagem(ns) inline aceita(s), ${rejected} ignorada(s) como assinatura.`,
+        );
+      }
+    }
+
+    return images;
+  }
+
+  private textWindowAroundMatch(text: string, index: number): string {
+    return text
+      .slice(Math.max(0, index - 300), index + 700)
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 
   private imageFromMovideskAttachment(
@@ -482,15 +584,158 @@ export class TrelloService {
       attachment.fileName ||
       attachment.originalFileName ||
       attachment.name ||
-      this.imageNameFromUrl(rawUrl);
-    if (!this.isImageName(name) && !this.isImageUrl(rawUrl)) return null;
+      this.imageNameFromAttachmentLocator(rawUrl);
+    if (
+      !this.isImageName(name) &&
+      !this.isImageUrl(rawUrl) &&
+      !this.isLikelyMovideskStorageHash(rawUrl)
+    ) {
+      return null;
+    }
     if (this.looksLikeSignature(`${name} ${rawUrl}`)) return null;
     if (this.looksLikeSignatureImage(attachment, context)) return null;
 
     const url = this.resolveMovideskAttachmentUrl(rawUrl);
     if (!url) return null;
 
-    return { name, url };
+    return { name, url, source: attachment.source };
+  }
+
+  private extractCustomFieldStorageAttachments(
+    value: unknown,
+  ): MovideskAttachment[] {
+    if (!Array.isArray(value)) return [];
+
+    const attachments: MovideskAttachment[] = [];
+    for (const field of value) {
+      if (!field || typeof field !== 'object') continue;
+      const record = field as Record<string, unknown>;
+      const items = Array.isArray(record.items) ? record.items : [];
+      const customFieldId = this.pickString(record.customFieldId);
+
+      for (const item of items) {
+        if (!item || typeof item !== 'object') continue;
+        const itemRecord = item as Record<string, unknown>;
+        const storageFileGuid = this.pickString(itemRecord.storageFileGuid);
+        if (!storageFileGuid) continue;
+
+        attachments.push({
+          storageFileGuid,
+          fileName:
+            this.pickString(itemRecord.fileName) ||
+            `print-${storageFileGuid.slice(0, 8)}.png`,
+          source: customFieldId
+            ? `customFieldValues.${customFieldId}`
+            : 'customFieldValues',
+        });
+      }
+    }
+
+    return attachments;
+  }
+
+  private extractTicketOpeningAttachments(
+    ticket: MovideskTicketDetails | null,
+  ): MovideskAttachment[] {
+    if (!ticket) return [];
+
+    return [
+      ...this.extractCustomFieldStorageAttachments(ticket.customFieldValues),
+      ...this.extractStorageAttachmentsFromUnknown(ticket.assets, 'assets'),
+      ...this.extractStorageAttachmentsFromUnknown(
+        ticket.attachments,
+        'attachments',
+      ),
+    ];
+  }
+
+  private extractStorageAttachmentsFromUnknown(
+    value: unknown,
+    source: string,
+  ): MovideskAttachment[] {
+    const attachments: MovideskAttachment[] = [];
+    const visited = new WeakSet<object>();
+
+    const visit = (item: unknown, path: string) => {
+      if (!item || typeof item !== 'object') return;
+      if (visited.has(item)) return;
+      visited.add(item);
+
+      if (Array.isArray(item)) {
+        item.forEach((child, index) => visit(child, `${path}.${index}`));
+        return;
+      }
+
+      const record = item as Record<string, unknown>;
+      const storageFileGuid =
+        this.pickString(record.storageFileGuid) ||
+        this.pickString(record.guid) ||
+        this.pickString(record.hash);
+      const locator =
+        storageFileGuid ||
+        this.pickString(record.url) ||
+        this.pickString(record.uri) ||
+        this.pickString(record.href) ||
+        this.pickString(record.path);
+
+      if (locator) {
+        attachments.push({
+          storageFileGuid,
+          guid: storageFileGuid ? undefined : this.pickString(record.guid),
+          hash: storageFileGuid ? undefined : this.pickString(record.hash),
+          url: this.pickString(record.url),
+          uri: this.pickString(record.uri),
+          href: this.pickString(record.href),
+          path: this.pickString(record.path),
+          fileName:
+            this.pickString(record.fileName) ||
+            this.pickString(record.originalFileName) ||
+            this.pickString(record.name) ||
+            (this.isLikelyMovideskStorageHash(locator)
+              ? `print-${locator.slice(0, 8)}.png`
+              : ''),
+          source: path,
+          size:
+            typeof record.size === 'number'
+              ? record.size
+              : typeof record.length === 'number'
+                ? record.length
+                : undefined,
+        });
+      }
+
+      for (const [key, child] of Object.entries(record)) {
+        if (key === 'actions' || key === 'description' || key === 'htmlDescription') {
+          continue;
+        }
+        visit(child, `${path}.${key}`);
+      }
+    };
+
+    visit(value, source);
+    return attachments;
+  }
+
+  private logMovideskAttachmentDiagnostics(
+    ticketId: number,
+    ticket: MovideskTicketDetails | null,
+  ) {
+    if (!ticket) {
+      this.logger.warn(
+        `Ticket #${ticketId}: Movidesk nao retornou detalhes para buscar anexos.`,
+      );
+      return;
+    }
+
+    this.logger.warn(
+      [
+        `Ticket #${ticketId}: nenhum anexo de abertura encontrado para o Trello.`,
+        `keys=${Object.keys(ticket).sort().join(',')}`,
+        `customFieldValues=${Array.isArray(ticket.customFieldValues) ? ticket.customFieldValues.length : 'nao-array'}`,
+        `assets=${Array.isArray(ticket.assets) ? ticket.assets.length : 'nao-array'}`,
+        `attachments=${Array.isArray(ticket.attachments) ? ticket.attachments.length : 'nao-array'}`,
+      ].join(' '),
+    );
   }
 
   private extractMovideskAttachmentsFromUnknown(
@@ -630,16 +875,15 @@ export class TrelloService {
     }
   }
 
-  private contentTypeFromImageName(name: string): string {
-    const normalized = name.toLowerCase();
-    if (normalized.endsWith('.png')) return 'image/png';
-    if (normalized.endsWith('.jpg') || normalized.endsWith('.jpeg')) {
-      return 'image/jpeg';
+  private imageNameFromAttachmentLocator(locator: string): string {
+    const name = this.imageNameFromUrl(locator);
+    if (this.isImageName(name)) return name;
+
+    if (this.isLikelyMovideskStorageHash(locator)) {
+      return `print-${locator.slice(0, 8)}.png`;
     }
-    if (normalized.endsWith('.gif')) return 'image/gif';
-    if (normalized.endsWith('.webp')) return 'image/webp';
-    if (normalized.endsWith('.svg')) return 'image/svg+xml';
-    return 'application/octet-stream';
+
+    return name;
   }
 
   private pickString(value: unknown): string {
@@ -657,23 +901,27 @@ export class TrelloService {
       .replace(/&#39;/g, "'");
   }
 
+  private htmlToPlainText(html: string): string {
+    return this.decodeHtmlEntities(html)
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/p>/gi, '\n')
+      .replace(/<\/li>/gi, '\n')
+      .replace(/<li[^>]*>/gi, '- ')
+      .replace(/<[^>]*>/g, '')
+      .replace(/\u00a0/g, ' ')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
   private removeUnwantedSystemContent(text: string): string {
     return text
       .split(/\n---\n/g)
-      .filter(
-        (block) =>
-          !this.looksLikeSignature(block) &&
-          !this.looksLikeSystemInteraction(block),
-      )
+      .filter((block) => !this.looksLikeSignature(block))
       .join('\n---\n')
-      .replace(
-        /!\[[^\]]*(?:napp|assinatura|signature|suporte|plataforma|kaue|kauê)[^\]]*\]\([^)]+\)/gi,
-        '',
-      )
-      .replace(
-        /<img[^>]+(?:napp|assinatura|signature|suporte|plataforma|kaue|kauê)[^>]*>/gi,
-        '',
-      )
+      .replace(/!\[[^\]]*]\([^)]+\)/g, '')
+      .replace(/<img[^>]*>/gi, '')
+      .replace(/https?:\/\/\S+\/storage\/download\?\S+/gi, '')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
   }
@@ -754,6 +1002,51 @@ export class TrelloService {
       (contextHasAgentSignature &&
         (looksLikeHashName || size === null || size < 250000))
     );
+  }
+
+  private looksLikeSignatureConversationImage(
+    image: ImageAttachment,
+    context: string,
+  ): boolean {
+    const normalizedName = this.normalizeForSignatureCheck(image.name);
+    const urlWithoutQuery = this.urlWithoutQueryString(image.url);
+    if (this.isKnownSignatureImageUrl(urlWithoutQuery)) return true;
+
+    const normalizedUrl = this.normalizeForSignatureCheck(urlWithoutQuery);
+    const imageHasSignatureHint =
+      normalizedName.includes('assinatura') ||
+      normalizedName.includes('signature') ||
+      normalizedName.includes('napp') ||
+      normalizedUrl.includes('assinatura') ||
+      normalizedUrl.includes('signature') ||
+      normalizedUrl.includes('napp') ||
+      normalizedUrl.includes('kaue');
+
+    return imageHasSignatureHint;
+  }
+
+  private isKnownSignatureImageUrl(rawUrl: string): boolean {
+    try {
+      const parsed = new URL(this.decodeHtmlEntities(rawUrl));
+      const fileId = parsed.pathname.split('/').filter(Boolean).pop();
+      return fileId
+        ? this.signatureImageHashes.has(fileId.toLowerCase())
+        : false;
+    } catch {
+      const fileId = rawUrl.split('/').filter(Boolean).pop();
+      return fileId
+        ? this.signatureImageHashes.has(fileId.toLowerCase())
+        : false;
+    }
+  }
+
+  private urlWithoutQueryString(rawUrl: string): string {
+    try {
+      const parsed = new URL(this.decodeHtmlEntities(rawUrl));
+      return `${parsed.origin}${parsed.pathname}`;
+    } catch {
+      return rawUrl.split('?')[0] ?? rawUrl;
+    }
   }
 
   private normalizeForSignatureCheck(text: string): string {
@@ -854,7 +1147,7 @@ export class TrelloService {
     const ticketUrl = `${movideskBaseUrl.replace(/\/$/, '')}/Ticket/Edit/${ticket.id}`;
 
     return [
-      `Ticket Movidesk: #${ticket.id}`,
+      `Ticket: #${ticket.id}`,
       '',
       ticket.subject ? `Assunto: ${ticket.subject}` : null,
       ticket.status ? `Status: ${ticket.status}` : null,

@@ -24,6 +24,7 @@ http.interceptors.response.use(
 const get = <T>(path: string) => http.get<T>(path).then((r) => r.data)
 const post = <T>(path: string, body?: unknown) =>
   http.post<T>(path, body).then((r) => r.data)
+const del = <T>(path: string) => http.delete<T>(path).then((r) => r.data)
 
 // Auth
 export interface AuthUser { id: number; name: string }
@@ -244,4 +245,6 @@ export const trelloApi = {
     get<TrelloList[]>(`/trello/lists${boardId ? `?boardId=${encodeURIComponent(boardId)}` : ''}`),
   createCardFromTicket: (ticketId: number, payload: CreateTrelloCardPayload) =>
     post<{ card: TrelloCard; ticket: Ticket }>(`/trello/tickets/${ticketId}/cards`, payload),
+  detachCardFromTicket: (ticketId: number) =>
+    del<{ ticket: Ticket }>(`/trello/tickets/${ticketId}/card`),
 }

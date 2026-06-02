@@ -65,3 +65,27 @@ export function useCreateTrelloCard(ticketId: number) {
     },
   })
 }
+
+export function useDetachTrelloCard(ticketId: number) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () => trelloApi.detachCardFromTicket(ticketId),
+    onSuccess: ({ ticket }) => {
+      queryClient.setQueryData<TicketsPayload>(TICKETS_QUERY_KEY, (old) => {
+        if (!old) return old
+        const patch = (list: typeof old.tickets) =>
+          list.map((item) => (item.id === ticket.id ? ticket : item))
+        return {
+          ...old,
+          tickets: patch(old.tickets),
+          close_tickets: patch(old.close_tickets),
+        }
+      })
+      toast.success('Ticket voltou para atendimento')
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : 'Erro ao remover da aba Trello')
+    },
+  })
+}

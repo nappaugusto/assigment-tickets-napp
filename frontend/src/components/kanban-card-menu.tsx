@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { MoreHorizontal, Link2, UserCheck, UserX, StickyNote, ChevronLeft, User, Bot, SquareKanban, ExternalLink } from 'lucide-react'
+import { MoreHorizontal, Link2, UserCheck, UserX, StickyNote, ChevronLeft, User, Bot, SquareKanban, ExternalLink, Undo2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { AssignAgentCommand } from '@/components/assign-agent-command'
 import { type Ticket } from '@/lib/api'
 import { useAuth } from '@/contexts/auth-context'
 import { useTicketsWithNotes } from '@/hooks/use-ticket-note'
+import { useDetachTrelloCard } from '@/hooks/use-trello'
 import { getTicketUrl } from '@/lib/utils'
 import { TrelloCardDialog } from '@/components/trello-card-dialog'
 
@@ -33,8 +34,10 @@ export function KanbanCardMenu({
   const { user } = useAuth()
   const [open, setOpen] = useState(false)
   const [trelloOpen, setTrelloOpen] = useState(false)
+  const [trelloCreateNew, setTrelloCreateNew] = useState(false)
   const [view, setView] = useState<MenuView>('main')
   const { data: ticketsWithNotes } = useTicketsWithNotes()
+  const detachTrelloCard = useDetachTrelloCard(ticket.id)
   const hasNote = ticketsWithNotes?.has(ticket.id) ?? false
 
   const close = () => {
@@ -50,6 +53,24 @@ export function KanbanCardMenu({
 
   const assignMe = () => {
     if (user?.name) onAssign(ticket.id, user.name)
+    close()
+  }
+
+  const openTrelloCard = () => {
+    if (ticket.trello_card_url) {
+      window.open(ticket.trello_card_url, '_blank', 'noreferrer')
+    }
+    close()
+  }
+
+  const openTrelloDialog = (createNew = false) => {
+    setTrelloCreateNew(createNew)
+    setTrelloOpen(true)
+    close()
+  }
+
+  const moveBackToInProgress = () => {
+    detachTrelloCard.mutate()
     close()
   }
 
@@ -96,13 +117,37 @@ export function KanbanCardMenu({
               Anotações
             </MenuItem>
 
-            <MenuItem
-              icon={ticket.trello_card_url ? <ExternalLink size={13} /> : <SquareKanban size={13} />}
-              onClick={() => { setTrelloOpen(true); close() }}
-              indicator={!!ticket.trello_card_url}
-            >
-              {ticket.trello_card_url ? 'Abrir Trello' : 'Enviar ao Trello'}
-            </MenuItem>
+            {ticket.trello_card_url ? (
+              <>
+                <MenuItem
+                  icon={<ExternalLink size={13} />}
+                  onClick={openTrelloCard}
+                  indicator
+                >
+                  Abrir Trello
+                </MenuItem>
+                <MenuItem
+                  icon={<SquareKanban size={13} />}
+                  onClick={() => openTrelloDialog(true)}
+                >
+                  Enviar novamente
+                </MenuItem>
+                <MenuItem
+                  icon={<Undo2 size={13} />}
+                  onClick={moveBackToInProgress}
+                  disabled={isLoading || detachTrelloCard.isPending}
+                >
+                  Voltar para atendimento
+                </MenuItem>
+              </>
+            ) : (
+              <MenuItem
+                icon={<SquareKanban size={13} />}
+                onClick={() => openTrelloDialog()}
+              >
+                Enviar ao Trello
+              </MenuItem>
+            )}
 
             <div className="h-px bg-border/40 my-0.5" />
 
@@ -164,7 +209,11 @@ export function KanbanCardMenu({
       <TrelloCardDialog
         ticket={trelloOpen ? ticket : null}
         open={trelloOpen}
-        onClose={() => setTrelloOpen(false)}
+        startCreateNew={trelloCreateNew}
+        onClose={() => {
+          setTrelloOpen(false)
+          setTrelloCreateNew(false)
+        }}
       />
     </Popover>
   )

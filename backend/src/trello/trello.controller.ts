@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Query, UseGuards } from '@nestjs/common';
 import { SessionGuard } from '../auth/auth.guard';
 import { CreateTrelloCardDto } from './trello.dto';
 import { TrelloService } from './trello.service';
@@ -29,5 +29,10 @@ export class TrelloController {
     @Body() dto: CreateTrelloCardDto,
   ) {
     return this.trelloService.createCardFromTicket(ticketId, dto);
+  }
+
+  @Delete('tickets/:ticketId/card')
+  detachCard(@Param('ticketId', ParseIntPipe) ticketId: number) {
+    return this.trelloService.detachCardFromTicket(ticketId);
   }
 }

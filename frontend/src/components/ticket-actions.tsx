@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Bot, ExternalLink, Link2, SquareKanban, UserCheck, UserX } from 'lucide-react'
+import { Bot, ExternalLink, Link2, SquareKanban, Undo2, UserCheck, UserX } from 'lucide-react'
 import { toast } from 'sonner'
 import { type Ticket } from '@/lib/api'
 import { useAuth } from '@/contexts/auth-context'
@@ -8,6 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { AssignAgentCommand } from '@/components/assign-agent-command'
 import { getTicketUrl } from '@/lib/utils'
 import { TrelloCardDialog } from '@/components/trello-card-dialog'
+import { useDetachTrelloCard } from '@/hooks/use-trello'
 
 interface TicketActionsProps {
   ticket: Ticket
@@ -22,6 +23,7 @@ export function TicketActions({ ticket, agentOptions, onAssign, onUnassign, isLo
   const { user } = useAuth()
   const [open, setOpen] = useState(false)
   const [trelloOpen, setTrelloOpen] = useState(false)
+  const detachTrelloCard = useDetachTrelloCard(ticket.id)
 
   const copyLink = () => {
     const url = getTicketUrl(ticket.id)
@@ -69,6 +71,19 @@ export function TicketActions({ ticket, agentOptions, onAssign, onUnassign, isLo
           <SquareKanban className="h-3.5 w-3.5" />
         )}
       </Button>
+
+      {ticket.trello_card_url && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          title="Voltar para atendimento"
+          onClick={() => detachTrelloCard.mutate()}
+          disabled={isLoading || detachTrelloCard.isPending}
+        >
+          <Undo2 className="h-3.5 w-3.5" />
+        </Button>
+      )}
 
       {user?.name && (
         <Button
