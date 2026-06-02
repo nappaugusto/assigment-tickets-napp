@@ -7,6 +7,7 @@ import { type Ticket } from '@/lib/api'
 import { useAuth } from '@/contexts/auth-context'
 import { useTicketsWithNotes } from '@/hooks/use-ticket-note'
 import { useDetachTrelloCard } from '@/hooks/use-trello'
+import { useMcpMovideskActions } from '@/hooks/use-mcp-movidesk'
 import { getTicketUrl } from '@/lib/utils'
 import { TrelloCardDialog } from '@/components/trello-card-dialog'
 
@@ -38,6 +39,7 @@ export function KanbanCardMenu({
   const [view, setView] = useState<MenuView>('main')
   const { data: ticketsWithNotes } = useTicketsWithNotes()
   const detachTrelloCard = useDetachTrelloCard(ticket.id)
+  const mcp = useMcpMovideskActions()
   const hasNote = ticketsWithNotes?.has(ticket.id) ?? false
 
   const close = () => {
@@ -69,9 +71,19 @@ export function KanbanCardMenu({
     close()
   }
 
-  const moveBackToInProgress = () => {
-    detachTrelloCard.mutate()
+  const moveBackToService = async () => {
     close()
+
+    try {
+      await detachTrelloCard.mutateAsync()
+      await mcp.changeStatus(
+        ticket.id,
+        'Em atendimento',
+        'Retorno do Trello para atendimento',
+      )
+    } catch (error) {
+      mcp.handleError(error, 'Não foi possível voltar o ticket para atendimento')
+    }
   }
 
   const handleOpenChange = (next: boolean) => {
@@ -120,6 +132,13 @@ export function KanbanCardMenu({
             {ticket.trello_card_url ? (
               <>
                 <MenuItem
+                  icon={<Undo2 size={13} />}
+                  onClick={() => void moveBackToService()}
+                  disabled={isLoading || detachTrelloCard.isPending || mcp.isPending}
+                >
+                  Voltar para atendimento
+                </MenuItem>
+                <MenuItem
                   icon={<ExternalLink size={13} />}
                   onClick={openTrelloCard}
                   indicator
@@ -131,13 +150,6 @@ export function KanbanCardMenu({
                   onClick={() => openTrelloDialog(true)}
                 >
                   Enviar novamente
-                </MenuItem>
-                <MenuItem
-                  icon={<Undo2 size={13} />}
-                  onClick={moveBackToInProgress}
-                  disabled={isLoading || detachTrelloCard.isPending}
-                >
-                  Voltar para atendimento
                 </MenuItem>
               </>
             ) : (

@@ -9,6 +9,7 @@ import { AssignAgentCommand } from '@/components/assign-agent-command'
 import { getTicketUrl } from '@/lib/utils'
 import { TrelloCardDialog } from '@/components/trello-card-dialog'
 import { useDetachTrelloCard } from '@/hooks/use-trello'
+import { useMcpMovideskActions } from '@/hooks/use-mcp-movidesk'
 
 interface TicketActionsProps {
   ticket: Ticket
@@ -24,6 +25,7 @@ export function TicketActions({ ticket, agentOptions, onAssign, onUnassign, isLo
   const [open, setOpen] = useState(false)
   const [trelloOpen, setTrelloOpen] = useState(false)
   const detachTrelloCard = useDetachTrelloCard(ticket.id)
+  const mcp = useMcpMovideskActions()
 
   const copyLink = () => {
     const url = getTicketUrl(ticket.id)
@@ -32,6 +34,19 @@ export function TicketActions({ ticket, agentOptions, onAssign, onUnassign, isLo
 
   const assignMe = () => {
     if (user?.name) onAssign(ticket.id, user.name)
+  }
+
+  const moveBackToService = async () => {
+    try {
+      await detachTrelloCard.mutateAsync()
+      await mcp.changeStatus(
+        ticket.id,
+        'Em atendimento',
+        'Retorno do Trello para atendimento',
+      )
+    } catch (error) {
+      mcp.handleError(error, 'Não foi possível voltar o ticket para atendimento')
+    }
   }
 
   return (
@@ -78,8 +93,8 @@ export function TicketActions({ ticket, agentOptions, onAssign, onUnassign, isLo
           size="icon"
           className="h-7 w-7"
           title="Voltar para atendimento"
-          onClick={() => detachTrelloCard.mutate()}
-          disabled={isLoading || detachTrelloCard.isPending}
+          onClick={() => void moveBackToService()}
+          disabled={isLoading || detachTrelloCard.isPending || mcp.isPending}
         >
           <Undo2 className="h-3.5 w-3.5" />
         </Button>
