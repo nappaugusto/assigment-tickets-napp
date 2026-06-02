@@ -56,6 +56,16 @@ export class CreateCaseDto {
   priority?: string;
 
   @IsOptional()
+  @IsInt()
+  @Min(1)
+  teamId?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  assigneeId?: number;
+
+  @IsOptional()
   @IsArray()
   @ArrayMaxSize(6)
   @ValidateNested({ each: true })

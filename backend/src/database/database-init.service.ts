@@ -79,8 +79,27 @@ export class DatabaseInitService implements OnModuleInit {
         id         INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
         name       TEXT        NOT NULL,
         username   TEXT        NOT NULL UNIQUE,
+        email      TEXT,
         password   TEXT        NOT NULL,
+        role       TEXT        NOT NULL DEFAULT 'user',
+        google_id  TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+
+      CREATE TABLE IF NOT EXISTS internal_teams (
+        id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+        name        TEXT        NOT NULL UNIQUE,
+        description TEXT,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+
+      CREATE TABLE IF NOT EXISTS internal_team_members (
+        team_id    INTEGER     NOT NULL REFERENCES internal_teams(id) ON DELETE CASCADE,
+        user_id    INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        is_admin   BOOLEAN     NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY(team_id, user_id)
       );
 
       CREATE TABLE IF NOT EXISTS tickets (
@@ -158,6 +177,8 @@ export class DatabaseInitService implements OnModuleInit {
         status         TEXT        NOT NULL DEFAULT 'Novo',
         requester_id   INTEGER     NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
         requester_name TEXT        NOT NULL,
+        team_id        INTEGER     REFERENCES internal_teams(id) ON DELETE SET NULL,
+        team_name      TEXT,
         assignee_id    INTEGER     REFERENCES users(id) ON DELETE SET NULL,
         assignee_name  TEXT,
         created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -178,6 +199,12 @@ export class DatabaseInitService implements OnModuleInit {
 
       CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_unique
         ON users (lower(username));
+      CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_unique
+        ON users (lower(email))
+        WHERE email IS NOT NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS users_google_id_unique
+        ON users (google_id)
+        WHERE google_id IS NOT NULL;
       CREATE INDEX IF NOT EXISTS tickets_status_idx ON tickets (status);
       CREATE INDEX IF NOT EXISTS tickets_opened_at_idx ON tickets (opened_at);
       CREATE INDEX IF NOT EXISTS tickets_responsavel_idx ON tickets (responsavel);
@@ -191,11 +218,21 @@ export class DatabaseInitService implements OnModuleInit {
       CREATE INDEX IF NOT EXISTS internal_cases_status_idx ON internal_cases (status);
       CREATE INDEX IF NOT EXISTS internal_cases_created_at_idx ON internal_cases (created_at);
       CREATE INDEX IF NOT EXISTS internal_cases_requester_idx ON internal_cases (requester_id);
+      CREATE INDEX IF NOT EXISTS internal_cases_team_idx ON internal_cases (team_id);
       CREATE INDEX IF NOT EXISTS internal_case_attachments_case_idx
         ON internal_case_attachments (case_id);
     `);
 
     await this.db.query(`
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS email TEXT,
+        ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user',
+        ADD COLUMN IF NOT EXISTS google_id TEXT;
+
+      ALTER TABLE internal_cases
+        ADD COLUMN IF NOT EXISTS team_id INTEGER REFERENCES internal_teams(id) ON DELETE SET NULL,
+        ADD COLUMN IF NOT EXISTS team_name TEXT;
+
       ALTER TABLE tickets
         ADD COLUMN IF NOT EXISTS trello_card_id TEXT,
         ADD COLUMN IF NOT EXISTS trello_card_url TEXT,
@@ -203,6 +240,13 @@ export class DatabaseInitService implements OnModuleInit {
         ADD COLUMN IF NOT EXISTS trello_card_created_at TIMESTAMPTZ;
 
       CREATE INDEX IF NOT EXISTS tickets_trello_card_id_idx ON tickets (trello_card_id);
+    `);
+
+    await this.db.query(`
+      UPDATE users
+         SET role = 'admin'
+       WHERE id = (SELECT min(id) FROM users)
+         AND NOT EXISTS (SELECT 1 FROM users WHERE role = 'admin');
     `);
   }
 

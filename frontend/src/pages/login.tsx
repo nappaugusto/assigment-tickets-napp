@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useAuth } from '@/contexts/auth-context'
+import { authApi } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -78,6 +79,23 @@ export function LoginPage() {
               {mutation.isPending ? 'Entrando…' : 'Entrar'}
             </Button>
           </form>
+
+          <div className="my-4 flex items-center gap-3">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs text-muted-foreground">ou</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={() => {
+              window.location.href = authApi.googleLoginUrl()
+            }}
+          >
+            Entrar com Google corporativo
+          </Button>
 
           <div className="mt-4 flex flex-col gap-2 text-center text-sm">
             <Link to="/forgot-password" className="text-primary hover:underline">

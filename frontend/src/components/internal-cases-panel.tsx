@@ -16,12 +16,21 @@ import {
   casesApi,
   type CreateInternalCaseAttachmentPayload,
   type InternalCase,
+  type InternalTeam,
+  type InternalUser,
 } from '@/lib/api'
 import {
   useCreateInternalCase,
   useInternalCases,
   useUpdateInternalCaseStatus,
 } from '@/hooks/use-cases'
+import {
+  useAddInternalTeamMember,
+  useCreateInternalTeam,
+  useInternalTeams,
+  useInternalUsers,
+} from '@/hooks/use-internal-teams'
+import { useAuth } from '@/contexts/auth-context'
 import { formatDate } from '@/lib/date-utils'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -50,8 +59,12 @@ function fileToBase64(file: File): Promise<string> {
 export function InternalCasesPanel() {
   const [open, setOpen] = useState(false)
   const casesQuery = useInternalCases()
+  const teamsQuery = useInternalTeams()
+  const usersQuery = useInternalUsers()
   const updateStatus = useUpdateInternalCaseStatus()
   const cases = casesQuery.data?.cases ?? []
+  const teams = teamsQuery.data?.teams ?? []
+  const users = usersQuery.data?.users ?? []
 
   const grouped = useMemo(() => ({
     newCases: cases.filter((item) => item.status === 'Novo'),
@@ -80,23 +93,7 @@ export function InternalCasesPanel() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-border/55 bg-card/45 p-3">
-        <div className="flex items-center gap-2">
-          <Settings className="h-4 w-4 text-primary" />
-          <h3 className="text-sm font-semibold text-foreground">Configurações internas</h3>
-        </div>
-        <div className="mt-3 grid gap-2 text-xs text-muted-foreground md:grid-cols-3">
-          <div className="rounded-lg border border-border/45 bg-background/25 p-3">
-            Status inicial: <strong className="text-foreground">Novo</strong>
-          </div>
-          <div className="rounded-lg border border-border/45 bg-background/25 p-3">
-            Virada automática: <strong className="text-foreground">próximo dia</strong>
-          </div>
-          <div className="rounded-lg border border-border/45 bg-background/25 p-3">
-            Anexos: <strong className="text-foreground">imagens até 5 MB</strong>
-          </div>
-        </div>
-      </section>
+      <InternalSettings teams={teams} users={users} />
 
       <section className="flex flex-col gap-3 rounded-xl border border-border/55 bg-card/62 p-3 shadow-[0_14px_36px_rgba(0,0,0,0.14)]">
         <div className="grid gap-3 xl:grid-cols-2">
@@ -127,7 +124,12 @@ export function InternalCasesPanel() {
         )}
       </section>
 
-      <CreateCaseDialog open={open} onClose={() => setOpen(false)} />
+      <CreateCaseDialog
+        open={open}
+        onClose={() => setOpen(false)}
+        teams={teams}
+        users={users}
+      />
     </section>
   )
 }
@@ -226,6 +228,8 @@ function CaseCard({
       <p className="mt-2 line-clamp-3 text-xs text-muted-foreground">{item.description}</p>
       <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
         <span>Aberto por {item.requester.name}</span>
+        {item.team && <span>Time: {item.team.name}</span>}
+        {item.assignee && <span>Responsável: {item.assignee.name}</span>}
         <span className="inline-flex items-center gap-1">
           <CalendarClock className="h-3.5 w-3.5" />
           {formatDate(item.createdAt)}
@@ -261,12 +265,127 @@ function CaseCard({
   )
 }
 
-function CreateCaseDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+function InternalSettings({ teams, users }: { teams: InternalTeam[]; users: InternalUser[] }) {
+  const { user } = useAuth()
+  const createTeam = useCreateInternalTeam()
+  const addMember = useAddInternalTeamMember()
+  const [teamName, setTeamName] = useState('')
+  const [teamDescription, setTeamDescription] = useState('')
+  const [selectedTeam, setSelectedTeam] = useState('')
+  const [selectedUser, setSelectedUser] = useState('')
+  const [isTeamAdmin, setIsTeamAdmin] = useState(false)
+
+  if (user?.role !== 'admin') {
+    return (
+      <section className="rounded-xl border border-border/55 bg-card/45 p-3">
+        <div className="flex items-center gap-2">
+          <Settings className="h-4 w-4 text-primary" />
+          <h3 className="text-sm font-semibold text-foreground">Times internos</h3>
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {teams.length ? `${teams.length} time(s) configurado(s).` : 'Nenhum time configurado ainda.'}
+        </p>
+      </section>
+    )
+  }
+
+  const submitTeam = () => {
+    if (teamName.trim().length < 2) {
+      toast.error('Informe o nome do time.')
+      return
+    }
+
+    createTeam.mutate(
+      { name: teamName.trim(), description: teamDescription.trim() || undefined },
+      {
+        onSuccess: () => {
+          setTeamName('')
+          setTeamDescription('')
+        },
+      },
+    )
+  }
+
+  const submitMember = () => {
+    const teamId = Number(selectedTeam)
+    const userId = Number(selectedUser)
+    if (!teamId || !userId) {
+      toast.error('Selecione time e usuário.')
+      return
+    }
+
+    addMember.mutate({ teamId, userId, isAdmin: isTeamAdmin })
+  }
+
+  return (
+    <section className="rounded-xl border border-border/55 bg-card/45 p-3">
+      <div className="flex items-center gap-2">
+        <Settings className="h-4 w-4 text-primary" />
+        <h3 className="text-sm font-semibold text-foreground">Configurações internas</h3>
+      </div>
+      <div className="mt-3 grid gap-3 xl:grid-cols-2">
+        <div className="rounded-lg border border-border/45 bg-background/25 p-3">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Criar time</h4>
+          <div className="mt-3 grid gap-2">
+            <Input value={teamName} onChange={(event) => setTeamName(event.target.value)} placeholder="Nome do time" />
+            <Input value={teamDescription} onChange={(event) => setTeamDescription(event.target.value)} placeholder="Descrição opcional" />
+            <Button type="button" size="sm" onClick={submitTeam} disabled={createTeam.isPending}>
+              Criar time
+            </Button>
+          </div>
+        </div>
+        <div className="rounded-lg border border-border/45 bg-background/25 p-3">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Usuários do time</h4>
+          <div className="mt-3 grid gap-2">
+            <select value={selectedTeam} onChange={(event) => setSelectedTeam(event.target.value)} className="h-9 rounded-md border border-input bg-background/70 px-3 text-sm text-foreground outline-none">
+              <option value="">Selecione o time</option>
+              {teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+            </select>
+            <select value={selectedUser} onChange={(event) => setSelectedUser(event.target.value)} className="h-9 rounded-md border border-input bg-background/70 px-3 text-sm text-foreground outline-none">
+              <option value="">Selecione o usuário</option>
+              {users.map((item) => <option key={item.id} value={item.id}>{item.name} ({item.email ?? item.username})</option>)}
+            </select>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <input type="checkbox" checked={isTeamAdmin} onChange={(event) => setIsTeamAdmin(event.target.checked)} className="h-4 w-4" />
+              Admin do time
+            </label>
+            <Button type="button" size="sm" onClick={submitMember} disabled={addMember.isPending}>
+              Adicionar ao time
+            </Button>
+          </div>
+        </div>
+      </div>
+      {teams.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {teams.map((team) => (
+            <Badge key={team.id} variant="outline">
+              {team.name} · {team.members.length}
+            </Badge>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function CreateCaseDialog({
+  open,
+  onClose,
+  teams,
+  users,
+}: {
+  open: boolean
+  onClose: () => void
+  teams: InternalTeam[]
+  users: InternalUser[]
+}) {
   const createCase = useCreateInternalCase()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState('')
   const [priority, setPriority] = useState('Normal')
+  const [teamId, setTeamId] = useState('')
+  const [assigneeId, setAssigneeId] = useState('')
   const [attachments, setAttachments] = useState<AttachmentDraft[]>([])
 
   const reset = () => {
@@ -275,6 +394,8 @@ function CreateCaseDialog({ open, onClose }: { open: boolean; onClose: () => voi
     setDescription('')
     setCategory('')
     setPriority('Normal')
+    setTeamId('')
+    setAssigneeId('')
     setAttachments([])
   }
 
@@ -333,6 +454,8 @@ function CreateCaseDialog({ open, onClose }: { open: boolean; onClose: () => voi
         description: description.trim(),
         category: category.trim() || undefined,
         priority,
+        teamId: teamId ? Number(teamId) : undefined,
+        assigneeId: assigneeId ? Number(assigneeId) : undefined,
         attachments: attachments.map(({ previewUrl: _previewUrl, ...attachment }) => attachment),
       },
       {
@@ -374,6 +497,24 @@ function CreateCaseDialog({ open, onClose }: { open: boolean; onClose: () => voi
                 className="h-9 rounded-md border border-input bg-background/70 px-3 text-sm text-foreground outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring"
               >
                 {PRIORITIES.map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <select
+                value={teamId}
+                onChange={(event) => setTeamId(event.target.value)}
+                className="h-9 rounded-md border border-input bg-background/70 px-3 text-sm text-foreground outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring"
+              >
+                <option value="">Time responsável</option>
+                {teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+              </select>
+              <select
+                value={assigneeId}
+                onChange={(event) => setAssigneeId(event.target.value)}
+                className="h-9 rounded-md border border-input bg-background/70 px-3 text-sm text-foreground outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring"
+              >
+                <option value="">Usuário responsável</option>
+                {users.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
               </select>
             </div>
             <textarea

@@ -26,6 +26,8 @@ interface CaseRow {
   status: string;
   requester_id: number;
   requester_name: string;
+  team_id: number | null;
+  team_name: string | null;
   assignee_id: number | null;
   assignee_name: string | null;
   created_at: string;
@@ -60,6 +62,12 @@ function toCaseDto(row: CaseRow) {
       id: row.requester_id,
       name: row.requester_name,
     },
+    team: row.team_id
+      ? {
+          id: row.team_id,
+          name: row.team_name,
+        }
+      : null,
     assignee: row.assignee_id
       ? {
           id: row.assignee_id,
@@ -152,9 +160,17 @@ export class CasesService {
         `
           INSERT INTO internal_cases (
             title, description, category, priority, status,
-            requester_id, requester_name, created_at, updated_at
+            requester_id, requester_name, team_id, team_name,
+            assignee_id, assignee_name, created_at, updated_at
           )
-          VALUES ($1, $2, $3, $4, 'Novo', $5, $6, now(), now())
+          VALUES (
+            $1, $2, $3, $4, 'Novo', $5, $6,
+            $7,
+            (SELECT name FROM internal_teams WHERE id = $7),
+            $8,
+            (SELECT name FROM users WHERE id = $8),
+            now(), now()
+          )
           RETURNING *, 0 AS attachment_count
         `,
         [
@@ -164,6 +180,8 @@ export class CasesService {
           dto.priority || 'Normal',
           user.id,
           user.name,
+          dto.teamId ?? null,
+          dto.assigneeId ?? null,
         ],
       );
       const created = result.rows[0];

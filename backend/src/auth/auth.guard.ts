@@ -11,6 +11,9 @@ import { Request } from 'express';
 export class LocalAuthGuard extends AuthGuard('local') {}
 
 @Injectable()
+export class GoogleAuthGuard extends AuthGuard('google') {}
+
+@Injectable()
 export class SessionGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const req = context.switchToHttp().getRequest<Request>();

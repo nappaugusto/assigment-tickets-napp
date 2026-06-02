@@ -27,7 +27,7 @@ const post = <T>(path: string, body?: unknown) =>
 const del = <T>(path: string) => http.delete<T>(path).then((r) => r.data)
 
 // Auth
-export interface AuthUser { id: number; name: string }
+export interface AuthUser { id: number; name: string; email: string | null; role: 'admin' | 'user' }
 export interface MeResponse { authenticated: boolean; user: AuthUser | null }
 export interface AuthResponse { success: boolean; user?: AuthUser; error?: string }
 
@@ -38,6 +38,7 @@ export const authApi = {
   register: (name: string, username: string, password: string, confirm_password: string) =>
     post<AuthResponse>('/auth/register', { name, username, password, confirm_password }),
   logout: () => post<{ success: boolean }>('/auth/logout'),
+  googleLoginUrl: () => '/auth/google',
   forgotPassword: (username: string) =>
     post<{ success: boolean; message: string }>('/auth/forgot-password', { username }),
   validateResetToken: (token: string) =>
@@ -274,6 +275,10 @@ export interface InternalCase {
     id: number
     name: string
   }
+  team: {
+    id: number
+    name: string | null
+  } | null
   assignee: {
     id: number
     name: string | null
@@ -296,6 +301,8 @@ export interface CreateInternalCasePayload {
   description: string
   category?: string
   priority?: string
+  teamId?: number
+  assigneeId?: number
   attachments?: CreateInternalCaseAttachmentPayload[]
 }
 
@@ -308,4 +315,38 @@ export const casesApi = {
     http.patch<InternalCase>(`/cases/${id}/status`, { status }).then((r) => r.data),
   attachmentUrl: (caseId: number, attachmentId: number) =>
     `/cases/${caseId}/attachments/${attachmentId}`,
+}
+
+export interface InternalTeamMember {
+  userId: number
+  name: string
+  email: string | null
+  role: 'admin' | 'user'
+  isAdmin: boolean
+}
+
+export interface InternalTeam {
+  id: number
+  name: string
+  description: string | null
+  createdAt: string
+  updatedAt: string
+  members: InternalTeamMember[]
+}
+
+export interface InternalUser {
+  id: number
+  name: string
+  username: string
+  email: string | null
+  role: 'admin' | 'user'
+}
+
+export const internalTeamsApi = {
+  list: () => get<{ teams: InternalTeam[] }>('/internal-teams'),
+  users: () => get<{ users: InternalUser[] }>('/internal-teams/users'),
+  create: (payload: { name: string; description?: string }) =>
+    post<InternalTeam>('/internal-teams', payload),
+  addMember: (teamId: number, payload: { userId: number; isAdmin?: boolean }) =>
+    post<InternalTeam>(`/internal-teams/${teamId}/members`, payload),
 }

@@ -16,6 +16,7 @@ import { McpModule } from './mcp/mcp.module';
 import { PreferencesModule } from './preferences/preferences.module';
 import { TrelloModule } from './trello/trello.module';
 import { CasesModule } from './cases/cases.module';
+import { TeamsModule } from './teams/teams.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { CasesModule } from './cases/cases.module';
     PreferencesModule,
     TrelloModule,
     CasesModule,
+    TeamsModule,
   ],
   providers: [DatabaseInitService],
 })

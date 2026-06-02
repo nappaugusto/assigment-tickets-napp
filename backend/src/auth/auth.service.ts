@@ -40,7 +40,7 @@ export class AuthService {
     return { success: true, user };
   }
 
-  toPublic(user: User): { id: number; name: string } {
-    return { id: user.id, name: user.name };
+  toPublic(user: User): { id: number; name: string; email: string | null; role: string } {
+    return { id: user.id, name: user.name, email: user.email, role: user.role };
   }
 }

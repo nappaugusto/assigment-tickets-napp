@@ -13,7 +13,7 @@ import {
 import type { Request } from 'express';
 import type { Response } from 'express';
 import { AuthService } from './auth.service';
-import { LocalAuthGuard, SessionGuard } from './auth.guard';
+import { GoogleAuthGuard, LocalAuthGuard, SessionGuard } from './auth.guard';
 import { RegisterDto } from './auth.dto';
 import { User } from '../users/user.entity';
 import { UsersService } from '../users/users.service';
@@ -32,6 +32,29 @@ export class AuthController {
       return { authenticated: true, user: this.authService.toPublic(user) };
     }
     return { authenticated: false, user: null };
+  }
+
+  @Get('google')
+  @UseGuards(GoogleAuthGuard)
+  googleLogin() {
+    return { success: true };
+  }
+
+  @Get('google/callback')
+  @UseGuards(GoogleAuthGuard)
+  async googleCallback(@Req() req: Request, @Res() res: Response) {
+    const user = (req as any).user as User;
+
+    await new Promise<void>((resolve, reject) => {
+      (req as any).logIn(user, (err: unknown) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+    await this.saveSession(req);
+    const redirectTo = process.env.APP_BASE_URL || '/';
+    return res.redirect(redirectTo);
   }
 
   private async saveSession(req: Request): Promise<void> {
