@@ -199,12 +199,6 @@ export class DatabaseInitService implements OnModuleInit {
 
       CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_unique
         ON users (lower(username));
-      CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_unique
-        ON users (lower(email))
-        WHERE email IS NOT NULL;
-      CREATE UNIQUE INDEX IF NOT EXISTS users_google_id_unique
-        ON users (google_id)
-        WHERE google_id IS NOT NULL;
       CREATE INDEX IF NOT EXISTS tickets_status_idx ON tickets (status);
       CREATE INDEX IF NOT EXISTS tickets_opened_at_idx ON tickets (opened_at);
       CREATE INDEX IF NOT EXISTS tickets_responsavel_idx ON tickets (responsavel);
@@ -218,7 +212,6 @@ export class DatabaseInitService implements OnModuleInit {
       CREATE INDEX IF NOT EXISTS internal_cases_status_idx ON internal_cases (status);
       CREATE INDEX IF NOT EXISTS internal_cases_created_at_idx ON internal_cases (created_at);
       CREATE INDEX IF NOT EXISTS internal_cases_requester_idx ON internal_cases (requester_id);
-      CREATE INDEX IF NOT EXISTS internal_cases_team_idx ON internal_cases (team_id);
       CREATE INDEX IF NOT EXISTS internal_case_attachments_case_idx
         ON internal_case_attachments (case_id);
     `);
@@ -239,6 +232,13 @@ export class DatabaseInitService implements OnModuleInit {
         ADD COLUMN IF NOT EXISTS trello_card_name TEXT,
         ADD COLUMN IF NOT EXISTS trello_card_created_at TIMESTAMPTZ;
 
+      CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_unique
+        ON users (lower(email))
+        WHERE email IS NOT NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS users_google_id_unique
+        ON users (google_id)
+        WHERE google_id IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS internal_cases_team_idx ON internal_cases (team_id);
       CREATE INDEX IF NOT EXISTS tickets_trello_card_id_idx ON tickets (trello_card_id);
     `);
 
