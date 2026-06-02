@@ -5,6 +5,7 @@ import { RegisterPage } from '@/pages/register'
 import { ForgotPasswordPage } from '@/pages/forgot-password'
 import { ResetPasswordPage } from '@/pages/reset-password'
 import { DashboardPage } from '@/pages/dashboard'
+import { InternalTicketsPage } from '@/pages/internal-tickets'
 
 export default function App() {
   return (
@@ -18,6 +19,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/internos"
+        element={
+          <ProtectedRoute>
+            <InternalTicketsPage />
           </ProtectedRoute>
         }
       />

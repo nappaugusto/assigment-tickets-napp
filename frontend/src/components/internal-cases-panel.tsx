@@ -2,10 +2,12 @@ import { useMemo, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import {
   CalendarClock,
+  CheckCircle2,
   ImagePlus,
   Loader2,
   MessageSquarePlus,
   Paperclip,
+  Settings,
   Send,
   X,
 } from 'lucide-react'
@@ -58,47 +60,94 @@ export function InternalCasesPanel() {
   }), [cases])
 
   return (
-    <section className="flex flex-col gap-3 rounded-xl border border-border/55 bg-card/62 p-3 shadow-[0_14px_36px_rgba(0,0,0,0.14)]">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
-        <div>
-          <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-primary/85">CMC interno</p>
-          <h2 className="text-base font-semibold text-foreground">Chamados próprios</h2>
-        </div>
-        <Button type="button" size="sm" onClick={() => setOpen(true)}>
-          <MessageSquarePlus className="h-4 w-4" />
-          Abrir novo chamado
-        </Button>
+    <section className="flex flex-col gap-4">
+      <div className="grid gap-3 md:grid-cols-3">
+        <SummaryTile label="Novos" value={grouped.newCases.length} tone="primary" />
+        <SummaryTile label="Em atendimento" value={grouped.inService.length} tone="warning" />
+        <SummaryTile label="Resolvidos" value={grouped.done.length} tone="success" />
       </div>
 
-      <div className="grid gap-3 xl:grid-cols-2">
-        <CaseColumn
-          title="Novos chamados"
-          description="Entram como Novo e viram atendimento no próximo dia."
-          cases={grouped.newCases}
-          emptyText="Nenhum chamado novo"
-          actionLabel="Puxar para atendimento"
-          onAction={(item) => updateStatus.mutate({ id: item.id, status: 'Em atendimento' })}
-          isUpdating={updateStatus.isPending}
-        />
-        <CaseColumn
-          title="Em atendimento"
-          description="Fila compartilhada para análise e resolução."
-          cases={grouped.inService}
-          emptyText="Nenhum chamado em atendimento"
-          actionLabel="Resolver"
-          onAction={(item) => updateStatus.mutate({ id: item.id, status: 'Resolvido' })}
-          isUpdating={updateStatus.isPending}
-        />
-      </div>
-
-      {grouped.done.length > 0 && (
-        <div className="rounded-lg border border-border/40 bg-background/20 px-3 py-2 text-xs text-muted-foreground">
-          {grouped.done.length} chamado{grouped.done.length !== 1 ? 's' : ''} resolvido{grouped.done.length !== 1 ? 's' : ''} no histórico.
+      <section className="rounded-xl border border-border/55 bg-card/62 p-3 shadow-[0_14px_36px_rgba(0,0,0,0.14)]">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-primary/85">Central interna</p>
+            <h2 className="text-base font-semibold text-foreground">Fila de chamados</h2>
+          </div>
+          <Button type="button" size="sm" onClick={() => setOpen(true)}>
+            <MessageSquarePlus className="h-4 w-4" />
+            Abrir novo chamado
+          </Button>
         </div>
-      )}
+      </section>
+
+      <section className="rounded-xl border border-border/55 bg-card/45 p-3">
+        <div className="flex items-center gap-2">
+          <Settings className="h-4 w-4 text-primary" />
+          <h3 className="text-sm font-semibold text-foreground">Configurações internas</h3>
+        </div>
+        <div className="mt-3 grid gap-2 text-xs text-muted-foreground md:grid-cols-3">
+          <div className="rounded-lg border border-border/45 bg-background/25 p-3">
+            Status inicial: <strong className="text-foreground">Novo</strong>
+          </div>
+          <div className="rounded-lg border border-border/45 bg-background/25 p-3">
+            Virada automática: <strong className="text-foreground">próximo dia</strong>
+          </div>
+          <div className="rounded-lg border border-border/45 bg-background/25 p-3">
+            Anexos: <strong className="text-foreground">imagens até 5 MB</strong>
+          </div>
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-3 rounded-xl border border-border/55 bg-card/62 p-3 shadow-[0_14px_36px_rgba(0,0,0,0.14)]">
+        <div className="grid gap-3 xl:grid-cols-2">
+          <CaseColumn
+            title="Novos chamados"
+            description="Entram como Novo e viram atendimento no próximo dia."
+            cases={grouped.newCases}
+            emptyText="Nenhum chamado novo"
+            actionLabel="Puxar para atendimento"
+            onAction={(item) => updateStatus.mutate({ id: item.id, status: 'Em atendimento' })}
+            isUpdating={updateStatus.isPending}
+          />
+          <CaseColumn
+            title="Em atendimento"
+            description="Fila compartilhada para análise e resolução."
+            cases={grouped.inService}
+            emptyText="Nenhum chamado em atendimento"
+            actionLabel="Resolver"
+            onAction={(item) => updateStatus.mutate({ id: item.id, status: 'Resolvido' })}
+            isUpdating={updateStatus.isPending}
+          />
+        </div>
+
+        {grouped.done.length > 0 && (
+          <div className="rounded-lg border border-border/40 bg-background/20 px-3 py-2 text-xs text-muted-foreground">
+            {grouped.done.length} chamado{grouped.done.length !== 1 ? 's' : ''} resolvido{grouped.done.length !== 1 ? 's' : ''} no histórico.
+          </div>
+        )}
+      </section>
 
       <CreateCaseDialog open={open} onClose={() => setOpen(false)} />
     </section>
+  )
+}
+
+function SummaryTile({ label, value, tone }: { label: string; value: number; tone: 'primary' | 'warning' | 'success' }) {
+  const color =
+    tone === 'primary'
+      ? 'border-primary/30 bg-primary/10 text-primary'
+      : tone === 'warning'
+        ? 'border-yellow-500/30 bg-yellow-500/10 text-yellow-300'
+        : 'border-green-500/30 bg-green-500/10 text-green-300'
+
+  return (
+    <div className={`rounded-xl border p-4 ${color}`}>
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs font-medium uppercase tracking-wide">{label}</span>
+        <CheckCircle2 className="h-4 w-4 opacity-80" />
+      </div>
+      <strong className="mt-2 block text-2xl text-foreground">{value}</strong>
+    </div>
   )
 }
 
