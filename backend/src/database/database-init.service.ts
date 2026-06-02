@@ -149,6 +149,33 @@ export class DatabaseInitService implements OnModuleInit {
         UNIQUE(user_id, key)
       );
 
+      CREATE TABLE IF NOT EXISTS internal_cases (
+        id             INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+        title          TEXT        NOT NULL,
+        description    TEXT        NOT NULL,
+        category       TEXT,
+        priority       TEXT        NOT NULL DEFAULT 'Normal',
+        status         TEXT        NOT NULL DEFAULT 'Novo',
+        requester_id   INTEGER     NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+        requester_name TEXT        NOT NULL,
+        assignee_id    INTEGER     REFERENCES users(id) ON DELETE SET NULL,
+        assignee_name  TEXT,
+        created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+
+      CREATE TABLE IF NOT EXISTS internal_case_attachments (
+        id              INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+        case_id         INTEGER     NOT NULL REFERENCES internal_cases(id) ON DELETE CASCADE,
+        file_name       TEXT        NOT NULL,
+        content_type    TEXT        NOT NULL,
+        size_bytes      INTEGER     NOT NULL,
+        content         BYTEA       NOT NULL,
+        uploaded_by_id  INTEGER     NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+        uploaded_by_name TEXT       NOT NULL,
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+
       CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_unique
         ON users (lower(username));
       CREATE INDEX IF NOT EXISTS tickets_status_idx ON tickets (status);
@@ -161,6 +188,11 @@ export class DatabaseInitService implements OnModuleInit {
         WHERE content <> '';
       CREATE INDEX IF NOT EXISTS user_preferences_user_key_idx
         ON user_preferences (user_id, key);
+      CREATE INDEX IF NOT EXISTS internal_cases_status_idx ON internal_cases (status);
+      CREATE INDEX IF NOT EXISTS internal_cases_created_at_idx ON internal_cases (created_at);
+      CREATE INDEX IF NOT EXISTS internal_cases_requester_idx ON internal_cases (requester_id);
+      CREATE INDEX IF NOT EXISTS internal_case_attachments_case_idx
+        ON internal_case_attachments (case_id);
     `);
 
     await this.db.query(`

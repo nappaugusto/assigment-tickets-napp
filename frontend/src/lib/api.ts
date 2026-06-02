@@ -248,3 +248,64 @@ export const trelloApi = {
   detachCardFromTicket: (ticketId: number) =>
     del<{ ticket: Ticket }>(`/trello/tickets/${ticketId}/card`),
 }
+
+// Internal Cases
+export interface InternalCaseAttachment {
+  id: number
+  caseId: number
+  fileName: string
+  contentType: string
+  sizeBytes: number
+  uploadedBy: {
+    id: number
+    name: string
+  }
+  createdAt: string
+}
+
+export interface InternalCase {
+  id: number
+  title: string
+  description: string
+  category: string | null
+  priority: string
+  status: 'Novo' | 'Em atendimento' | 'Resolvido' | 'Cancelado'
+  requester: {
+    id: number
+    name: string
+  }
+  assignee: {
+    id: number
+    name: string | null
+  } | null
+  attachmentCount: number
+  createdAt: string
+  updatedAt: string
+  attachments?: InternalCaseAttachment[]
+}
+
+export interface CreateInternalCaseAttachmentPayload {
+  fileName: string
+  contentType: string
+  sizeBytes: number
+  dataBase64: string
+}
+
+export interface CreateInternalCasePayload {
+  title: string
+  description: string
+  category?: string
+  priority?: string
+  attachments?: CreateInternalCaseAttachmentPayload[]
+}
+
+export const casesApi = {
+  list: () => get<{ cases: InternalCase[] }>('/cases'),
+  create: (payload: CreateInternalCasePayload) =>
+    post<InternalCase>('/cases', payload),
+  get: (id: number) => get<InternalCase>(`/cases/${id}`),
+  updateStatus: (id: number, status: InternalCase['status']) =>
+    http.patch<InternalCase>(`/cases/${id}/status`, { status }).then((r) => r.data),
+  attachmentUrl: (caseId: number, attachmentId: number) =>
+    `/cases/${caseId}/attachments/${attachmentId}`,
+}

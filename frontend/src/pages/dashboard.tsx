@@ -14,6 +14,7 @@ import { Toolbar } from '@/components/toolbar'
 import { TicketTable } from '@/components/ticket-table'
 import { KanbanBoard } from '@/components/kanban-board'
 import { McpDeskDrawer } from '@/components/mcp-desk-drawer'
+import { InternalCasesPanel } from '@/components/internal-cases-panel'
 import { formatDate } from '@/lib/date-utils'
 
 export function DashboardPage() {
@@ -130,6 +131,8 @@ export function DashboardPage() {
             analytics={monthlyAnalytics}
             isLoading={isLoading || syncMutation.isPending}
           />
+
+          <InternalCasesPanel />
 
           {viewMode === 'table' ? (
             <TicketTable

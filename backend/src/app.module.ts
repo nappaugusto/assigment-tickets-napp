@@ -15,6 +15,7 @@ import { NotesModule } from './notes/notes.module';
 import { McpModule } from './mcp/mcp.module';
 import { PreferencesModule } from './preferences/preferences.module';
 import { TrelloModule } from './trello/trello.module';
+import { CasesModule } from './cases/cases.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { TrelloModule } from './trello/trello.module';
     McpModule,
     PreferencesModule,
     TrelloModule,
+    CasesModule,
   ],
   providers: [DatabaseInitService],
 })
