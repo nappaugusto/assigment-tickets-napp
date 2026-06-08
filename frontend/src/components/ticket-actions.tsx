@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Bot, ExternalLink, Link2, SquareKanban, Undo2, UserCheck, UserX } from 'lucide-react'
+import { Bot, ExternalLink, Link2, Sparkles, SquareKanban, Undo2, UserCheck, UserX } from 'lucide-react'
 import { toast } from 'sonner'
 import { type Ticket } from '@/lib/api'
 import { useAuth } from '@/contexts/auth-context'
@@ -18,9 +18,10 @@ interface TicketActionsProps {
   onUnassign: (id: number) => void
   isLoading?: boolean
   onOpenService?: () => void
+  onOpenTriage?: () => void
 }
 
-export function TicketActions({ ticket, agentOptions, onAssign, onUnassign, isLoading, onOpenService }: TicketActionsProps) {
+export function TicketActions({ ticket, agentOptions, onAssign, onUnassign, isLoading, onOpenService, onOpenTriage }: TicketActionsProps) {
   const { user } = useAuth()
   const [open, setOpen] = useState(false)
   const [trelloOpen, setTrelloOpen] = useState(false)
@@ -60,6 +61,18 @@ export function TicketActions({ ticket, agentOptions, onAssign, onUnassign, isLo
           onClick={onOpenService}
         >
           <Bot className="h-3.5 w-3.5" />
+        </Button>
+      )}
+
+      {onOpenTriage && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          title="Triagem IA"
+          onClick={onOpenTriage}
+        >
+          <Sparkles className="h-3.5 w-3.5" />
         </Button>
       )}
 

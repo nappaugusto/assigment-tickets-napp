@@ -47,7 +47,9 @@ Variáveis obrigatórias:
 | `DATABASE_URL`              | URL de conexão do PostgreSQL                         |
 | `DATABASE_POOL_MAX`         | Máximo de conexões do pool Postgres                  |
 | `MOVIDESK_API_TOKEN`        | Token da API pública do Movidesk                     |
-| `MOVIDESK_API_QUERY_PARAMS` | Query de busca de tickets, incluindo campos de SLA e fechamento |
+| `MOVIDESK_API_QUERY_PARAMS` | Query de busca de tickets; para todos os times, não filtre por `ownerTeam` |
+| `MOVIDESK_TICKETS_PAGE_SIZE` | Quantidade de tickets por página na sincronização do Movidesk |
+| `MOVIDESK_TICKETS_MAX_PAGES` | Máximo de páginas buscadas por sincronização |
 | `MOVIDESK_DEBUG_DATE_FIELDS` | Quando `true`, loga amostras do payload bruto de datas retornado pela API |
 | `MOVIDESK_DEBUG_DATE_FIELDS_SAMPLE_SIZE` | Quantidade de tickets amostrados nos logs de diagnóstico |
 | `ASSIGNMENT_TEAM_NAMES`     | Nomes das equipes para o seletor de atribuição       |

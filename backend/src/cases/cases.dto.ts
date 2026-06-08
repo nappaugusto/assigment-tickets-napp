@@ -13,7 +13,15 @@ import {
 import { Type } from 'class-transformer';
 
 const ALLOWED_PRIORITIES = ['Baixa', 'Normal', 'Alta', 'Urgente'] as const;
-const ALLOWED_STATUSES = ['Novo', 'Em atendimento', 'Resolvido', 'Cancelado'] as const;
+const ALLOWED_STATUSES = [
+  'Novo',
+  'Em atendimento',
+  'Aguardando solicitante',
+  'Aguardando terceiro',
+  'Resolvido',
+  'Cancelado',
+  'Reaberto',
+] as const;
 
 export class CreateCaseAttachmentDto {
   @IsString()
@@ -76,4 +84,20 @@ export class CreateCaseDto {
 export class UpdateCaseStatusDto {
   @IsIn(ALLOWED_STATUSES)
   status!: string;
+}
+
+export class CreateCaseCommentDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(4000)
+  content!: string;
+}
+
+export class UpdateSlaPolicyDto {
+  @IsIn(ALLOWED_PRIORITIES)
+  priority!: string;
+
+  @IsInt()
+  @Min(1)
+  durationHours!: number;
 }

@@ -111,6 +111,9 @@ export function DashboardPage() {
             agentFilter={filters.agentFilter}
             onAgentChange={filters.setAgentFilter}
             agentOptions={agentOptions}
+            teamFilter={filters.teamFilter}
+            onTeamChange={filters.setTeamFilter}
+            teamOptions={filters.teamOptions}
             onSync={handleSync}
             isSyncing={syncMutation.isPending}
             lastSync={lastSync}
@@ -128,6 +131,7 @@ export function DashboardPage() {
 
           <MonthlyAnalytics
             analytics={monthlyAnalytics}
+            teamOptions={filters.teamOptions}
             isLoading={isLoading || syncMutation.isPending}
           />
 

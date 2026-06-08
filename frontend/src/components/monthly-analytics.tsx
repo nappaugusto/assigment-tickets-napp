@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Award, ChevronDown, ChevronUp, Gauge, PauseCircle, TrendingDown, TrendingUp, type LucideIcon } from 'lucide-react'
+import { AlertTriangle, Award, ChevronDown, ChevronUp, Gauge, PauseCircle, TrendingDown, TrendingUp, Workflow, type LucideIcon } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { preferencesApi, type MonthlyAnalyticsPreference, type TicketMonthlyAnalyticsPayload } from '@/lib/api'
+import { preferencesApi, ticketsApi, type MonthlyAnalyticsPreference, type TicketMonthlyAnalyticsPayload } from '@/lib/api'
 
 interface MonthlyAnalyticsProps {
   analytics?: TicketMonthlyAnalyticsPayload
+  teamOptions: string[]
   isLoading?: boolean
 }
 
@@ -473,8 +474,9 @@ function MonthlyLineChart({ months }: { months: MonthlyChartPoint[] }) {
   )
 }
 
-export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps) {
+export function MonthlyAnalytics({ analytics, teamOptions, isLoading }: MonthlyAnalyticsProps) {
   const queryClient = useQueryClient()
+  const [selectedTeam, setSelectedTeam] = useState('')
   const [isCollapsed, setIsCollapsed] = useState(
     () => readStoredBoolean(MONTHLY_ANALYTICS_COLLAPSED_KEY, MONTHLY_ANALYTICS_COLLAPSED_COOKIE),
   )
@@ -488,6 +490,13 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
     staleTime: Infinity,
   })
 
+  const teamAnalyticsQuery = useQuery({
+    queryKey: ['monthly-analytics', selectedTeam],
+    queryFn: () => ticketsApi.monthlyAnalytics(4, selectedTeam),
+    enabled: selectedTeam !== '',
+    staleTime: 20_000,
+  })
+
   const preferenceMutation = useMutation({
     mutationFn: preferencesApi.saveMonthlyAnalytics,
     onMutate: async (preference) => {
@@ -499,6 +508,9 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
   const storedPreference = preferenceQuery.data
   const resolvedCollapsed = storedPreference?.collapsed ?? isCollapsed
   const resolvedSummaryCollapsed = storedPreference?.summaryCollapsed ?? isSummaryCollapsed
+  const resolvedAnalytics = selectedTeam ? teamAnalyticsQuery.data : analytics
+  const analyticsLoading = isLoading || (selectedTeam !== '' && teamAnalyticsQuery.isLoading)
+  const analyticsTeamLabel = selectedTeam || 'Todas as equipes'
 
   const savePreference = (preference: MonthlyAnalyticsPreference) => {
     writeStoredBoolean(MONTHLY_ANALYTICS_COLLAPSED_KEY, MONTHLY_ANALYTICS_COLLAPSED_COOKIE, preference.collapsed)
@@ -527,14 +539,14 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
   }
 
   const months = useMemo(
-    () => (analytics?.months ?? []).map(toChartPoint).filter((item): item is MonthlyChartPoint => item !== null),
-    [analytics?.months],
+    () => (resolvedAnalytics?.months ?? []).map(toChartPoint).filter((item): item is MonthlyChartPoint => item !== null),
+    [resolvedAnalytics?.months],
   )
 
   const currentMonth = useMemo(() => {
-    const current = analytics?.current_month ? toChartPoint(analytics.current_month) : null
+    const current = resolvedAnalytics?.current_month ? toChartPoint(resolvedAnalytics.current_month) : null
     return current ?? months.at(-1) ?? null
-  }, [analytics, months])
+  }, [resolvedAnalytics, months])
 
   const previousMonth = months.length > 1 ? months.at(-2) : undefined
   const currentSlaRate = getSlaRate(currentMonth)
@@ -552,23 +564,41 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <CardTitle className="text-xl">Visão mensal da equipe</CardTitle>
-            {!resolvedCollapsed && !isLoading && currentMonth && (
+            {!resolvedCollapsed && !analyticsLoading && currentMonth && (
               <p className="mt-1 text-sm text-muted-foreground">
                 Recorte atual: <strong className="text-foreground">{currentMonth.label}</strong>
+                <span className="mx-2 text-muted-foreground/55">|</span>
+                <span>{analyticsTeamLabel}</span>
               </p>
             )}
           </div>
-          {!resolvedCollapsed && !isLoading && (
-            <div className="flex flex-wrap items-center gap-2 rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs text-amber-100">
-              <span>
-                Tickets pausados:{' '}
-                <strong className="tabular-nums text-amber-50">{analytics?.active_sla_paused ?? 0}</strong>
-              </span>
-              <span className="text-amber-200/60">|</span>
-              <span>
-                Pausados no mês:{' '}
-                <strong className="tabular-nums text-amber-50">{currentMonth?.sla_paused ?? 0}</strong>
-              </span>
+          {!resolvedCollapsed && !analyticsLoading && (
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="relative min-w-[220px] flex-1 sm:flex-none">
+                <Workflow className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <select
+                  value={selectedTeam}
+                  onChange={(event) => setSelectedTeam(event.target.value)}
+                  className="h-9 w-full rounded-full border border-input bg-background/70 pl-9 pr-9 text-xs text-foreground shadow-inner outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring"
+                  aria-label="Filtrar visão mensal por equipe"
+                >
+                  <option value="">Todas as equipes</option>
+                  {teamOptions.map((team) => (
+                    <option key={team} value={team}>{team}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex flex-wrap items-center gap-2 rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs text-amber-100">
+                <span>
+                  Tickets pausados:{' '}
+                  <strong className="tabular-nums text-amber-50">{resolvedAnalytics?.active_sla_paused ?? 0}</strong>
+                </span>
+                <span className="text-amber-200/60">|</span>
+                <span>
+                  Pausados no mês:{' '}
+                  <strong className="tabular-nums text-amber-50">{currentMonth?.sla_paused ?? 0}</strong>
+                </span>
+              </div>
             </div>
           )}
           <Button
@@ -585,7 +615,7 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
       </CardHeader>
       {!resolvedCollapsed && !preferenceQuery.isLoading && (
         <CardContent className="space-y-5">
-          {isLoading ? (
+          {analyticsLoading ? (
             <div className="grid gap-3 md:grid-cols-3">
               {[1, 2, 3].map((item) => (
                 <div key={item} className="h-24 animate-pulse rounded-xl bg-muted/40" />
@@ -652,7 +682,7 @@ export function MonthlyAnalytics({ analytics, isLoading }: MonthlyAnalyticsProps
                     />
                     <InsightCard
                       title="SLA pausado"
-                      value={`${analytics?.active_sla_paused ?? 0}`}
+                      value={`${resolvedAnalytics?.active_sla_paused ?? 0}`}
                       helper={`${currentMonth?.sla_paused ?? 0} pausados no mês`}
                       icon={PauseCircle}
                       tone="border-amber-400/20 bg-amber-400/10 text-amber-100"

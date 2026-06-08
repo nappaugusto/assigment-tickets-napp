@@ -427,16 +427,22 @@ export class TicketsService {
 
   async getMonthlyAnalytics(
     months = DEFAULT_ANALYTICS_MONTHS,
+    team?: string,
   ): Promise<TicketMonthlyAnalyticsDto> {
     const rows = await this.getAllRaw();
-    return this.buildMonthlyAnalytics(rows, months);
+    return this.buildMonthlyAnalytics(rows, months, team);
   }
 
   private buildMonthlyAnalytics(
     rows: Ticket[],
     months = DEFAULT_ANALYTICS_MONTHS,
+    team?: string,
   ): TicketMonthlyAnalyticsDto {
     const totalMonths = Math.max(1, Math.min(months, 12));
+    const normalizedTeam = team?.trim() ? normalize(team.trim()) : '';
+    const filteredRows = normalizedTeam
+      ? rows.filter((ticket) => normalize(ticket.ownerTeam ?? '') === normalizedTeam)
+      : rows;
 
     const today = getBrazilDateParts(new Date());
     const anchorMonth = { year: today.year, month: today.month, day: 1 };
@@ -458,7 +464,7 @@ export class TicketsService {
 
     const oldestMonthToKeep = monthKeyFromParts(firstMonth);
 
-    for (const ticket of rows) {
+    for (const ticket of filteredRows) {
       const openedAt = parseCalendarDateParts(ticket.opened_at);
       const dueAt = parseTicketDateTime(ticket.slaSolutionDate);
       const lastUpdate = parseTicketDateTime(ticket.last_update);
@@ -497,7 +503,7 @@ export class TicketsService {
 
     const analyticsMonths = Array.from(monthMap.values());
     const currentMonth = analyticsMonths[analyticsMonths.length - 1] ?? null;
-    const activePausedCount = rows.filter(
+    const activePausedCount = filteredRows.filter(
       (ticket) => isActive(ticket) && !!ticket.slaSolutionDateIsPaused,
     ).length;
 

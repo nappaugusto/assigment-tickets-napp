@@ -209,6 +209,67 @@ export class PeopleService {
     }
   }
 
+  async fetchAssignmentTeams(): Promise<string[]> {
+    const pageSize = Number(
+      this.config.get('MOVIDESK_PERSONS_PAGE_SIZE') ?? 200,
+    );
+    const maxPages = Number(
+      this.config.get('MOVIDESK_PERSONS_MAX_PAGES') ?? 10,
+    );
+    const rawParams =
+      this.config.get<string>('MOVIDESK_PERSONS_QUERY_PARAMS') ?? '';
+
+    const baseParams = this.parseQueryString(rawParams);
+    this.ensureSelectFields(baseParams);
+    baseParams['$top'] = String(pageSize);
+    if (this.token) baseParams['token'] = this.token;
+
+    const teams = new Set<string>();
+
+    for (let page = 0; page < maxPages; page++) {
+      baseParams['$skip'] = String(page * pageSize);
+      const resp = await axios.get(this.apiUrl, {
+        params: baseParams,
+        timeout: 10000,
+        headers: { accept: 'application/json', 'user-agent': 'NestJS/1.0' },
+      });
+
+      const data = Array.isArray(resp.data)
+        ? (resp.data as Record<string, unknown>[])
+        : [];
+      if (data.length === 0) break;
+
+      for (const person of data) {
+        const profileType = Number(person['profileType'] ?? 0);
+        const isActive = person['isActive'];
+        if ((profileType === 1 || profileType === 3) && isActive) {
+          for (const team of this.getTeamNames(person)) {
+            const normalized = team.trim();
+            if (normalized) teams.add(normalized);
+          }
+        }
+      }
+
+      if (data.length < pageSize) break;
+    }
+
+    return Array.from(teams).sort((a, b) => a.localeCompare(b));
+  }
+
+  async fetchAssignmentTeamsForConfiguredScope(): Promise<string[]> {
+    const people = await this.fetchAssignmentPeopleDetails();
+    const teams = new Set<string>();
+
+    for (const person of people) {
+      for (const team of person.teams) {
+        const normalized = team.trim();
+        if (normalized) teams.add(normalized);
+      }
+    }
+
+    return Array.from(teams).sort((a, b) => a.localeCompare(b));
+  }
+
   private parseQueryString(raw: string): Record<string, string> {
     const result: Record<string, string> = {};
     for (const part of raw.split('&')) {

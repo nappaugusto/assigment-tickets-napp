@@ -1,4 +1,4 @@
-import { Bot, CalendarDays, Columns3, RefreshCw, Search, Table2, Users, X } from 'lucide-react'
+import { Bot, CalendarDays, Columns3, RefreshCw, Search, Table2, Users, Workflow, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -14,6 +14,9 @@ interface ToolbarProps {
   agentFilter: string
   onAgentChange: (v: string) => void
   agentOptions: string[]
+  teamFilter: string
+  onTeamChange: (v: string) => void
+  teamOptions: string[]
   onSync: () => void
   isSyncing: boolean
   lastSync?: string
@@ -39,6 +42,9 @@ export function Toolbar({
   agentFilter,
   onAgentChange,
   agentOptions,
+  teamFilter,
+  onTeamChange,
+  teamOptions,
   onSync,
   isSyncing,
   lastSync,
@@ -80,8 +86,8 @@ export function Toolbar({
         </div>
       </div>
 
-      <div className="grid gap-2 lg:grid-cols-[minmax(220px,1fr)_180px_180px_240px_auto]">
-        <label className="relative">
+      <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]">
+        <label className="relative min-w-0 sm:col-span-2 xl:col-span-2">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
@@ -102,7 +108,7 @@ export function Toolbar({
           )}
         </label>
 
-        <label className="relative">
+        <label className="relative min-w-0">
           <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="date"
@@ -113,12 +119,12 @@ export function Toolbar({
           />
         </label>
 
-        <label className="relative">
+        <label className="relative min-w-0">
           <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <select
             value={dateFilterField}
             onChange={(e) => onDateFieldChange(e.target.value as DateFilterField)}
-            className="h-10 w-full rounded-lg border border-input bg-background/70 pl-9 pr-3 text-sm text-foreground shadow-inner outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring"
+            className="h-10 w-full min-w-0 rounded-lg border border-input bg-background/70 pl-9 pr-9 text-sm text-foreground shadow-inner outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring"
             aria-label="Tipo de data para filtro"
           >
             <option value="slaSolutionDate">Vencimento/SLA</option>
@@ -128,12 +134,12 @@ export function Toolbar({
           </select>
         </label>
 
-        <label className="relative">
+        <label className="relative min-w-0">
           <Users className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <select
             value={agentFilter}
             onChange={(e) => onAgentChange(e.target.value)}
-            className="h-10 w-full rounded-lg border border-input bg-background/70 pl-9 pr-3 text-sm text-foreground shadow-inner outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring"
+            className="h-10 w-full min-w-0 rounded-lg border border-input bg-background/70 pl-9 pr-9 text-sm text-foreground shadow-inner outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring"
             aria-label="Filtrar por agente"
           >
             <option value="">Todos os agentes</option>
@@ -143,10 +149,25 @@ export function Toolbar({
           </select>
         </label>
 
+        <label className="relative min-w-0">
+          <Workflow className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <select
+            value={teamFilter}
+            onChange={(e) => onTeamChange(e.target.value)}
+            className="h-10 w-full min-w-0 rounded-lg border border-input bg-background/70 pl-9 pr-9 text-sm text-foreground shadow-inner outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring"
+            aria-label="Filtrar por time"
+          >
+            <option value="">Todos os times</option>
+            {teamOptions.map((team) => (
+              <option key={team} value={team}>{team}</option>
+            ))}
+          </select>
+        </label>
+
         <Button
           type="button"
           variant="outline"
-          className="h-10 rounded-lg px-3 text-xs"
+          className="h-10 w-full rounded-lg px-3 text-xs sm:w-auto"
           onClick={onClearFilters}
           disabled={!hasActiveFilters}
         >

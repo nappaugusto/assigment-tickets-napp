@@ -97,8 +97,11 @@ export interface TicketsPayload {
 export const ticketsApi = {
   refresh: (manual = false) =>
     get<TicketsPayload>(`/tickets/refresh${manual ? '?manual=1' : ''}`),
-  monthlyAnalytics: (months = 4) =>
-    get<TicketMonthlyAnalyticsPayload>(`/tickets/analytics/monthly?months=${months}`),
+  monthlyAnalytics: (months = 4, team?: string) => {
+    const params = new URLSearchParams({ months: String(months) })
+    if (team) params.set('team', team)
+    return get<TicketMonthlyAnalyticsPayload>(`/tickets/analytics/monthly?${params.toString()}`)
+  },
   assign: (id: number, responsavel: string) =>
     http
       .post<{ success: boolean; message: string; ticket_id: number; responsavel: string | null; now: string }>(
@@ -164,6 +167,56 @@ export const mcpMovideskApi = {
     post<McpToolCallResult>(`/mcp/movidesk/tools/${encodeURIComponent(name)}/call`, {
       arguments: args,
     }),
+}
+
+export type TriageStatus = 'pending' | 'running' | 'completed' | 'failed'
+export type TriageDecision = 'accepted' | 'ignored' | 'copied' | 'card_created'
+
+export interface TicketAiTriageResult {
+  tags: string[]
+  priority: 'baixa' | 'media' | 'alta' | 'critica'
+  shouldCreateCard: boolean
+  summary: string
+  symptom: string
+  likelyArea: string
+  reasoning: string
+  technicalHypothesis: string
+  evidence: string[]
+  relevantFiles: Array<{ path: string; reason: string }>
+  nextSteps: string[]
+  suggestedCard: {
+    title: string
+    description: string
+    labels: string[]
+  }
+  customerQuestions: string[]
+  confidence: 'baixa' | 'media' | 'alta'
+}
+
+export interface TicketAiTriage {
+  id: number
+  ticket_id: number
+  provider: string
+  model: string
+  status: TriageStatus
+  triage: TicketAiTriageResult | null
+  input_summary: Record<string, unknown> | null
+  error: string | null
+  decision: string | null
+  created_at: string
+  updated_at: string
+  finished_at: string | null
+}
+
+export const aiTriageApi = {
+  latest: (ticketId: number) =>
+    get<{ triage: TicketAiTriage | null }>(`/tickets/${ticketId}/triage`),
+  start: (ticketId: number) =>
+    post<{ triage: TicketAiTriage }>(`/tickets/${ticketId}/triage`),
+  reanalyze: (ticketId: number) =>
+    post<{ triage: TicketAiTriage }>(`/tickets/${ticketId}/triage/reanalyze`),
+  decision: (id: number, decision: TriageDecision) =>
+    http.patch<{ triage: TicketAiTriage }>(`/triage/${id}/decision`, { decision }).then((r) => r.data),
 }
 
 // Kanban Board
@@ -264,13 +317,37 @@ export interface InternalCaseAttachment {
   createdAt: string
 }
 
+export interface InternalCaseComment {
+  id: number
+  caseId: number
+  author: {
+    id: number
+    name: string
+  }
+  content: string
+  createdAt: string
+}
+
+export interface InternalCaseSlaPolicy {
+  priority: string
+  durationHours: number
+  updatedAt: string
+}
+
 export interface InternalCase {
   id: number
   title: string
   description: string
   category: string | null
   priority: string
-  status: 'Novo' | 'Em atendimento' | 'Resolvido' | 'Cancelado'
+  status:
+    | 'Novo'
+    | 'Em atendimento'
+    | 'Aguardando solicitante'
+    | 'Aguardando terceiro'
+    | 'Resolvido'
+    | 'Cancelado'
+    | 'Reaberto'
   requester: {
     id: number
     name: string
@@ -284,9 +361,36 @@ export interface InternalCase {
     name: string | null
   } | null
   attachmentCount: number
+  commentCount: number
+  dueAt: string | null
+  resolvedAt: string | null
+  isOverdue: boolean
   createdAt: string
   updatedAt: string
   attachments?: InternalCaseAttachment[]
+  comments?: InternalCaseComment[]
+}
+
+export interface InternalCaseDashboard {
+  summary: {
+    newCount: number
+    inServiceCount: number
+    waitingCount: number
+    resolvedCount: number
+    overdueCount: number
+    avgResolutionHours: number | null
+  }
+  byTeam: Array<{ label: string; total: number }>
+  byPriority: Array<{ label: string; total: number }>
+  oldestOpen: Array<{
+    id: number
+    title: string
+    priority: string
+    status: InternalCase['status']
+    dueAt: string | null
+    createdAt: string
+  }>
+  weekly: Array<{ week: string; opened: number; resolved: number }>
 }
 
 export interface CreateInternalCaseAttachmentPayload {
@@ -308,11 +412,17 @@ export interface CreateInternalCasePayload {
 
 export const casesApi = {
   list: () => get<{ cases: InternalCase[] }>('/cases'),
+  dashboard: () => get<InternalCaseDashboard>('/cases/dashboard'),
+  slaPolicies: () => get<{ policies: InternalCaseSlaPolicy[] }>('/cases/sla-policies'),
+  updateSlaPolicy: (payload: { priority: string; durationHours: number }) =>
+    http.patch<InternalCaseSlaPolicy>('/cases/sla-policies', payload).then((r) => r.data),
   create: (payload: CreateInternalCasePayload) =>
     post<InternalCase>('/cases', payload),
   get: (id: number) => get<InternalCase>(`/cases/${id}`),
   updateStatus: (id: number, status: InternalCase['status']) =>
     http.patch<InternalCase>(`/cases/${id}/status`, { status }).then((r) => r.data),
+  addComment: (id: number, content: string) =>
+    post<InternalCaseComment>(`/cases/${id}/comments`, { content }),
   attachmentUrl: (caseId: number, attachmentId: number) =>
     `/cases/${caseId}/attachments/${attachmentId}`,
 }
@@ -347,6 +457,14 @@ export const internalTeamsApi = {
   users: () => get<{ users: InternalUser[] }>('/internal-teams/users'),
   create: (payload: { name: string; description?: string }) =>
     post<InternalTeam>('/internal-teams', payload),
+  syncMovidesk: () =>
+    post<{ teams: InternalTeam[]; syncedCount: number }>('/internal-teams/sync-movidesk'),
+  update: (teamId: number, payload: { name?: string; description?: string }) =>
+    http.patch<InternalTeam>(`/internal-teams/${teamId}`, payload).then((r) => r.data),
+  delete: (teamId: number) =>
+    del<{ success: boolean }>(`/internal-teams/${teamId}`),
   addMember: (teamId: number, payload: { userId: number; isAdmin?: boolean }) =>
     post<InternalTeam>(`/internal-teams/${teamId}/members`, payload),
+  removeMember: (teamId: number, userId: number) =>
+    del<InternalTeam>(`/internal-teams/${teamId}/members/${userId}`),
 }

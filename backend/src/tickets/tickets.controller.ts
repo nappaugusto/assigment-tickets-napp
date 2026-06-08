@@ -66,9 +66,12 @@ export class TicketsController {
 
   @UseGuards(SessionGuard)
   @Get('tickets/analytics/monthly')
-  async monthlyAnalytics(@Query('months') months?: string) {
+  async monthlyAnalytics(
+    @Query('months') months?: string,
+    @Query('team') team?: string,
+  ) {
     const parsedMonths = months ? Number(months) : undefined;
-    return this.ticketsService.getMonthlyAnalytics(parsedMonths);
+    return this.ticketsService.getMonthlyAnalytics(parsedMonths, team);
   }
 
   @Get('app-version')

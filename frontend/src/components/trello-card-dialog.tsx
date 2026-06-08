@@ -17,6 +17,8 @@ interface TrelloCardDialogProps {
   open: boolean
   onClose: () => void
   startCreateNew?: boolean
+  suggestedName?: string
+  suggestedDescription?: string
 }
 
 export function TrelloCardDialog({ ticket, open, onClose, startCreateNew }: TrelloCardDialogProps) {
@@ -37,6 +39,8 @@ function TrelloCardDialogContent({
   open,
   onClose,
   startCreateNew,
+  suggestedName,
+  suggestedDescription,
 }: TrelloCardDialogProps & { ticket: Ticket }) {
   const status = useTrelloStatus()
   const canLoadTrello = open && status.data?.configured
@@ -56,10 +60,10 @@ function TrelloCardDialogContent({
   useEffect(() => {
     if (!open) return
     setCreateNew(!!startCreateNew)
-    setName(defaultCardName(ticket))
+    setName(suggestedName || defaultCardName(ticket))
     setBoardId(status.data?.defaultBoardId ?? '')
     setListId(status.data?.defaultListId ?? '')
-  }, [open, startCreateNew, status.data?.defaultBoardId, status.data?.defaultListId, ticket])
+  }, [open, startCreateNew, status.data?.defaultBoardId, status.data?.defaultListId, suggestedName, ticket])
 
   useEffect(() => {
     if (!open || !lists.data?.length) return
@@ -68,7 +72,10 @@ function TrelloCardDialogContent({
     }
   }, [listId, lists.data, open])
 
-  const description = useMemo(() => defaultCardDescription(ticket), [ticket])
+  const description = useMemo(
+    () => suggestedDescription || defaultCardDescription(ticket),
+    [suggestedDescription, ticket],
+  )
   const existingUrl = ticket.trello_card_url
   const showCreateForm = !existingUrl || createNew
   const selectedListMissing = showCreateForm && !listId

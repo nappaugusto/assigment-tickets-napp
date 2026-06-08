@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { MoreHorizontal, Link2, UserCheck, UserX, StickyNote, ChevronLeft, User, Bot, SquareKanban, ExternalLink, Undo2 } from 'lucide-react'
+import { MoreHorizontal, Link2, UserCheck, UserX, StickyNote, ChevronLeft, User, Bot, SquareKanban, ExternalLink, Undo2, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { AssignAgentCommand } from '@/components/assign-agent-command'
@@ -19,6 +19,7 @@ interface KanbanCardMenuProps {
   isLoading?: boolean
   onOpenNotes: () => void
   onOpenService?: () => void
+  onOpenTriage?: () => void
 }
 
 type MenuView = 'main' | 'assign'
@@ -31,6 +32,7 @@ export function KanbanCardMenu({
   isLoading,
   onOpenNotes,
   onOpenService,
+  onOpenTriage,
 }: KanbanCardMenuProps) {
   const { user } = useAuth()
   const [open, setOpen] = useState(false)
@@ -118,6 +120,15 @@ export function KanbanCardMenu({
                 onClick={() => { onOpenService(); close() }}
               >
                 Atendimento MCP
+              </MenuItem>
+            )}
+
+            {onOpenTriage && (
+              <MenuItem
+                icon={<Sparkles size={13} />}
+                onClick={() => { onOpenTriage(); close() }}
+              >
+                Triagem IA
               </MenuItem>
             )}
 

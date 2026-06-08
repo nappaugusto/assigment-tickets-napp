@@ -29,6 +29,7 @@ interface StoredTicketFilters {
   dateFilter: string
   dateFilterField: DateFilterField
   agentFilter: string
+  teamFilter: string
   quickFilter: QuickFilter
   sortKey: SortKey
   sortDir: SortDir
@@ -39,6 +40,7 @@ const DEFAULT_FILTERS: StoredTicketFilters = {
   dateFilter: '',
   dateFilterField: 'slaSolutionDate',
   agentFilter: '',
+  teamFilter: '',
   quickFilter: 'all',
   sortKey: '',
   sortDir: 'asc',
@@ -64,6 +66,7 @@ function readInitialFilters() {
           ? stored.dateFilterField as DateFilterField
           : DEFAULT_FILTERS.dateFilterField,
         agentFilter: typeof stored.agentFilter === 'string' ? stored.agentFilter : DEFAULT_FILTERS.agentFilter,
+        teamFilter: typeof stored.teamFilter === 'string' ? stored.teamFilter : DEFAULT_FILTERS.teamFilter,
         quickFilter: QUICK_FILTERS.includes(stored.quickFilter as QuickFilter)
           ? stored.quickFilter as QuickFilter
           : DEFAULT_FILTERS.quickFilter,
@@ -139,6 +142,7 @@ export function useTicketFilters(
   const [dateFilter, setDateFilter] = useState(initialFilters.filters.dateFilter)
   const [dateFilterField, setDateFilterField] = useState<DateFilterField>(initialFilters.filters.dateFilterField)
   const [agentFilter, setAgentFilter] = useState(initialFilters.filters.agentFilter)
+  const [teamFilter, setTeamFilter] = useState(initialFilters.filters.teamFilter)
   const [quickFilter, setQuickFilter] = useState<QuickFilter>(initialFilters.filters.quickFilter)
   const [sortKey, setSortKey] = useState<SortKey>(initialFilters.filters.sortKey)
   const [sortDir, setSortDir] = useState<SortDir>(initialFilters.filters.sortDir)
@@ -156,11 +160,12 @@ export function useTicketFilters(
       dateFilter,
       dateFilterField,
       agentFilter,
+      teamFilter,
       quickFilter,
       sortKey,
       sortDir,
     }))
-  }, [agentFilter, dateFilter, dateFilterField, keepFilters, quickFilter, search, sortDir, sortKey])
+  }, [agentFilter, dateFilter, dateFilterField, keepFilters, quickFilter, search, sortDir, sortKey, teamFilter])
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -176,6 +181,7 @@ export function useTicketFilters(
     setDateFilter('')
     setDateFilterField('slaSolutionDate')
     setAgentFilter('')
+    setTeamFilter('')
     setQuickFilter('all')
   }
 
@@ -201,6 +207,12 @@ export function useTicketFilters(
     if (agentFilter) {
       filtered = filtered.filter(
         (t) => normalizeText(t.responsavel ?? '') === normalizeText(agentFilter),
+      )
+    }
+
+    if (teamFilter) {
+      filtered = filtered.filter(
+        (t) => normalizeText(t.ownerTeam ?? '') === normalizeText(teamFilter),
       )
     }
 
@@ -236,7 +248,7 @@ export function useTicketFilters(
     }
 
     return filtered
-  }, [agentFilter, dateFilter, dateFilterField, quickFilter, searchTerms, sortDir, sortKey])
+  }, [agentFilter, dateFilter, dateFilterField, quickFilter, searchTerms, sortDir, sortKey, teamFilter])
 
   const filteredTickets = useMemo(() => filterTickets(tickets), [tickets, filterTickets])
   const filteredNewTickets = useMemo(() => filterTickets(newTickets), [newTickets, filterTickets])
@@ -245,6 +257,7 @@ export function useTicketFilters(
     search.trim(),
     dateFilter,
     agentFilter,
+    teamFilter,
     quickFilter !== 'all' ? quickFilter : '',
   ].filter(Boolean).length
 
@@ -254,11 +267,18 @@ export function useTicketFilters(
     return Array.from(names).sort((a, b) => a.localeCompare(b))
   }, [allTickets])
 
+  const teamOptions = useMemo(() => {
+    const names = new Set<string>()
+    allTickets.forEach((t) => { if (t.ownerTeam) names.add(t.ownerTeam) })
+    return Array.from(names).sort((a, b) => a.localeCompare(b))
+  }, [allTickets])
+
   return {
     search, setSearch,
     dateFilter, setDateFilter,
     dateFilterField, setDateFilterField,
     agentFilter, setAgentFilter,
+    teamFilter, setTeamFilter,
     quickFilter, setQuickFilter,
     activeFilterCount,
     hasActiveFilters: activeFilterCount > 0,
@@ -268,5 +288,6 @@ export function useTicketFilters(
     filteredTickets,
     filteredNewTickets,
     agentOptions,
+    teamOptions,
   }
 }

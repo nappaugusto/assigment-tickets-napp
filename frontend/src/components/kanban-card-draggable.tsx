@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { TicketActions } from '@/components/ticket-actions'
 import { TicketNoteDrawer } from '@/components/ticket-note-drawer'
 import { TicketServiceDrawer } from '@/components/ticket-service-drawer'
+import { TicketAiTriageDrawer } from '@/components/ticket-ai-triage-drawer'
 import { useTicketsWithNotes } from '@/hooks/use-ticket-note'
 import { getTicketUrl } from '@/lib/utils'
 
@@ -47,6 +48,7 @@ export function KanbanCardDraggable({
 }: KanbanCardDraggableProps) {
   const [noteOpen, setNoteOpen] = useState(false)
   const [serviceOpen, setServiceOpen] = useState(false)
+  const [triageOpen, setTriageOpen] = useState(false)
   const [moveOpen, setMoveOpen] = useState(false)
   const sla = getSlaStatus(ticket.slaSolutionDate, ticket.slaSolutionDateIsPaused)
   const slaLabel = getTimeUntilSla(ticket.slaSolutionDate)
@@ -176,6 +178,7 @@ export function KanbanCardDraggable({
             onUnassign={onUnassign}
             isLoading={isLoading}
             onOpenService={() => setServiceOpen(true)}
+            onOpenTriage={() => setTriageOpen(true)}
           />
         </div>
           {!isDragOverlay && (
@@ -206,6 +209,11 @@ export function KanbanCardDraggable({
         open={serviceOpen}
         onClose={() => setServiceOpen(false)}
         agentOptions={agentOptions}
+      />
+      <TicketAiTriageDrawer
+        ticket={triageOpen ? ticket : null}
+        open={triageOpen}
+        onClose={() => setTriageOpen(false)}
       />
     </>
   )

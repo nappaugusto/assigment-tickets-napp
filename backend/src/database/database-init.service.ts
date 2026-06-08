@@ -159,6 +159,21 @@ export class DatabaseInitService implements OnModuleInit {
         UNIQUE(user_id, ticket_id)
       );
 
+      CREATE TABLE IF NOT EXISTS ticket_ai_triages (
+        id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+        ticket_id   INTEGER     NOT NULL,
+        provider    TEXT        NOT NULL DEFAULT 'claude',
+        model       TEXT        NOT NULL,
+        status      TEXT        NOT NULL DEFAULT 'pending',
+        triage      JSONB,
+        input_summary JSONB,
+        error       TEXT,
+        decision    TEXT,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+        finished_at TIMESTAMPTZ
+      );
+
       CREATE TABLE IF NOT EXISTS user_preferences (
         id         INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
         user_id    INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -175,6 +190,8 @@ export class DatabaseInitService implements OnModuleInit {
         category       TEXT,
         priority       TEXT        NOT NULL DEFAULT 'Normal',
         status         TEXT        NOT NULL DEFAULT 'Novo',
+        due_at         TIMESTAMPTZ,
+        resolved_at    TIMESTAMPTZ,
         requester_id   INTEGER     NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
         requester_name TEXT        NOT NULL,
         team_id        INTEGER     REFERENCES internal_teams(id) ON DELETE SET NULL,
@@ -197,10 +214,26 @@ export class DatabaseInitService implements OnModuleInit {
         created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
       );
 
+      CREATE TABLE IF NOT EXISTS internal_case_comments (
+        id              INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+        case_id         INTEGER     NOT NULL REFERENCES internal_cases(id) ON DELETE CASCADE,
+        author_id       INTEGER     NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+        author_name     TEXT        NOT NULL,
+        content         TEXT        NOT NULL,
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+
+      CREATE TABLE IF NOT EXISTS internal_case_sla_policies (
+        priority        TEXT        PRIMARY KEY,
+        duration_hours  INTEGER     NOT NULL,
+        updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+
       CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_unique
         ON users (lower(username));
       CREATE INDEX IF NOT EXISTS tickets_status_idx ON tickets (status);
       CREATE INDEX IF NOT EXISTS tickets_opened_at_idx ON tickets (opened_at);
+      CREATE INDEX IF NOT EXISTS ticket_ai_triages_ticket_id_idx ON ticket_ai_triages (ticket_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS tickets_responsavel_idx ON tickets (responsavel);
       CREATE INDEX IF NOT EXISTS tickets_updated_at_idx ON tickets (updated_at);
       CREATE INDEX IF NOT EXISTS password_resets_expires_at_idx ON password_resets (expires_at);
@@ -214,6 +247,8 @@ export class DatabaseInitService implements OnModuleInit {
       CREATE INDEX IF NOT EXISTS internal_cases_requester_idx ON internal_cases (requester_id);
       CREATE INDEX IF NOT EXISTS internal_case_attachments_case_idx
         ON internal_case_attachments (case_id);
+      CREATE INDEX IF NOT EXISTS internal_case_comments_case_idx
+        ON internal_case_comments (case_id);
     `);
 
     await this.db.query(`
@@ -224,7 +259,9 @@ export class DatabaseInitService implements OnModuleInit {
 
       ALTER TABLE internal_cases
         ADD COLUMN IF NOT EXISTS team_id INTEGER REFERENCES internal_teams(id) ON DELETE SET NULL,
-        ADD COLUMN IF NOT EXISTS team_name TEXT;
+        ADD COLUMN IF NOT EXISTS team_name TEXT,
+        ADD COLUMN IF NOT EXISTS due_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
 
       ALTER TABLE tickets
         ADD COLUMN IF NOT EXISTS trello_card_id TEXT,
@@ -239,7 +276,24 @@ export class DatabaseInitService implements OnModuleInit {
         ON users (google_id)
         WHERE google_id IS NOT NULL;
       CREATE INDEX IF NOT EXISTS internal_cases_team_idx ON internal_cases (team_id);
+      CREATE INDEX IF NOT EXISTS internal_cases_due_at_idx ON internal_cases (due_at);
       CREATE INDEX IF NOT EXISTS tickets_trello_card_id_idx ON tickets (trello_card_id);
+    `);
+
+    await this.db.query(`
+      INSERT INTO internal_case_sla_policies (priority, duration_hours)
+      VALUES
+        ('Urgente', 8),
+        ('Alta', 24),
+        ('Normal', 48),
+        ('Baixa', 120)
+      ON CONFLICT(priority) DO NOTHING;
+
+      UPDATE internal_cases c
+         SET due_at = c.created_at + make_interval(hours => p.duration_hours)
+        FROM internal_case_sla_policies p
+       WHERE c.due_at IS NULL
+         AND c.priority = p.priority;
     `);
 
     await this.db.query(`

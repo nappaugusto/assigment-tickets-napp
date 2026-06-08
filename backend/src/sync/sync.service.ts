@@ -19,6 +19,8 @@ export class SyncService {
   private readonly queryParams: Record<string, string>;
   private readonly debugDateFields: boolean;
   private readonly debugDateFieldsSampleSize: number;
+  private readonly pageSize: number;
+  private readonly maxPages: number;
 
   constructor(
     private readonly config: ConfigService,
@@ -34,6 +36,14 @@ export class SyncService {
     this.debugDateFieldsSampleSize = Math.max(
       1,
       Number(config.get('MOVIDESK_DEBUG_DATE_FIELDS_SAMPLE_SIZE') ?? 5),
+    );
+    this.pageSize = Math.max(
+      1,
+      Number(config.get('MOVIDESK_TICKETS_PAGE_SIZE') ?? 300),
+    );
+    this.maxPages = Math.max(
+      1,
+      Number(config.get('MOVIDESK_TICKETS_MAX_PAGES') ?? 10),
     );
 
     // Parse query params from env string
@@ -56,6 +66,13 @@ export class SyncService {
       !result['$select'].split(',').includes('lastUpdate')
     ) {
       result['$select'] = `${result['$select']},lastUpdate`;
+    }
+
+    if (
+      result['$select'] &&
+      !result['$select'].split(',').includes('ownerTeam')
+    ) {
+      result['$select'] = `${result['$select']},ownerTeam`;
     }
 
     return result;
@@ -306,39 +323,50 @@ export class SyncService {
   }
 
   private async fetchFromApi(): Promise<Record<string, unknown>[]> {
-    const params: Record<string, string> = { ...this.queryParams };
-    if (this.apiToken) params['token'] = this.apiToken;
-
     try {
-      const response = await axios.get(this.apiUrl, {
-        params,
-        timeout: Number(this.config.get('MOVIDESK_API_TIMEOUT') ?? 10000),
-        headers: { accept: 'application/json', 'user-agent': 'NestJS/1.0' },
-      });
+      const normalized: Record<string, unknown>[] = [];
 
-      let data = response.data as unknown;
-      if (Array.isArray(data)) {
-        // ok
-      } else if (data && typeof data === 'object') {
-        const obj = data as Record<string, unknown>;
-        for (const key of ['tickets', 'data', 'items', 'result', 'results']) {
-          if (Array.isArray(obj[key])) {
-            data = obj[key];
-            break;
+      for (let page = 0; page < this.maxPages; page++) {
+        const params: Record<string, string> = {
+          ...this.queryParams,
+          $top: String(this.pageSize),
+          $skip: String(page * this.pageSize),
+        };
+        if (this.apiToken) params['token'] = this.apiToken;
+
+        const response = await axios.get(this.apiUrl, {
+          params,
+          timeout: Number(this.config.get('MOVIDESK_API_TIMEOUT') ?? 10000),
+          headers: { accept: 'application/json', 'user-agent': 'NestJS/1.0' },
+        });
+
+        let data = response.data as unknown;
+        if (Array.isArray(data)) {
+          // ok
+        } else if (data && typeof data === 'object') {
+          const obj = data as Record<string, unknown>;
+          for (const key of ['tickets', 'data', 'items', 'result', 'results']) {
+            if (Array.isArray(obj[key])) {
+              data = obj[key];
+              break;
+            }
           }
         }
-      }
 
-      if (!Array.isArray(data)) return [];
+        if (!Array.isArray(data)) break;
+        const rawTickets = data as RawTicket[];
+        if (rawTickets.length === 0) break;
 
-      if (this.debugDateFields) {
-        this.logDateFieldDiagnostics(data as RawTicket[]);
-      }
+        if (this.debugDateFields && page === 0) {
+          this.logDateFieldDiagnostics(rawTickets);
+        }
 
-      const normalized: Record<string, unknown>[] = [];
-      for (const item of data as RawTicket[]) {
-        const n = this.normalizeTicket(item);
-        if (n) normalized.push(n);
+        for (const item of rawTickets) {
+          const n = this.normalizeTicket(item);
+          if (n) normalized.push(n);
+        }
+
+        if (rawTickets.length < this.pageSize) break;
       }
 
       this.logger.log(`Fetched ${normalized.length} tickets from Movidesk API`);

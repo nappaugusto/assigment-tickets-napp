@@ -17,6 +17,7 @@ import { PreferencesModule } from './preferences/preferences.module';
 import { TrelloModule } from './trello/trello.module';
 import { CasesModule } from './cases/cases.module';
 import { TeamsModule } from './teams/teams.module';
+import { AiTriageModule } from './ai-triage/ai-triage.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { TeamsModule } from './teams/teams.module';
     TrelloModule,
     CasesModule,
     TeamsModule,
+    AiTriageModule,
   ],
   providers: [DatabaseInitService],
 })

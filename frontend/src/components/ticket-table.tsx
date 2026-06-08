@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { KanbanCardMenu } from '@/components/kanban-card-menu'
 import { TicketNoteDrawer } from '@/components/ticket-note-drawer'
 import { TicketServiceDrawer } from '@/components/ticket-service-drawer'
+import { TicketAiTriageDrawer } from '@/components/ticket-ai-triage-drawer'
 import { type SortKey, type SortDir } from '@/hooks/use-ticket-filters'
 import { ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronsDownUp, ChevronsUpDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -60,6 +61,7 @@ function TicketRow({ ticket, agentOptions, onAssign, onUnassign, isLoading, curr
 }) {
   const [noteOpen, setNoteOpen] = useState(false)
   const [serviceOpen, setServiceOpen] = useState(false)
+  const [triageOpen, setTriageOpen] = useState(false)
   const [assignOpen, setAssignOpen] = useState(false)
   const sla = getSlaStatus(ticket.slaSolutionDate, ticket.slaSolutionDateIsPaused)
   const slaLabel = getTimeUntilSla(ticket.slaSolutionDate)
@@ -134,6 +136,7 @@ function TicketRow({ ticket, agentOptions, onAssign, onUnassign, isLoading, curr
             isLoading={isLoading}
             onOpenNotes={() => setNoteOpen(true)}
             onOpenService={() => setServiceOpen(true)}
+            onOpenTriage={() => setTriageOpen(true)}
           />
         </TableCell>
       </TableRow>
@@ -148,6 +151,11 @@ function TicketRow({ ticket, agentOptions, onAssign, onUnassign, isLoading, curr
         open={serviceOpen}
         onClose={() => setServiceOpen(false)}
         agentOptions={agentOptions}
+      />
+      <TicketAiTriageDrawer
+        ticket={triageOpen ? ticket : null}
+        open={triageOpen}
+        onClose={() => setTriageOpen(false)}
       />
     </>
   )
