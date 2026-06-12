@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import * as Dialog from '@radix-ui/react-dialog'
 import {
   Bot,
+  CheckSquare,
   Clipboard,
   Code2,
   CornerDownLeft,
@@ -186,6 +187,7 @@ function TicketAiTriageDrawerContent({
             ) : triage && triageRecord ? (
               <div className="space-y-4">
                 <TriagePanel triage={triage} />
+                <QuickCopyPanel ticket={ticket} triage={triage} />
                 <CustomerReplyPanel text={getSuggestedCustomerReply(ticket, triage)} />
                 <SimilarTicketsPanel
                   tickets={similarQuery.data?.tickets ?? []}
@@ -224,6 +226,65 @@ function TicketAiTriageDrawerContent({
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+  )
+}
+
+function QuickCopyPanel({ ticket, triage }: { ticket: Ticket; triage: TicketAiTriageResult }) {
+  const actions = [
+    {
+      label: 'Resumo executivo',
+      icon: <Clipboard className="h-3.5 w-3.5" />,
+      text: formatExecutiveSummary(ticket, triage),
+      success: 'Resumo executivo copiado',
+    },
+    {
+      label: 'Descrição técnica',
+      icon: <Code2 className="h-3.5 w-3.5" />,
+      text: formatTechnicalDescription(ticket, triage),
+      success: 'Descrição técnica copiada',
+    },
+    {
+      label: 'Checklist',
+      icon: <CheckSquare className="h-3.5 w-3.5" />,
+      text: formatChecklist(triage),
+      success: 'Checklist copiado',
+    },
+    {
+      label: 'Mensagem cliente',
+      icon: <MessageSquareText className="h-3.5 w-3.5" />,
+      text: getSuggestedCustomerReply(ticket, triage),
+      success: 'Mensagem ao cliente copiada',
+    },
+  ]
+
+  const copyAction = async (text: string, success: string) => {
+    try {
+      await copyText(text)
+      toast.success(success)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível copiar')
+    }
+  }
+
+  return (
+    <section className="rounded-lg border border-border/60 bg-card/60 p-4">
+      <PanelHeader icon={<Sparkles size={15} />} title="Atalhos da triagem" />
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {actions.map((action) => (
+          <Button
+            key={action.label}
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9 justify-start gap-2 text-xs"
+            onClick={() => void copyAction(action.text, action.success)}
+          >
+            {action.icon}
+            {action.label}
+          </Button>
+        ))}
+      </div>
+    </section>
   )
 }
 
@@ -512,7 +573,7 @@ function LabeledText({ label, text, strong }: { label: string; text: string; str
 }
 
 function stripLeadingNumber(value: string) {
-  return value.replace(/^\s*\d+[\).]\s*/, '').trim()
+  return value.replace(/^\s*\d+[).]\s*/, '').trim()
 }
 
 function getSuggestedCustomerReply(ticket: Ticket, triage: TicketAiTriageResult | null) {
@@ -647,6 +708,40 @@ function formatTriageForCopy(ticket: Ticket, triage: TicketAiTriageResult | null
     getSuggestedCustomerReply(ticket, triage),
   ]
     .filter(Boolean)
+    .join('\n')
+}
+
+function formatExecutiveSummary(ticket: Ticket, triage: TicketAiTriageResult) {
+  return [
+    `Ticket #${ticket.id}${ticket.subject ? ` - ${ticket.subject}` : ''}`,
+    `Prioridade: ${triage.priority} | Confiança: ${triage.confidence}`,
+    `Resumo: ${triage.summary}`,
+    `Área provável: ${triage.likelyArea}`,
+    triage.shouldCreateCard ? 'Recomendação: criar card para acompanhamento técnico.' : 'Recomendação: tratar na fila de atendimento.',
+  ].join('\n')
+}
+
+function formatTechnicalDescription(ticket: Ticket, triage: TicketAiTriageResult) {
+  return [
+    `Ticket: #${ticket.id}`,
+    ticket.subject ? `Assunto: ${ticket.subject}` : null,
+    `Sintoma: ${triage.symptom}`,
+    `Hipótese técnica: ${triage.technicalHypothesis}`,
+    `Área provável: ${triage.likelyArea}`,
+    '',
+    'Evidências:',
+    ...triage.evidence.map((item) => `- ${stripLeadingNumber(item)}`),
+    '',
+    'Arquivos relacionados:',
+    ...triage.relevantFiles.map((file) => `- ${file.path}${file.reason ? `: ${file.reason}` : ''}`),
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+function formatChecklist(triage: TicketAiTriageResult) {
+  return triage.nextSteps
+    .map((item) => `- [ ] ${stripLeadingNumber(item)}`)
     .join('\n')
 }
 

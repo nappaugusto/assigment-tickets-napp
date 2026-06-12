@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { ArrowDown, ArrowUp, ArrowUpDown, Trash2 } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Clock, UserX, Trash2 } from 'lucide-react'
 import { type Ticket, type KanbanColumn as KanbanColumnType } from '@/lib/api'
 import { KanbanCardDraggable } from '@/components/kanban-card-draggable'
 
@@ -21,6 +21,11 @@ interface KanbanColumnProps {
   onDelete: (columnId: string) => void
   onMoveTicketToColumn: (ticketId: number, columnId: string) => void
   showTriageSummary: boolean
+  metrics?: {
+    expired: number
+    warning: number
+    unassigned: number
+  }
 }
 
 export function KanbanColumn({
@@ -37,6 +42,7 @@ export function KanbanColumn({
   onDelete,
   onMoveTicketToColumn,
   showTriageSummary,
+  metrics,
 }: KanbanColumnProps) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -75,9 +81,33 @@ export function KanbanColumn({
       data-kanban-column-id={column.id}
     >
       <div className="flex items-center justify-between px-1">
-        <div className="flex items-baseline gap-2">
-          <h2 className="font-semibold text-sm">{column.title}</h2>
-          <span className="text-xs text-muted-foreground">{tickets.length}</span>
+        <div className="min-w-0">
+          <div className="flex items-baseline gap-2">
+            <h2 className="truncate font-semibold text-sm">{column.title}</h2>
+            <span className="text-xs text-muted-foreground">{tickets.length}</span>
+          </div>
+          {metrics && (metrics.expired > 0 || metrics.warning > 0 || metrics.unassigned > 0) && (
+            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+              {metrics.expired > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-1.5 py-0.5 text-destructive">
+                  <AlertTriangle size={11} />
+                  {metrics.expired}
+                </span>
+              )}
+              {metrics.warning > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/10 px-1.5 py-0.5 text-amber-300">
+                  <Clock size={11} />
+                  {metrics.warning}
+                </span>
+              )}
+              {metrics.unassigned > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5">
+                  <UserX size={11} />
+                  {metrics.unassigned}
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-1">
           <button

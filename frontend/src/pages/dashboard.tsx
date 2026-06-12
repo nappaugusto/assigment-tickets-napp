@@ -9,6 +9,7 @@ import { useAppVersion } from '@/hooks/use-app-version'
 import { Header } from '@/components/header'
 import { MonthlyAnalytics } from '@/components/monthly-analytics'
 import { ManagementInsights } from '@/components/management-insights'
+import { OperationalAlerts } from '@/components/operational-alerts'
 import { SummaryCards, computeSummary } from '@/components/summary-cards'
 import { QuickFilters } from '@/components/quick-filters'
 import { Toolbar } from '@/components/toolbar'
@@ -142,6 +143,13 @@ export function DashboardPage() {
           />
 
           <ManagementInsights
+            tickets={filters.filteredTickets}
+            newTickets={filters.filteredNewTickets}
+            onQuickFilter={filters.setQuickFilter}
+            onSearch={filters.setSearch}
+          />
+
+          <OperationalAlerts
             tickets={filters.filteredTickets}
             newTickets={filters.filteredNewTickets}
             onQuickFilter={filters.setQuickFilter}

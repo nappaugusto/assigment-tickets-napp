@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { AlertTriangle, Bot, ChevronDown, ChevronUp, Clock3, Hash, KanbanSquare, UserRound, Workflow } from 'lucide-react'
+import { AlertTriangle, Bot, ChevronDown, ChevronUp, Clock3, KanbanSquare, UserRound, Workflow } from 'lucide-react'
 import { type Ticket } from '@/lib/api'
 import { formatDate } from '@/lib/date-utils'
 import { type QuickFilter } from '@/hooks/use-ticket-filters'

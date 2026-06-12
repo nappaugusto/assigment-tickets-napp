@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { ExternalLink, Loader2, SquareKanban, X } from 'lucide-react'
 import { type Ticket } from '@/lib/api'
-import { getTicketUrl } from '@/lib/utils'
 import {
   useCreateTrelloCard,
   useTrelloBoards,
@@ -318,21 +317,4 @@ function TrelloCardDialogContent({
 
 function defaultCardName(ticket: Ticket): string {
   return `#${ticket.id} - ${ticket.subject || 'Sem assunto'}`.slice(0, 160)
-}
-
-function defaultCardDescription(ticket: Ticket): string {
-  return [
-    `Ticket: #${ticket.id}`,
-    '',
-    ticket.subject ? `Assunto: ${ticket.subject}` : null,
-    ticket.status ? `Status: ${ticket.status}` : null,
-    ticket.ownerTeam ? `Equipe: ${ticket.ownerTeam}` : null,
-    ticket.responsavel ? `Responsavel: ${ticket.responsavel}` : 'Responsavel: nao atribuido',
-    ticket.slaSolutionDate ? `SLA: ${ticket.slaSolutionDate}` : null,
-    ticket.opened_at ? `Aberto em: ${ticket.opened_at}` : null,
-    '',
-    `Link: ${getTicketUrl(ticket.id)}`,
-  ]
-    .filter(Boolean)
-    .join('\n')
 }

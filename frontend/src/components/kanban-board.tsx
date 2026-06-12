@@ -10,12 +10,13 @@ import {
   type DragOverEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
-import { Plus } from 'lucide-react'
+import { Search, Plus, X } from 'lucide-react'
 import { type KanbanBoard as KanbanBoardState, type Ticket } from '@/lib/api'
 import { useKanbanBoard } from '@/hooks/use-kanban-board'
 import { useAuth } from '@/contexts/auth-context'
 import { KanbanColumn, type KanbanColumnDateSort } from '@/components/kanban-column'
 import { KanbanCardDraggable } from '@/components/kanban-card-draggable'
+import { getSlaStatus, normalizeText } from '@/lib/date-utils'
 
 const KANBAN_COLUMN_DATE_SORTS_KEY = 'kanbanColumnDateSorts'
 
@@ -61,6 +62,7 @@ export function KanbanBoard({
   const [activeTicket, setActiveTicket] = useState<Ticket | null>(null)
   const [addingColumn, setAddingColumn] = useState(false)
   const [newColumnTitle, setNewColumnTitle] = useState('')
+  const [kanbanSearch, setKanbanSearch] = useState('')
   const [columnDateSorts, setColumnDateSorts] = useState<Record<string, KanbanColumnDateSort>>(() => {
     try {
       const stored = JSON.parse(localStorage.getItem(KANBAN_COLUMN_DATE_SORTS_KEY) ?? '{}')
@@ -201,6 +203,33 @@ export function KanbanBoard({
       .map((id) => allTickets.find((t) => String(t.id) === id))
       .filter((t): t is Ticket => t !== undefined)
   }
+
+  const matchesKanbanSearch = (ticket: Ticket) => {
+    const query = normalizeText(kanbanSearch.trim().replace(/^#/, ''))
+    if (!query) return true
+
+    const haystack = normalizeText([
+      ticket.id,
+      ticket.subject,
+      ticket.status,
+      ticket.ownerTeam,
+      ticket.responsavel,
+      ticket.ai_triage?.priority,
+      ticket.ai_triage?.summary,
+    ].filter(Boolean).join(' '))
+
+    return haystack.includes(query)
+  }
+
+  const getColumnMetrics = (columnTickets: Ticket[]) => ({
+    expired: columnTickets.filter((ticket) =>
+      getSlaStatus(ticket.slaSolutionDate, ticket.slaSolutionDateIsPaused) === 'expired',
+    ).length,
+    warning: columnTickets.filter((ticket) =>
+      getSlaStatus(ticket.slaSolutionDate, ticket.slaSolutionDateIsPaused) === 'warning',
+    ).length,
+    unassigned: columnTickets.filter((ticket) => !ticket.responsavel).length,
+  })
 
   const findColumnIdForItem = (boardState: KanbanBoardState, itemId: string) => {
     if (boardState.columns.some((c) => c.id === itemId)) return itemId
@@ -441,25 +470,59 @@ export function KanbanBoard({
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <div className="flex gap-4 overflow-x-auto pb-4 items-start">
-        {board.columns.map((col) => (
-          <KanbanColumn
-            key={col.id}
-            column={col}
-            columns={board.columns}
-            tickets={sortTicketsForColumn(col.id, getTicketsForColumn(col.id))}
-            dateSort={columnDateSorts[col.id] ?? 'manual'}
-            onDateSortChange={handleColumnDateSortChange}
-            agentOptions={agentOptions}
-            onAssign={onAssign}
-            onUnassign={onUnassign}
-            isLoading={isLoading}
-            currentUser={currentUser}
-            onDelete={handleDeleteColumn}
-            onMoveTicketToColumn={handleMoveTicketToColumn}
-            showTriageSummary={showTriageSummary}
+      <div className="mb-3 flex flex-col gap-2 rounded-lg border border-border/60 bg-card/70 p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-medium text-foreground">Kanban</p>
+          <p className="text-xs text-muted-foreground">
+            {allTickets.filter(matchesKanbanSearch).length} de {allTickets.length} tickets no board
+          </p>
+        </div>
+        <label className="relative w-full sm:max-w-xs">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={kanbanSearch}
+            onChange={(event) => setKanbanSearch(event.target.value)}
+            placeholder="Buscar no Kanban..."
+            className="h-9 w-full rounded-md border border-input bg-background/70 pl-8 pr-8 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-1 focus:ring-ring"
           />
-        ))}
+          {kanbanSearch && (
+            <button
+              type="button"
+              onClick={() => setKanbanSearch('')}
+              className="absolute right-2 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="Limpar busca do Kanban"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </label>
+      </div>
+
+      <div className="flex gap-4 overflow-x-auto pb-4 items-start">
+        {board.columns.map((col) => {
+          const columnTickets = sortTicketsForColumn(col.id, getTicketsForColumn(col.id))
+          const visibleTickets = columnTickets.filter(matchesKanbanSearch)
+
+          return (
+            <KanbanColumn
+              key={col.id}
+              column={col}
+              columns={board.columns}
+              tickets={visibleTickets}
+              dateSort={columnDateSorts[col.id] ?? 'manual'}
+              onDateSortChange={handleColumnDateSortChange}
+              agentOptions={agentOptions}
+              onAssign={onAssign}
+              onUnassign={onUnassign}
+              isLoading={isLoading}
+              currentUser={currentUser}
+              onDelete={handleDeleteColumn}
+              onMoveTicketToColumn={handleMoveTicketToColumn}
+              showTriageSummary={showTriageSummary}
+              metrics={getColumnMetrics(columnTickets)}
+            />
+          )
+        })}
 
         <div className="w-[280px] shrink-0">
           {addingColumn ? (
