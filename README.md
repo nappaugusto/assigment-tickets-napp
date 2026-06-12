@@ -104,6 +104,34 @@ Em Docker/Railway, o servidor MCP Movidesk é empacotado na imagem em
 `MOVIDESK_API_TOKEN` ou `MOVIDESK_TOKEN`; as variáveis `MOVIDESK_MCP_*`
 têm fallback automático para o caminho empacotado.
 
+### Claude Code no backend
+
+A triagem IA usa o Claude Code CLI diretamente pelo backend (`claude --print`).
+Você não precisa deixar uma sessão interativa do Claude aberta no terminal: ao
+subir o NestJS, o módulo de triagem valida automaticamente se o CLI está
+disponível e registra o resultado nos logs.
+
+No Docker Compose e no `make docker-run`, o container monta `~/.claude` e
+`~/.claude.json` do host em modo leitura para reutilizar o login já feito na sua
+máquina. Faça login uma vez no host, se necessário:
+
+```bash
+claude
+```
+
+Depois disso, basta subir o app normalmente. Para verificar o estado pelo
+backend:
+
+```bash
+curl http://localhost:3001/triage/claude/status
+```
+
+Se quiser pular a checagem de inicialização, defina:
+
+```bash
+CLAUDE_CLI_STARTUP_CHECK=false
+```
+
 ---
 
 ## Fluxos com Makefile

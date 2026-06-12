@@ -42,6 +42,7 @@ interface KanbanBoardProps {
   onAssign: (id: number, name: string) => void
   onUnassign: (id: number) => void
   isLoading?: boolean
+  showTriageSummary: boolean
 }
 
 export function KanbanBoard({
@@ -51,6 +52,7 @@ export function KanbanBoard({
   onAssign,
   onUnassign,
   isLoading,
+  showTriageSummary,
 }: KanbanBoardProps) {
   const { user } = useAuth()
   const currentUser = user?.name ?? ''
@@ -455,6 +457,7 @@ export function KanbanBoard({
             currentUser={currentUser}
             onDelete={handleDeleteColumn}
             onMoveTicketToColumn={handleMoveTicketToColumn}
+            showTriageSummary={showTriageSummary}
           />
         ))}
 
@@ -504,6 +507,7 @@ export function KanbanBoard({
             isLoading={isLoading}
             currentUser={currentUser}
             isDragOverlay
+            showTriageSummary={showTriageSummary}
           />
         ) : null}
       </DragOverlay>

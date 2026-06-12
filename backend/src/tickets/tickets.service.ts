@@ -1,11 +1,17 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { BadGatewayException, Injectable, Inject } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import axios from 'axios';
 import { Pool } from 'pg';
 import { DB_TOKEN } from '../database/database.module';
 import {
   Ticket,
+  TicketAiTriagePreview,
+  TicketDetailDto,
+  TicketDetailInteractionDto,
   TicketDto,
   TicketMonthlyAnalyticsDto,
   TicketMonthlyAnalyticsItem,
+  SimilarTicketDto,
 } from './ticket.entity';
 
 const FINAL_STATUS_KEYWORDS = ['cancelado', 'resolvido', 'fechado'];
@@ -18,6 +24,22 @@ interface CalendarDateParts {
   year: number;
   month: number;
   day: number;
+}
+
+type RawMovideskRecord = Record<string, unknown>;
+
+interface LatestTriagePreviewRow {
+  ticket_id: number;
+  id: number;
+  status: 'completed';
+  triage: {
+    priority?: unknown;
+    summary?: unknown;
+    likelyArea?: unknown;
+    confidence?: unknown;
+  } | null;
+  updated_at: string;
+  finished_at: string | null;
 }
 
 function normalize(s: string): string {
@@ -39,7 +61,30 @@ function isActive(ticket: Ticket): boolean {
   return !isFinal(ticket.status);
 }
 
-function toDto(t: Ticket): TicketDto {
+function asTriageEnum<T extends string>(value: unknown, allowed: T[], fallback: T): T {
+  return allowed.includes(value as T) ? (value as T) : fallback;
+}
+
+function toTriagePreview(row: LatestTriagePreviewRow): TicketAiTriagePreview | null {
+  if (!row.triage) return null;
+
+  return {
+    id: row.id,
+    status: row.status,
+    priority: asTriageEnum(
+      row.triage.priority,
+      ['baixa', 'media', 'alta', 'critica'],
+      'media',
+    ),
+    summary: String(row.triage.summary || 'Triagem salva sem resumo.'),
+    likelyArea: String(row.triage.likelyArea || 'Área não identificada'),
+    confidence: asTriageEnum(row.triage.confidence, ['baixa', 'media', 'alta'], 'media'),
+    updated_at: row.updated_at,
+    finished_at: row.finished_at,
+  };
+}
+
+function toDto(t: Ticket, aiTriage: TicketAiTriagePreview | null = null): TicketDto {
   return {
     id: t.id,
     subject: t.subject,
@@ -56,7 +101,115 @@ function toDto(t: Ticket): TicketDto {
     trello_card_url: t.trello_card_url,
     trello_card_name: t.trello_card_name,
     trello_card_created_at: t.trello_card_created_at,
+    ai_triage: aiTriage,
   };
+}
+
+function getRecord(value: unknown): RawMovideskRecord | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as RawMovideskRecord)
+    : null;
+}
+
+function getString(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  return text || null;
+}
+
+function getNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getArray(value: unknown): RawMovideskRecord[] {
+  return Array.isArray(value)
+    ? value.map(getRecord).filter((item): item is RawMovideskRecord => !!item)
+    : [];
+}
+
+function decodeHtmlEntities(text: string): string {
+  const entities: Record<string, string> = {
+    nbsp: ' ',
+    amp: '&',
+    lt: '<',
+    gt: '>',
+    quot: '"',
+    apos: "'",
+  };
+
+  return text.replace(/&(#\d+|#x[\da-f]+|[a-z]+);/gi, (match, entity: string) => {
+    const normalized = entity.toLowerCase();
+    if (normalized.startsWith('#x')) {
+      const code = Number.parseInt(normalized.slice(2), 16);
+      return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+    }
+    if (normalized.startsWith('#')) {
+      const code = Number.parseInt(normalized.slice(1), 10);
+      return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+    }
+    return entities[normalized] ?? match;
+  });
+}
+
+function stripHtml(value: unknown): string {
+  const html = getString(value) ?? '';
+  return decodeHtmlEntities(
+    html
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/(p|div|li|tr|h[1-6])>/gi, '\n')
+      .replace(/<li[^>]*>/gi, '- ')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/[ \t]{2,}/g, ' ')
+      .replace(/\n[ \t]+/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim(),
+  );
+}
+
+function firstNonEmpty(...values: unknown[]): string | null {
+  for (const value of values) {
+    const text = getString(value);
+    if (text) return text;
+  }
+  return null;
+}
+
+function extractDocumentIds(value: string | null | undefined) {
+  const text = String(value ?? '');
+  return Array.from(new Set(text.match(/\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}/g) ?? []))
+    .map((item) => item.replace(/\D/g, ''))
+    .filter((item) => item.length >= 14);
+}
+
+function extractSimilarityTerms(value: string | null | undefined) {
+  const stopWords = new Set([
+    'com',
+    'das',
+    'dos',
+    'para',
+    'por',
+    'sem',
+    'uma',
+    'nos',
+    'nas',
+    'erro',
+    'ticket',
+    'cnpj',
+  ]);
+
+  return Array.from(
+    new Set(
+      normalize(String(value ?? ''))
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .map((term) => term.trim())
+        .filter((term) => term.length >= 3 && !stopWords.has(term)),
+    ),
+  ).slice(0, 18);
 }
 
 function isToday(isoDate: string | null): boolean {
@@ -228,13 +381,29 @@ function parseTicketDateTime(value: string | null): Date | null {
 
 @Injectable()
 export class TicketsService {
-  constructor(@Inject(DB_TOKEN) private readonly db: Pool) {}
+  private readonly movideskApiUrl: string;
+  private readonly movideskToken: string;
+  private readonly movideskTimeout: number;
+
+  constructor(
+    @Inject(DB_TOKEN) private readonly db: Pool,
+    private readonly config: ConfigService,
+  ) {
+    this.movideskApiUrl =
+      config.get<string>('MOVIDESK_API_URL') ??
+      'https://api.movidesk.com/public/v1/tickets';
+    this.movideskToken =
+      config.get<string>('MOVIDESK_API_TOKEN') ??
+      config.get<string>('MOVIDESK_TOKEN') ??
+      '';
+    this.movideskTimeout = Number(config.get('MOVIDESK_API_TIMEOUT') ?? 10000);
+  }
 
   async getAll(): Promise<TicketDto[]> {
     const result = await this.db.query<Ticket>(
       `SELECT * FROM tickets ORDER BY id DESC`,
     );
-    return result.rows.map(toDto);
+    return result.rows.map((ticket) => toDto(ticket));
   }
 
   async getActive(): Promise<TicketDto[]> {
@@ -243,7 +412,7 @@ export class TicketsService {
     );
     return result.rows
       .filter((t) => isActive(t) && !isToday(t.opened_at))
-      .map(toDto);
+      .map((ticket) => toDto(ticket));
   }
 
   async getNewToday(): Promise<TicketDto[]> {
@@ -252,7 +421,7 @@ export class TicketsService {
     );
     return result.rows
       .filter((t) => isActive(t) && isToday(t.opened_at))
-      .map(toDto);
+      .map((ticket) => toDto(ticket));
   }
 
   async findById(id: number): Promise<TicketDto | undefined> {
@@ -262,6 +431,124 @@ export class TicketsService {
     );
     const t = result.rows[0];
     return t ? toDto(t) : undefined;
+  }
+
+  async getDetail(id: number): Promise<TicketDetailDto> {
+    if (!this.movideskToken) {
+      const cached = await this.getCachedDetail(id);
+      if (cached) return cached;
+      throw new BadGatewayException('Token do Movidesk não configurado.');
+    }
+
+    try {
+      const response = await axios.get<RawMovideskRecord>(this.movideskApiUrl, {
+        params: { token: this.movideskToken, id },
+        timeout: this.movideskTimeout,
+      });
+      return this.toDetailDto(response.data);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const cached = await this.getCachedDetail(id, message);
+      if (cached) return cached;
+      throw new BadGatewayException(`Não foi possível buscar detalhes do ticket no Movidesk: ${message}`);
+    }
+  }
+
+  private async getCachedDetail(id: number, cause?: string): Promise<TicketDetailDto | null> {
+    const result = await this.db.query<Ticket>(
+      `SELECT * FROM tickets WHERE id = $1 LIMIT 1`,
+      [id],
+    );
+    const ticket = result.rows[0];
+    if (!ticket) return null;
+
+    const unavailableReason = cause
+      ? ` Detalhes completos temporariamente indisponíveis: ${cause}`
+      : '';
+
+    return {
+      id: ticket.id,
+      subject: ticket.subject,
+      status: ticket.status,
+      urgency: null,
+      category: null,
+      ownerTeam: ticket.ownerTeam,
+      ownerName: ticket.responsavel,
+      createdDate: ticket.opened_at,
+      lastUpdate: ticket.last_update,
+      slaSolutionDate: ticket.slaSolutionDate,
+      clients: [],
+      serviceFull: [],
+      tags: [],
+      summary:
+        `Exibindo dados locais em cache do ticket #${ticket.id}.${unavailableReason}`.trim(),
+      interactions: [],
+      rawActionCount: 0,
+    };
+  }
+
+  private toDetailDto(ticket: RawMovideskRecord): TicketDetailDto {
+    const actions = getArray(ticket.actions)
+      .map((action) => this.toInteractionDto(action))
+      .filter((action) => !action.isDeleted)
+      .sort((a, b) => {
+        const left = a.createdDate ? new Date(a.createdDate).getTime() : 0;
+        const right = b.createdDate ? new Date(b.createdDate).getTime() : 0;
+        return left - right;
+      });
+    const firstInteraction = actions.find((action) => action.text)?.text ?? '';
+    const owner = getRecord(ticket.owner);
+    const clients = getArray(ticket.clients).map((client) => {
+      const organization = getRecord(client.organization);
+      return {
+        name: firstNonEmpty(client.businessName, client.name),
+        email: firstNonEmpty(client.email),
+        organization: firstNonEmpty(organization?.businessName, organization?.name),
+      };
+    });
+
+    return {
+      id: getNumber(ticket.id) ?? 0,
+      subject: firstNonEmpty(ticket.subject),
+      status: firstNonEmpty(ticket.status),
+      urgency: firstNonEmpty(ticket.urgency),
+      category: firstNonEmpty(ticket.category),
+      ownerTeam: firstNonEmpty(ticket.ownerTeam),
+      ownerName: firstNonEmpty(owner?.businessName, owner?.name),
+      createdDate: firstNonEmpty(ticket.createdDate, ticket.openedIn),
+      lastUpdate: firstNonEmpty(ticket.lastUpdate),
+      slaSolutionDate: firstNonEmpty(ticket.slaSolutionDate),
+      clients,
+      serviceFull: Array.isArray(ticket.serviceFull)
+        ? ticket.serviceFull.map(String).filter(Boolean)
+        : [ticket.serviceFirstLevel, ticket.serviceSecondLevel, ticket.serviceThirdLevel]
+            .map((value) => getString(value))
+            .filter((value): value is string => !!value),
+      tags: Array.isArray(ticket.tags) ? ticket.tags.map(String).filter(Boolean) : [],
+      summary:
+        firstInteraction ||
+        stripHtml(ticket.description) ||
+        firstNonEmpty(ticket.subject) ||
+        'Sem descrição disponível.',
+      interactions: actions,
+      rawActionCount: getNumber(ticket.actionCount) ?? actions.length,
+    };
+  }
+
+  private toInteractionDto(action: RawMovideskRecord): TicketDetailInteractionDto {
+    const createdBy = getRecord(action.createdBy);
+    const type = getNumber(action.type) === 2 ? 'public' : 'internal';
+    return {
+      id: getNumber(action.id),
+      type,
+      origin: getNumber(action.origin),
+      status: firstNonEmpty(action.status),
+      author: firstNonEmpty(createdBy?.businessName, createdBy?.name),
+      authorEmail: firstNonEmpty(createdBy?.email),
+      createdDate: firstNonEmpty(action.createdDate),
+      text: stripHtml(firstNonEmpty(action.description, action.htmlDescription)),
+      isDeleted: Boolean(action.isDeleted),
+    };
   }
 
   async assign(id: number, responsavel: string): Promise<void> {
@@ -408,19 +695,49 @@ export class TicketsService {
     return result.rows;
   }
 
+  private async getLatestCompletedTriagePreviews(ticketIds: number[]) {
+    if (!ticketIds.length) return new Map<number, TicketAiTriagePreview>();
+
+    const result = await this.db.query<LatestTriagePreviewRow>(
+      `
+      SELECT DISTINCT ON (ticket_id)
+             ticket_id, id, status, triage, updated_at, finished_at
+        FROM ticket_ai_triages
+       WHERE ticket_id = ANY($1::int[])
+         AND status = 'completed'
+         AND triage IS NOT NULL
+       ORDER BY ticket_id, created_at DESC, id DESC
+      `,
+      [ticketIds],
+    );
+
+    return new Map(
+      result.rows
+        .map((row) => [row.ticket_id, toTriagePreview(row)] as const)
+        .filter((item): item is readonly [number, TicketAiTriagePreview] =>
+          Boolean(item[1]),
+        ),
+    );
+  }
+
   async getDashboardSnapshot(): Promise<{
     tickets: TicketDto[];
     newTickets: TicketDto[];
     monthlyAnalytics: TicketMonthlyAnalyticsDto;
   }> {
     const rows = await this.getAllRaw();
+    const activeTickets = rows.filter(isActive);
+    const triagePreviews = await this.getLatestCompletedTriagePreviews(
+      activeTickets.map((ticket) => ticket.id),
+    );
+
     return {
-      tickets: rows
-        .filter((t) => isActive(t) && !isToday(t.opened_at))
-        .map(toDto),
-      newTickets: rows
-        .filter((t) => isActive(t) && isToday(t.opened_at))
-        .map(toDto),
+      tickets: activeTickets
+        .filter((t) => !isToday(t.opened_at))
+        .map((ticket) => toDto(ticket, triagePreviews.get(ticket.id) ?? null)),
+      newTickets: activeTickets
+        .filter((t) => isToday(t.opened_at))
+        .map((ticket) => toDto(ticket, triagePreviews.get(ticket.id) ?? null)),
       monthlyAnalytics: this.buildMonthlyAnalytics(rows),
     };
   }
@@ -428,21 +745,110 @@ export class TicketsService {
   async getMonthlyAnalytics(
     months = DEFAULT_ANALYTICS_MONTHS,
     team?: string,
+    responsavel?: string,
   ): Promise<TicketMonthlyAnalyticsDto> {
     const rows = await this.getAllRaw();
-    return this.buildMonthlyAnalytics(rows, months, team);
+    return this.buildMonthlyAnalytics(rows, months, team, responsavel);
+  }
+
+  async getSimilarTickets(id: number, limit = 6): Promise<SimilarTicketDto[]> {
+    const rows = await this.getAllRaw();
+    const target = rows.find((ticket) => ticket.id === id);
+    if (!target) return [];
+
+    const targetTerms = extractSimilarityTerms(target.subject);
+    const targetDocs = extractDocumentIds(target.subject);
+    const activeRows = rows.filter((ticket) => ticket.id !== id);
+    const triagePreviews = await this.getLatestCompletedTriagePreviews(
+      activeRows.map((ticket) => ticket.id),
+    );
+
+    return activeRows
+      .map((ticket) => {
+        let score = 0;
+        const reasons: string[] = [];
+        const subjectTerms = extractSimilarityTerms(ticket.subject);
+        const subjectDocs = extractDocumentIds(ticket.subject);
+        const commonTerms = targetTerms.filter((term) => subjectTerms.includes(term));
+        const commonDocs = targetDocs.filter((doc) => subjectDocs.includes(doc));
+
+        if (commonDocs.length) {
+          score += commonDocs.length * 8;
+          reasons.push('Mesmo CNPJ no assunto');
+        }
+
+        if (commonTerms.length) {
+          score += commonTerms.length * 2;
+          reasons.push(`${commonTerms.slice(0, 4).join(', ')} no assunto`);
+        }
+
+        if (target.ownerTeam && ticket.ownerTeam === target.ownerTeam) {
+          score += 3;
+          reasons.push('Mesmo time');
+        }
+
+        if (target.responsavel && ticket.responsavel === target.responsavel) {
+          score += 2;
+          reasons.push('Mesmo responsável');
+        }
+
+        if (ticket.trello_card_url) {
+          score += 1;
+          reasons.push('Já virou demanda técnica');
+        }
+
+        return {
+          ticket,
+          score,
+          reasons: reasons.slice(0, 3),
+        };
+      })
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score || b.ticket.id - a.ticket.id)
+      .slice(0, Math.max(1, Math.min(limit, 12)))
+      .map(({ ticket, score, reasons }) => ({
+        id: ticket.id,
+        subject: ticket.subject,
+        status: ticket.status,
+        ownerTeam: ticket.ownerTeam,
+        responsavel: ticket.responsavel,
+        opened_at: ticket.opened_at,
+        slaSolutionDate: ticket.slaSolutionDate,
+        trello_card_url: ticket.trello_card_url,
+        score,
+        reasons,
+        ai_triage: triagePreviews.get(ticket.id) ?? null,
+      }));
   }
 
   private buildMonthlyAnalytics(
     rows: Ticket[],
     months = DEFAULT_ANALYTICS_MONTHS,
     team?: string,
+    responsavel?: string,
   ): TicketMonthlyAnalyticsDto {
     const totalMonths = Math.max(1, Math.min(months, 12));
     const normalizedTeam = team?.trim() ? normalize(team.trim()) : '';
-    const filteredRows = normalizedTeam
-      ? rows.filter((ticket) => normalize(ticket.ownerTeam ?? '') === normalizedTeam)
-      : rows;
+    const normalizedResponsavel = responsavel?.trim()
+      ? normalize(responsavel.trim())
+      : '';
+    const filteredRows = rows.filter((ticket) => {
+      if (
+        normalizedTeam &&
+        normalize(ticket.ownerTeam ?? '') !== normalizedTeam
+      ) {
+        return false;
+      }
+
+      if (
+        normalizedResponsavel &&
+        normalize(ticket.responsavel ?? '') !== normalizedResponsavel
+      ) {
+        return false;
+      }
+
+      return true;
+    });
 
     const today = getBrazilDateParts(new Date());
     const anchorMonth = { year: today.year, month: today.month, day: 1 };

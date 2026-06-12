@@ -1,0 +1,62 @@
+
+===========================================================================================
+Justificativa para Desenvolvimento Interno do Aplicativo de Gestão e Triagem de Tickets
+===========================================================================================
+O CMC atende ao papel de sistema formal para registro, consulta e acompanhamento básico de chamados. No entanto, a rotina operacional da equipe exige uma camada mais específica, integrada e inteligente, voltada não apenas para armazenar tickets, mas para apoiar a priorização, a triagem técnica, a distribuição de responsabilidades e o encaminhamento eficiente das demandas.
+
+Nesse contexto, o desenvolvimento interno de um aplicativo complementar traz benefícios relevantes. A principal vantagem está na possibilidade de adaptar a ferramenta ao fluxo real da operação, considerando regras internas, equipes, responsáveis, SLAs, prioridades, integrações e formas de trabalho que uma solução genérica dificilmente atende com a mesma precisão.
+
+O aplicativo interno pode atuar como uma camada operacional sobre os chamados, oferecendo uma visão centralizada da fila de atendimento, filtros rápidos, indicadores de SLA, responsáveis, status, visualização em kanban e ações diretas sobre os tickets. Isso reduz o tempo gasto na busca por informações, evita perda de contexto e melhora a organização diária da equipe.
+
+Outro diferencial importante é a triagem com apoio de inteligência artificial. A solução pode analisar o conteúdo do chamado, gerar um resumo técnico, sugerir prioridade, levantar hipóteses iniciais, indicar próximos passos e apoiar o analista na tomada de decisão. Com isso, cada ticket deixa de depender exclusivamente de uma análise manual inicial, reduzindo retrabalho e acelerando o direcionamento correto da demanda.
+
+Além disso, a integração com ferramentas utilizadas no fluxo interno, como Movidesk e Trello, permite conectar o atendimento ao trabalho técnico. O aplicativo pode criar cards, vincular chamados, enviar descrições completas, incluir triagens, aplicar labels e manter o histórico operacional organizado. Essa integração reduz duplicidade de informações e evita que o contexto se perca entre suporte, produto e engenharia.
+
+O desenvolvimento interno também permite construir uma base histórica própria, com dados mais aderentes à realidade da empresa. A partir dela, torna-se possível acompanhar volume de chamados, reincidência de problemas, gargalos por etapa, desempenho por responsável, tickets em risco e tempo de resolução. Esses indicadores apoiam decisões de gestão e ajudam a transformar o atendimento em uma fonte contínua de melhoria dos processos e produtos.
+
+Portanto, a proposta não é apenas substituir funcionalidades já existentes no CMC, mas complementar suas limitações com uma ferramenta focada na eficiência operacional. Enquanto o CMC atua como repositório formal dos chamados, o aplicativo interno passa a funcionar como uma camada de inteligência, priorização e execução.
+
+Com isso, espera-se obter ganhos como redução no tempo de triagem, melhor distribuição de tickets, maior visibilidade sobre SLAs, menor perda de contexto entre áreas, integração mais fluida com o fluxo técnico e geração de indicadores estratégicos para acompanhamento da operação.
+
+Em resumo, o desenvolvimento interno faz sentido porque permite criar uma solução sob medida para a rotina da equipe, conectando chamados, pessoas, prioridades, inteligência artificial e ferramentas de execução em um único fluxo operacional. O CMC registra os chamados; o aplicativo interno ajuda a entendê-los, priorizá-los e resolvê-los com mais eficiência.
+=========================================================================================
+
+
+Justificativa para Desenvolvimento Interno de uma Plataforma Própria de Gestão e Triagem de Tickets
+
+A proposta de desenvolvimento interno tem como objetivo substituir gradualmente o uso do CMC por uma plataforma própria de abertura, gestão, triagem e acompanhamento de tickets. A ideia não é apenas reproduzir funcionalidades já existentes, mas construir uma solução mais aderente à realidade operacional da empresa, com fluxos próprios, integrações internas e apoio de inteligência artificial desde a abertura do chamado até sua resolução.
+
+O CMC atende a uma necessidade genérica de registro e acompanhamento de chamados, porém apresenta limitações quando a operação precisa de maior personalização, automação, rastreabilidade e inteligência sobre os tickets. Ao desenvolver uma plataforma interna, a empresa passa a ter controle total sobre o fluxo de atendimento, as regras de negócio, os dados coletados, os indicadores gerados e a evolução da ferramenta conforme as necessidades reais dos times.
+
+Na nova solução, os tickets poderão ser abertos diretamente no aplicativo interno, já com campos, categorias, prioridades e informações pensadas para o contexto da empresa. Isso permite padronizar melhor a entrada dos chamados, reduzir informações incompletas e direcionar cada demanda de forma mais eficiente desde o início.
+
+Um dos principais diferenciais será a análise dos tickets por inteligência artificial. A IA poderá apoiar a triagem inicial, resumir o problema, sugerir prioridade, identificar possíveis causas, indicar áreas responsáveis, recomendar próximos passos e comparar o chamado com casos semelhantes já registrados. Esse recurso reduz o esforço manual da equipe, acelera o entendimento do problema e melhora a qualidade da tomada de decisão.
+
+Além disso, a plataforma poderá centralizar todo o ciclo de vida do ticket: abertura, classificação, atribuição, acompanhamento, comunicação, histórico, mudança de status, encaminhamento para desenvolvimento, integração com ferramentas como Trello e geração de indicadores. Com isso, evita-se a fragmentação do processo em múltiplas ferramentas e reduz-se a perda de contexto entre atendimento, suporte, produto e engenharia.
+
+Outro benefício relevante é a autonomia tecnológica. Uma plataforma própria permite evoluir funcionalidades sem depender do roadmap de terceiros, limitações comerciais, restrições de customização ou formatos fechados de dados. A empresa pode adaptar rapidamente o sistema a novos processos, criar automações específicas, integrar bases internas e desenvolver dashboards alinhados aos indicadores que realmente importam para a gestão.
+
+A substituição do CMC também fortalece a governança dos dados. Com os tickets sendo abertos e tratados internamente, torna-se possível estruturar uma base histórica própria, com informações mais completas sobre recorrência de problemas, tempo de atendimento, gargalos, impacto por cliente, desempenho por equipe, tipos de demanda e qualidade das resoluções. Esses dados podem apoiar decisões estratégicas e orientar melhorias nos produtos, processos e atendimento.
+
+Dessa forma, o desenvolvimento interno da plataforma faz sentido porque transforma o sistema de chamados em uma ferramenta estratégica para a operação. Em vez de apenas registrar tickets, a solução passa a entender, priorizar, distribuir, acompanhar e gerar inteligência sobre cada demanda.
+
+Espera-se, com isso, obter ganhos como maior controle sobre o fluxo de atendimento, redução do tempo de triagem, melhor direcionamento dos chamados, automação de tarefas repetitivas, integração com ferramentas internas, maior qualidade dos dados, indicadores mais precisos e evolução contínua conforme as necessidades da empresa.
+
+Em resumo, substituir o CMC por uma plataforma própria permite construir um processo de atendimento mais inteligente, flexível e alinhado à realidade da empresa. O novo aplicativo não será apenas um sistema de chamados, mas uma base operacional e analítica para abertura, gestão, triagem com IA e resolução eficiente das demandas junto a IA.
+===================================================================================
+
+
+Para IA, o código usa Claude/Sonnet por padrão. A precificação pública atual do Claude Sonnet é de aproximadamente US$ 3 por 1 milhão de tokens de entrada e US$ 15 por 1 milhão de tokens de saída, conforme página oficial da Anthropic. Considerando o câmbio aproximado de US$ 1 = R$ 5,18 em 11/06/2026, os cenários iniciais seriam:
+
+Cenário	Premissa	Custo estimado
+Triagem simples	1.500 tickets/mês, ~6k tokens entrada + 1k saída por ticket	~US$ 50/mês, cerca de R$ 260
+Triagem + análise técnica em 30% dos tickets	Triagem em todos + análise mais profunda em 450 tickets	~US$ 100 a US$ 110/mês, cerca de R$ 520 a R$ 570
+Triagem + análise + follow-up	Inclui interações adicionais com IA	~US$ 140/mês, cerca de R$ 725
+Esses valores são estimativas iniciais. O custo real da IA dependerá do tamanho médio dos tickets, quantidade de histórico enviada no prompt, uso de análise de código, uso de banco de diagnóstico, número de mensagens de follow-up e modelo escolhido. Uma otimização possível é usar um modelo mais barato para classificação e resumo inicial, reservando modelos mais fortes para tickets complexos.
+
+Para infraestrutura, considerando o volume atual de aproximadamente 1.500 tickets/mês, a aplicação ainda é relativamente leve. Uma estimativa inicial seria:
+
+Item	Estimativa mensal
+Servidor/app pequeno ou médio	R$ 100 a R$ 400
+PostgreSQL gerenciado ou VPS com banco	R$ 100 a R$ 500
+Backups, logs e monitoramento básico	R$ 50 a R$ 200

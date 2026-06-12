@@ -27,6 +27,18 @@ interface TrelloListResponse {
   id: string;
   name: string;
   closed: boolean;
+  idBoard?: string;
+}
+
+interface TrelloLabelResponse {
+  id: string;
+  name: string;
+  color: string | null;
+}
+
+interface TrelloCardLabelStateResponse {
+  idBoard?: string;
+  idLabels?: string[];
 }
 
 interface MovideskAttachment {
@@ -150,7 +162,7 @@ export class TrelloService {
       {
         params: {
           ...this.authParams(),
-          fields: 'name,closed',
+          fields: 'name,closed,idBoard',
           filter: 'open',
         },
       },
@@ -185,13 +197,27 @@ export class TrelloService {
       };
     }
 
-    const listId = dto.listId || this.getEnv('TRELLO_DEFAULT_LIST_ID');
-    if (!listId?.trim()) {
-      throw new BadRequestException('Lista do Trello não informada.');
-    }
+    const destination = await this.resolveCardDestination(dto);
 
     const name = (dto.name || this.defaultCardName(ticket)).trim();
-    const mcpContent = await this.buildMcpTicketContent(ticket);
+    const ticketContent = await this.buildMcpTicketContent(ticket);
+    const extraDescription = dto.extraDescription?.trim() || dto.description?.trim();
+    const labelIds = destination.boardId
+      ? await this.resolveLabelIds(destination.boardId, dto.labels)
+      : [];
+    if (dto.labels?.length) {
+      this.logger.log(
+        `Ticket #${ticket.id}: ${labelIds.length}/${dto.labels.length} label(s) resolvida(s) para o Trello.`,
+      );
+    }
+    const mcpContent = extraDescription
+      ? [
+          ticketContent,
+          '',
+          '## Triagem IA',
+          extraDescription,
+        ].join('\n')
+      : ticketContent;
     const [desc, ...comments] = this.splitForTrello(mcpContent);
     const images = await this.getTicketImages(ticket.id);
     this.logger.log(
@@ -204,9 +230,10 @@ export class TrelloService {
       {
         params: {
           ...this.authParams(),
-          idList: listId.trim(),
+          idList: destination.listId,
           name,
           desc,
+          ...(labelIds.length ? { idLabels: labelIds.join(',') } : {}),
           pos: 'top',
         },
       },
@@ -229,6 +256,204 @@ export class TrelloService {
       card,
       ticket: updatedTicket ?? ticket,
     };
+  }
+
+  async applyLabelsToTicketCard(
+    ticket: TicketDto,
+    labels: string[] | undefined,
+  ): Promise<{ applied: number; resolved: number }> {
+    const cardId = ticket.trello_card_id?.trim();
+    const names = this.normalizeLabelNames(labels);
+    if (!cardId || !names.length) return { applied: 0, resolved: 0 };
+
+    const response = await this.client.get<TrelloCardLabelStateResponse>(
+      `/cards/${encodeURIComponent(cardId)}`,
+      {
+        params: {
+          ...this.authParams(),
+          fields: 'idBoard,idLabels',
+        },
+      },
+    );
+
+    const boardId = response.data.idBoard;
+    if (!boardId) return { applied: 0, resolved: 0 };
+
+    const labelIds = await this.resolveLabelIds(boardId, names);
+    const existingIds = new Set(response.data.idLabels ?? []);
+    const missingIds = labelIds.filter((labelId) => !existingIds.has(labelId));
+
+    for (const labelId of missingIds) {
+      await this.client.post(
+        `/cards/${encodeURIComponent(cardId)}/idLabels`,
+        null,
+        {
+          params: {
+            ...this.authParams(),
+            value: labelId,
+          },
+        },
+      );
+    }
+
+    if (labelIds.length) {
+      this.logger.log(
+        `Card Trello ${cardId}: ${missingIds.length}/${labelIds.length} label(s) da triagem IA aplicada(s).`,
+      );
+    }
+
+    return { applied: missingIds.length, resolved: labelIds.length };
+  }
+
+  private async resolveCardDestination(
+    dto: CreateTrelloCardDto,
+  ): Promise<{ listId: string; boardId: string | null }> {
+    const explicitListId = dto.listId?.trim();
+    if (explicitListId) {
+      return {
+        listId: explicitListId,
+        boardId: dto.boardId?.trim() || await this.getListBoardId(explicitListId),
+      };
+    }
+
+    const defaultListId = this.getEnv('TRELLO_DEFAULT_LIST_ID');
+    if (defaultListId) {
+      return {
+        listId: defaultListId,
+        boardId: dto.boardId?.trim() || await this.getListBoardId(defaultListId),
+      };
+    }
+
+    const boardId = dto.boardId?.trim() || this.getEnv('TRELLO_DEFAULT_BOARD_ID');
+    if (boardId) {
+      const lists = await this.listBoardLists(boardId);
+      const list = lists.find((item) => !item.closed) ?? lists[0];
+      if (list?.id) return { listId: list.id, boardId };
+    }
+
+    const boards = await this.listBoards();
+    const board = boards[0];
+    if (board?.id) {
+      const lists = await this.listBoardLists(board.id);
+      const list = lists.find((item) => !item.closed) ?? lists[0];
+      if (list?.id) return { listId: list.id, boardId: board.id };
+    }
+
+    throw new BadRequestException(
+      'Não encontrei uma lista aberta no Trello para criar o card.',
+    );
+  }
+
+  private async getListBoardId(listId: string): Promise<string | null> {
+    try {
+      const response = await this.client.get<{ idBoard?: string }>(
+        `/lists/${encodeURIComponent(listId)}`,
+        {
+          params: {
+            ...this.authParams(),
+            fields: 'idBoard',
+          },
+        },
+      );
+      return response.data.idBoard ?? null;
+    } catch (error) {
+      this.logger.warn(
+        `Não foi possível descobrir o board da lista ${listId}: ${(error as Error).message}`,
+      );
+      return null;
+    }
+  }
+
+  private async resolveLabelIds(
+    boardId: string,
+    labels: string[] | undefined,
+  ): Promise<string[]> {
+    const names = this.normalizeLabelNames(labels);
+    if (!names.length) return [];
+
+    const response = await this.client.get<TrelloLabelResponse[]>(
+      `/boards/${encodeURIComponent(boardId)}/labels`,
+      {
+        params: {
+          ...this.authParams(),
+          fields: 'name,color',
+          limit: 1000,
+        },
+      },
+    );
+
+    const existingByName = new Map(
+      response.data
+        .filter((label) => label.name?.trim())
+        .map((label) => [this.normalizeLabelKey(label.name), label]),
+    );
+    const ids: string[] = [];
+
+    for (const name of names) {
+      const existing = existingByName.get(this.normalizeLabelKey(name));
+      if (existing) {
+        ids.push(existing.id);
+        continue;
+      }
+
+      const created = await this.createBoardLabel(boardId, name);
+      ids.push(created.id);
+      existingByName.set(this.normalizeLabelKey(name), created);
+    }
+
+    return ids;
+  }
+
+  private async createBoardLabel(
+    boardId: string,
+    name: string,
+  ): Promise<TrelloLabelResponse> {
+    const response = await this.client.post<TrelloLabelResponse>(
+      '/labels',
+      null,
+      {
+        params: {
+          ...this.authParams(),
+          idBoard: boardId,
+          name,
+          color: this.getLabelColor(name),
+        },
+      },
+    );
+    return response.data;
+  }
+
+  private normalizeLabelNames(labels: string[] | undefined): string[] {
+    return Array.from(
+      new Set(
+        (labels ?? [])
+          .map((label) => String(label).trim())
+          .filter(Boolean)
+          .map((label) => label.slice(0, 64)),
+      ),
+    ).slice(0, 8);
+  }
+
+  private normalizeLabelKey(label: string): string {
+    return label
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toLowerCase();
+  }
+
+  private getLabelColor(label: string): string {
+    const normalized = this.normalizeLabelKey(label);
+    if (normalized.includes('critica') || normalized.includes('alta') || normalized.includes('bug')) {
+      return 'red';
+    }
+    if (normalized.includes('sla') || normalized.includes('prioridade')) {
+      return 'orange';
+    }
+    if (normalized.includes('catalog')) return 'blue';
+    if (normalized.includes('config')) return 'purple';
+    if (normalized.includes('seller')) return 'lime';
+    return 'sky';
   }
 
   async detachCardFromTicket(ticketId: number): Promise<{ ticket: TicketDto }> {
@@ -309,8 +534,7 @@ export class TrelloService {
     const visibleActions = ticket.actions
       .filter((action) =>
         `${action.description ?? ''}\n${action.htmlDescription ?? ''}`.trim(),
-      )
-      .slice(-5);
+      );
 
     return visibleActions
       .map((action) => this.formatMovideskAction(action))

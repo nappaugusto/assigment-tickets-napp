@@ -8,8 +8,9 @@ import { KanbanCardMenu } from '@/components/kanban-card-menu'
 import { TicketNoteDrawer } from '@/components/ticket-note-drawer'
 import { TicketServiceDrawer } from '@/components/ticket-service-drawer'
 import { TicketAiTriageDrawer } from '@/components/ticket-ai-triage-drawer'
+import { TicketDetailDrawer } from '@/components/ticket-detail-drawer'
 import { type SortKey, type SortDir } from '@/hooks/use-ticket-filters'
-import { ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronsDownUp, ChevronsUpDown } from 'lucide-react'
+import { ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronsDownUp, ChevronsUpDown, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { AssignAgentCommand } from '@/components/assign-agent-command'
@@ -33,6 +34,7 @@ interface TicketTableProps {
   sortKey: SortKey
   sortDir: SortDir
   onSort: (key: SortKey) => void
+  showTriageSummary: boolean
 }
 
 function SortButton({ label, sortK, active, dir, onSort }: {
@@ -51,17 +53,19 @@ function SortButton({ label, sortK, active, dir, onSort }: {
   )
 }
 
-function TicketRow({ ticket, agentOptions, onAssign, onUnassign, isLoading, currentUser }: {
+function TicketRow({ ticket, agentOptions, onAssign, onUnassign, isLoading, currentUser, showTriageSummary }: {
   ticket: Ticket
   agentOptions: string[]
   onAssign: (id: number, name: string) => void
   onUnassign: (id: number) => void
   isLoading?: boolean
   currentUser: string
+  showTriageSummary: boolean
 }) {
   const [noteOpen, setNoteOpen] = useState(false)
   const [serviceOpen, setServiceOpen] = useState(false)
   const [triageOpen, setTriageOpen] = useState(false)
+  const [detailOpen, setDetailOpen] = useState(false)
   const [assignOpen, setAssignOpen] = useState(false)
   const sla = getSlaStatus(ticket.slaSolutionDate, ticket.slaSolutionDateIsPaused)
   const slaLabel = getTimeUntilSla(ticket.slaSolutionDate)
@@ -75,19 +79,44 @@ function TicketRow({ ticket, agentOptions, onAssign, onUnassign, isLoading, curr
 
   return (
     <>
-      <TableRow className={`${rowColor ?? ''} border-border/35 transition-colors`}>
+      <TableRow
+        className={`${rowColor ?? ''} cursor-pointer border-border/35 transition-colors`}
+        onClick={() => setDetailOpen(true)}
+      >
         <TableCell className="font-mono text-xs w-16">
           <a
             href={getTicketUrl(ticket.id)}
             target="_blank"
             rel="noreferrer"
             className="rounded-md bg-primary/10 px-2 py-1 text-primary transition-colors hover:bg-primary/18 hover:no-underline"
+            onClick={(event) => event.stopPropagation()}
           >
             #{ticket.id}
           </a>
         </TableCell>
         <TableCell className="max-w-xs">
           <span className="line-clamp-2 text-sm">{ticket.subject || '—'}</span>
+          {ticket.ai_triage && (
+            <button
+              type="button"
+              className={`mt-2 flex max-w-full items-start gap-1.5 rounded-md border border-primary/25 bg-primary/10 text-left text-xs text-muted-foreground transition-colors hover:bg-primary/15 ${
+                showTriageSummary ? 'px-2 py-1.5' : 'w-fit px-2 py-1'
+              }`}
+              onClick={(event) => {
+                event.stopPropagation()
+                setTriageOpen(true)
+              }}
+            >
+              <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-primary" />
+              <span className="min-w-0">
+                <span className="font-medium text-primary">Triagem salva</span>
+                <span className="text-muted-foreground"> / {ticket.ai_triage.priority}: </span>
+                {showTriageSummary && (
+                  <span className="line-clamp-2 text-foreground/80">{ticket.ai_triage.summary}</span>
+                )}
+              </span>
+            </button>
+          )}
         </TableCell>
         <TableCell className="w-36">
           <Badge variant={SLA_BADGE_VARIANT[sla]} className="text-xs gap-1 whitespace-nowrap">
@@ -105,6 +134,7 @@ function TicketRow({ ticket, agentOptions, onAssign, onUnassign, isLoading, curr
                 className="max-w-full rounded px-1 py-0.5 text-left transition-colors hover:bg-muted"
                 disabled={isLoading}
                 title="Alterar responsável"
+                onClick={(event) => event.stopPropagation()}
               >
                 {ticket.responsavel ? (
                   <span className={isMyTicket ? 'text-primary font-medium' : undefined}>
@@ -128,19 +158,26 @@ function TicketRow({ ticket, agentOptions, onAssign, onUnassign, isLoading, curr
           </Popover>
         </TableCell>
         <TableCell className="w-12 text-center">
-          <KanbanCardMenu
-            ticket={ticket}
-            agentOptions={agentOptions}
-            onAssign={onAssign}
-            onUnassign={onUnassign}
-            isLoading={isLoading}
-            onOpenNotes={() => setNoteOpen(true)}
-            onOpenService={() => setServiceOpen(true)}
-            onOpenTriage={() => setTriageOpen(true)}
-          />
+          <div onClick={(event) => event.stopPropagation()}>
+            <KanbanCardMenu
+              ticket={ticket}
+              agentOptions={agentOptions}
+              onAssign={onAssign}
+              onUnassign={onUnassign}
+              isLoading={isLoading}
+              onOpenNotes={() => setNoteOpen(true)}
+              onOpenService={() => setServiceOpen(true)}
+              onOpenTriage={() => setTriageOpen(true)}
+            />
+          </div>
         </TableCell>
       </TableRow>
 
+      <TicketDetailDrawer
+        ticket={detailOpen ? ticket : null}
+        open={detailOpen}
+        onClose={() => setDetailOpen(false)}
+      />
       <TicketNoteDrawer
         ticket={noteOpen ? ticket : null}
         open={noteOpen}
@@ -175,6 +212,7 @@ function Section({
   onSort,
   collapsed,
   onToggleCollapsed,
+  showTriageSummary,
 }: {
   title: string
   count: number
@@ -189,6 +227,7 @@ function Section({
   onSort: (k: SortKey) => void
   collapsed: boolean
   onToggleCollapsed: () => void
+  showTriageSummary: boolean
 }) {
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-border/55 bg-card/62 p-3 shadow-[0_14px_36px_rgba(0,0,0,0.14)]">
@@ -250,6 +289,7 @@ function Section({
                   onUnassign={onUnassign}
                   isLoading={isLoading}
                   currentUser={currentUser}
+                  showTriageSummary={showTriageSummary}
                 />
               ))
             )}
@@ -322,6 +362,7 @@ export function TicketTable(props: TicketTableProps) {
         onSort={props.onSort}
         collapsed={!!collapsedSections.inProgress}
         onToggleCollapsed={() => toggleSection('inProgress')}
+        showTriageSummary={props.showTriageSummary}
       />
       <Section
         title="No Trello"
@@ -337,6 +378,7 @@ export function TicketTable(props: TicketTableProps) {
         onSort={props.onSort}
         collapsed={!!collapsedSections.trello}
         onToggleCollapsed={() => toggleSection('trello')}
+        showTriageSummary={props.showTriageSummary}
       />
       <Section
         title="Novos Tickets"
@@ -352,6 +394,7 @@ export function TicketTable(props: TicketTableProps) {
         onSort={props.onSort}
         collapsed={!!collapsedSections.newTickets}
         onToggleCollapsed={() => toggleSection('newTickets')}
+        showTriageSummary={props.showTriageSummary}
       />
     </div>
   )

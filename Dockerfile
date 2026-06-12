@@ -39,11 +39,23 @@ COPY vendor/mcp-movidesk/ ./
 RUN npm run build
 
 # ─────────────────────────────────────────────
-# Stage 4: Production image
+# Stage 4: Build bundled DB readonly MCP server
+# ─────────────────────────────────────────────
+FROM node:20-alpine AS mcp-db-builder
+
+WORKDIR /build/mcp-db-readonly
+COPY vendor/mcp-db-readonly/package.json vendor/mcp-db-readonly/package-lock.json ./
+RUN npm ci
+
+COPY vendor/mcp-db-readonly/ ./
+RUN npm run build
+
+# ─────────────────────────────────────────────
+# Stage 5: Production image
 # ─────────────────────────────────────────────
 FROM node:20-alpine AS production
 
-RUN apk add --no-cache nginx gettext
+RUN apk add --no-cache nginx gettext git openssh-client
 
 # ── Backend runtime ──────────────────────────
 WORKDIR /app/backend
@@ -51,6 +63,7 @@ WORKDIR /app/backend
 # Only install production dependencies
 COPY backend/package.json backend/pnpm-lock.yaml ./
 RUN npm install -g pnpm && pnpm install --frozen-lockfile --prod
+RUN npm install -g @anthropic-ai/claude-code
 
 COPY --from=backend-builder /build/backend/dist ./dist
 
@@ -59,6 +72,12 @@ WORKDIR /app/mcp-movidesk
 COPY vendor/mcp-movidesk/package.json vendor/mcp-movidesk/package-lock.json ./
 RUN npm ci --omit=dev
 COPY --from=mcp-builder /build/mcp-movidesk/dist ./dist
+
+# ── Bundled read-only DB MCP server ──────────
+WORKDIR /app/mcp-db-readonly
+COPY vendor/mcp-db-readonly/package.json vendor/mcp-db-readonly/package-lock.json ./
+RUN npm ci --omit=dev
+COPY --from=mcp-db-builder /build/mcp-db-readonly/dist ./dist
 
 # ── Frontend static files ────────────────────
 COPY --from=frontend-builder /build/frontend/dist /usr/share/nginx/html

@@ -2,12 +2,13 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAuth } from '@/contexts/auth-context'
-import { useAssignmentPeople, useTickets, useSyncTickets } from '@/hooks/use-tickets'
+import { useAssignmentPeople, useAssignmentPeopleDetails, useTickets, useSyncTickets } from '@/hooks/use-tickets'
 import { useTicketFilters } from '@/hooks/use-ticket-filters'
 import { useTicketActions } from '@/hooks/use-ticket-actions'
 import { useAppVersion } from '@/hooks/use-app-version'
 import { Header } from '@/components/header'
 import { MonthlyAnalytics } from '@/components/monthly-analytics'
+import { ManagementInsights } from '@/components/management-insights'
 import { SummaryCards, computeSummary } from '@/components/summary-cards'
 import { QuickFilters } from '@/components/quick-filters'
 import { Toolbar } from '@/components/toolbar'
@@ -23,11 +24,15 @@ export function DashboardPage() {
     return (localStorage.getItem('viewMode') as 'table' | 'kanban') ?? 'table'
   })
   const [mcpDeskOpen, setMcpDeskOpen] = useState(false)
+  const [showTriageSummary, setShowTriageSummary] = useState(() => {
+    return localStorage.getItem('showTriageSummary') !== 'false'
+  })
 
   useAppVersion()
 
   const { data, isLoading } = useTickets()
   const { data: assignmentPeople } = useAssignmentPeople()
+  const { data: assignmentPeopleDetails } = useAssignmentPeopleDetails()
   const syncMutation = useSyncTickets()
   const { assignTicket, unassignTicket, isAssigning, isUnassigning } = useTicketActions()
 
@@ -60,6 +65,11 @@ export function DashboardPage() {
   const handleViewMode = (m: 'table' | 'kanban') => {
     setViewMode(m)
     localStorage.setItem('viewMode', m)
+  }
+
+  const handleShowTriageSummary = (show: boolean) => {
+    setShowTriageSummary(show)
+    localStorage.setItem('showTriageSummary', String(show))
   }
 
   if (isLoading) {
@@ -125,13 +135,24 @@ export function DashboardPage() {
             hasActiveFilters={filters.hasActiveFilters}
             keepFilters={filters.keepFilters}
             onKeepFiltersChange={filters.setKeepFilters}
+            showTriageSummary={showTriageSummary}
+            onShowTriageSummaryChange={handleShowTriageSummary}
             onClearFilters={filters.clearFilters}
             onOpenMcpDesk={() => setMcpDeskOpen(true)}
+          />
+
+          <ManagementInsights
+            tickets={filters.filteredTickets}
+            newTickets={filters.filteredNewTickets}
+            onQuickFilter={filters.setQuickFilter}
+            onSearch={filters.setSearch}
           />
 
           <MonthlyAnalytics
             analytics={monthlyAnalytics}
             teamOptions={filters.teamOptions}
+            agentOptions={agentOptions}
+            peopleDetails={assignmentPeopleDetails?.people ?? []}
             isLoading={isLoading || syncMutation.isPending}
           />
 
@@ -146,6 +167,7 @@ export function DashboardPage() {
               sortKey={filters.sortKey}
               sortDir={filters.sortDir}
               onSort={filters.toggleSort}
+              showTriageSummary={showTriageSummary}
             />
           ) : (
             <KanbanBoard
@@ -155,6 +177,7 @@ export function DashboardPage() {
               onAssign={assignTicket}
               onUnassign={unassignTicket}
               isLoading={isAssigning || isUnassigning}
+              showTriageSummary={showTriageSummary}
             />
           )}
 

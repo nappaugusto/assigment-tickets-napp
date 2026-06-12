@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Check, GripVertical, MoreVertical, Pencil } from 'lucide-react'
+import { Check, GripVertical, MoreVertical, Pencil, Sparkles } from 'lucide-react'
 import { type KanbanColumn, type Ticket } from '@/lib/api'
 import { formatDate, getSlaStatus, getTimeUntilSla } from '@/lib/date-utils'
 import { Badge } from '@/components/ui/badge'
@@ -10,6 +10,7 @@ import { TicketActions } from '@/components/ticket-actions'
 import { TicketNoteDrawer } from '@/components/ticket-note-drawer'
 import { TicketServiceDrawer } from '@/components/ticket-service-drawer'
 import { TicketAiTriageDrawer } from '@/components/ticket-ai-triage-drawer'
+import { TicketDetailDrawer } from '@/components/ticket-detail-drawer'
 import { useTicketsWithNotes } from '@/hooks/use-ticket-note'
 import { getTicketUrl } from '@/lib/utils'
 
@@ -32,6 +33,7 @@ interface KanbanCardDraggableProps {
   columns?: KanbanColumn[]
   currentColumnId?: string
   onMoveToColumn?: (ticketId: number, columnId: string) => void
+  showTriageSummary: boolean
 }
 
 export function KanbanCardDraggable({
@@ -45,10 +47,12 @@ export function KanbanCardDraggable({
   columns = [],
   currentColumnId,
   onMoveToColumn,
+  showTriageSummary,
 }: KanbanCardDraggableProps) {
   const [noteOpen, setNoteOpen] = useState(false)
   const [serviceOpen, setServiceOpen] = useState(false)
   const [triageOpen, setTriageOpen] = useState(false)
+  const [detailOpen, setDetailOpen] = useState(false)
   const [moveOpen, setMoveOpen] = useState(false)
   const sla = getSlaStatus(ticket.slaSolutionDate, ticket.slaSolutionDateIsPaused)
   const slaLabel = getTimeUntilSla(ticket.slaSolutionDate)
@@ -76,7 +80,10 @@ export function KanbanCardDraggable({
         style={isDragOverlay ? { cursor: 'grabbing' } : style}
         className={`rounded-lg border p-3 flex flex-col gap-2 bg-card select-none ${
           isMyTicket ? 'border-primary/40' : 'border-border/40'
-        } ${isDragging ? 'ring-1 ring-primary/35' : ''} ${isDragOverlay ? 'shadow-lg rotate-1' : ''}`}
+        } ${isDragging ? 'ring-1 ring-primary/35' : ''} ${isDragOverlay ? 'shadow-lg rotate-1' : 'cursor-pointer'}`}
+        onClick={() => {
+          if (!isDragOverlay) setDetailOpen(true)
+        }}
       >
         <div className="flex items-start justify-between gap-2">
           <a
@@ -147,6 +154,7 @@ export function KanbanCardDraggable({
                 title="Arrastar chamado"
                 className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:cursor-grabbing"
                 style={{ touchAction: 'none' }}
+                onClick={(e) => e.stopPropagation()}
                 {...attributes}
                 {...listeners}
               >
@@ -156,6 +164,29 @@ export function KanbanCardDraggable({
           </div>
         </div>
         <p className="text-sm leading-snug line-clamp-3">{ticket.subject || '—'}</p>
+      {ticket.ai_triage && (
+        <button
+          type="button"
+          className={`rounded-md border border-primary/25 bg-primary/10 text-left transition-colors hover:bg-primary/15 ${
+            showTriageSummary ? 'px-2.5 py-2' : 'px-2 py-1'
+          }`}
+          onClick={(event) => {
+            event.stopPropagation()
+            setTriageOpen(true)
+          }}
+        >
+          <div className={`flex items-center gap-1.5 text-[11px] font-medium text-primary ${showTriageSummary ? 'mb-1' : ''}`}>
+            <Sparkles size={12} />
+            Triagem salva
+            <span className="text-muted-foreground">/{ticket.ai_triage.priority}</span>
+          </div>
+          {showTriageSummary && (
+            <p className="line-clamp-2 text-xs leading-snug text-foreground/85">
+              {ticket.ai_triage.summary}
+            </p>
+          )}
+        </button>
+      )}
       <div className="text-xs text-muted-foreground">
         {ticket.responsavel ? (
           <span className={isMyTicket ? 'text-primary font-medium' : undefined}>
@@ -171,15 +202,17 @@ export function KanbanCardDraggable({
       </div>
       <div className="flex flex-wrap items-center gap-1">
         <div className="min-w-0">
-          <TicketActions
-            ticket={ticket}
-            agentOptions={agentOptions}
-            onAssign={onAssign}
-            onUnassign={onUnassign}
-            isLoading={isLoading}
-            onOpenService={() => setServiceOpen(true)}
-            onOpenTriage={() => setTriageOpen(true)}
-          />
+          <div onClick={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
+            <TicketActions
+              ticket={ticket}
+              agentOptions={agentOptions}
+              onAssign={onAssign}
+              onUnassign={onUnassign}
+              isLoading={isLoading}
+              onOpenService={() => setServiceOpen(true)}
+              onOpenTriage={() => setTriageOpen(true)}
+            />
+          </div>
         </div>
           {!isDragOverlay && (
             <div className="flex items-center gap-1">
@@ -199,6 +232,11 @@ export function KanbanCardDraggable({
         </div>
       </div>
 
+      <TicketDetailDrawer
+        ticket={detailOpen ? ticket : null}
+        open={detailOpen}
+        onClose={() => setDetailOpen(false)}
+      />
       <TicketNoteDrawer
         ticket={noteOpen ? ticket : null}
         open={noteOpen}

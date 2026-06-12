@@ -1,20 +1,27 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import * as Dialog from '@radix-ui/react-dialog'
 import {
   Bot,
   Clipboard,
+  Code2,
+  CornerDownLeft,
   ExternalLink,
   FileCode2,
   Loader2,
+  MessageSquareText,
   RefreshCw,
+  Sparkles,
   SquareKanban,
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { type Ticket, type TicketAiTriageResult } from '@/lib/api'
+import { ticketsApi, type SimilarTicket, type Ticket, type TicketAiTriage, type TicketAiTriageResult } from '@/lib/api'
 import { getTicketUrl } from '@/lib/utils'
 import {
+  useAnalyzeCodeAiTriage,
   useAiTriageDecision,
+  useAiTriageFollowUp,
   useReanalyzeAiTriage,
   useStartAiTriage,
   useTicketAiTriage,
@@ -53,16 +60,26 @@ function TicketAiTriageDrawerContent({
   open,
   onClose,
 }: TicketAiTriageDrawerProps & { ticket: Ticket }) {
-  const [trelloOpen, setTrelloOpen] = useState(false)
   const triageQuery = useTicketAiTriage(ticket.id, open)
+  const similarQuery = useQuery({
+    queryKey: ['similar-tickets', ticket.id],
+    queryFn: () => ticketsApi.similar(ticket.id),
+    enabled: open,
+    staleTime: 60_000,
+  })
   const startTriage = useStartAiTriage(ticket.id)
   const reanalyze = useReanalyzeAiTriage(ticket.id)
+  const analyzeCode = useAnalyzeCodeAiTriage(ticket.id)
   const decision = useAiTriageDecision(ticket.id)
+  const followUp = useAiTriageFollowUp(ticket.id)
+  const [trelloOpen, setTrelloOpen] = useState(false)
   const triageRecord = triageQuery.data?.triage ?? null
   const triage = triageRecord?.triage ?? null
+  const trelloLabels = triage ? buildTrelloLabels(triage) : []
   const isWorking =
     startTriage.isPending ||
     reanalyze.isPending ||
+    analyzeCode.isPending ||
     triageRecord?.status === 'pending' ||
     triageRecord?.status === 'running'
 
@@ -74,9 +91,17 @@ function TicketAiTriageDrawerContent({
 
   const copyTriage = async () => {
     if (!triage || !triageRecord) return
-    await navigator.clipboard.writeText(formatTriageForCopy(ticket, triage))
-    await decision.mutateAsync({ id: triageRecord.id, decision: 'copied' })
-    toast.success('Triagem copiada')
+    try {
+      await copyText(formatTriageForCopy(ticket, triage))
+      toast.success('Triagem copiada')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível copiar a triagem')
+      return
+    }
+
+    void decision.mutateAsync({ id: triageRecord.id, decision: 'copied' }).catch(() => {
+      // The mutation hook already shows the user-facing error toast.
+    })
   }
 
   const ignore = async () => {
@@ -85,11 +110,10 @@ function TicketAiTriageDrawerContent({
     toast.success('Sugestão ignorada')
   }
 
-  const openSuggestedCard = async () => {
+  const markCardCreated = async () => {
     if (triageRecord) {
       await decision.mutateAsync({ id: triageRecord.id, decision: 'card_created' })
     }
-    setTrelloOpen(true)
   }
 
   return (
@@ -129,6 +153,17 @@ function TicketAiTriageDrawerContent({
                 {isWorking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                 Re-analisar
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 gap-2"
+                disabled={isWorking}
+                onClick={() => analyzeCode.mutate()}
+              >
+                {analyzeCode.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Code2 className="h-3.5 w-3.5" />}
+                Analisar código
+              </Button>
               <Dialog.Close asChild>
                 <button className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
                   <X size={17} />
@@ -141,21 +176,32 @@ function TicketAiTriageDrawerContent({
             {isWorking ? (
               <div className="flex min-h-72 flex-col items-center justify-center gap-3 rounded-lg border border-border/45 bg-muted/15 text-sm text-muted-foreground">
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                Analisando ticket e trechos do código...
+                {analyzeCode.isPending ? 'Analisando código e evidências do banco...' : 'Analisando ticket...'}
               </div>
             ) : triageRecord?.status === 'failed' ? (
               <div className="rounded-lg border border-destructive/35 bg-destructive/10 p-4 text-sm">
                 <p className="font-medium text-foreground">Não foi possível gerar a triagem.</p>
                 <p className="mt-1 text-muted-foreground">{triageRecord.error}</p>
               </div>
-            ) : triage ? (
+            ) : triage && triageRecord ? (
               <div className="space-y-4">
                 <TriagePanel triage={triage} />
+                <CustomerReplyPanel text={getSuggestedCustomerReply(ticket, triage)} />
+                <SimilarTicketsPanel
+                  tickets={similarQuery.data?.tickets ?? []}
+                  triageSimilarTickets={triage.similarTickets ?? []}
+                  isLoading={similarQuery.isLoading}
+                />
+                <TriageChatPanel
+                  triageRecord={triageRecord}
+                  isPending={followUp.isPending}
+                  onSend={(message) => followUp.mutateAsync({ id: triageRecord.id, message })}
+                />
                 <SuggestedCardPanel
                   triage={triage}
                   onCopy={copyTriage}
                   onIgnore={ignore}
-                  onCreateCard={openSuggestedCard}
+                  onCreateCard={() => setTrelloOpen(true)}
                   isBusy={decision.isPending}
                 />
               </div>
@@ -165,17 +211,18 @@ function TicketAiTriageDrawerContent({
               </div>
             )}
           </div>
+          <TrelloCardDialog
+            ticket={trelloOpen ? ticket : null}
+            open={trelloOpen}
+            onClose={() => setTrelloOpen(false)}
+            startCreateNew={Boolean(ticket.trello_card_url)}
+            suggestedName={triage?.suggestedCard.title}
+            suggestedDescription={triage ? formatTriageForTrello(ticket, triage) : undefined}
+            suggestedLabels={trelloLabels}
+            onCreated={markCardCreated}
+          />
         </Dialog.Content>
       </Dialog.Portal>
-
-      <TrelloCardDialog
-        ticket={trelloOpen ? ticket : null}
-        open={trelloOpen}
-        startCreateNew
-        suggestedName={triage?.suggestedCard.title}
-        suggestedDescription={triage?.suggestedCard.description || formatTriageForCopy(ticket, triage)}
-        onClose={() => setTrelloOpen(false)}
-      />
     </Dialog.Root>
   )
 }
@@ -207,7 +254,7 @@ function TriagePanel({ triage }: { triage: TicketAiTriageResult }) {
       </div>
 
       <ListBlock title="Evidências" items={triage.evidence} />
-      <ListBlock title="Próximos passos" items={triage.nextSteps} ordered />
+      <NextStepsBlock items={triage.nextSteps} />
 
       {triage.relevantFiles.length > 0 && (
         <div className="mt-4">
@@ -225,6 +272,101 @@ function TriagePanel({ triage }: { triage: TicketAiTriageResult }) {
           </div>
         </div>
       )}
+    </section>
+  )
+}
+
+function CustomerReplyPanel({ text }: { text?: string }) {
+  const reply = text?.trim()
+  if (!reply) return null
+
+  const copyReply = async () => {
+    try {
+      await copyText(reply)
+      toast.success('Resposta ao cliente copiada')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível copiar a resposta')
+    }
+  }
+
+  return (
+    <section className="rounded-lg border border-border/60 bg-card/60 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <PanelHeader icon={<MessageSquareText size={15} />} title="Resposta sugerida ao cliente" />
+        <Button size="sm" variant="outline" className="h-8 gap-2 text-xs" onClick={copyReply}>
+          <Clipboard className="h-3.5 w-3.5" />
+          Copiar
+        </Button>
+      </div>
+      <div className="mt-3 whitespace-pre-wrap rounded-md border border-border/45 bg-background/35 p-3 text-sm leading-relaxed text-foreground">
+        {reply}
+      </div>
+    </section>
+  )
+}
+
+function SimilarTicketsPanel({
+  tickets,
+  triageSimilarTickets,
+  isLoading,
+}: {
+  tickets: SimilarTicket[]
+  triageSimilarTickets: TicketAiTriageResult['similarTickets']
+  isLoading?: boolean
+}) {
+  const aiItems = triageSimilarTickets.filter(
+    (item) => !tickets.some((ticket) => ticket.id === item.id),
+  )
+
+  if (isLoading) {
+    return (
+      <section className="rounded-lg border border-border/60 bg-card/60 p-4">
+        <PanelHeader icon={<Sparkles size={15} />} title="Tickets semelhantes" />
+        <p className="mt-3 text-sm text-muted-foreground">Buscando comparações...</p>
+      </section>
+    )
+  }
+
+  if (!tickets.length && !aiItems.length) return null
+
+  return (
+    <section className="rounded-lg border border-border/60 bg-card/60 p-4">
+      <PanelHeader icon={<Sparkles size={15} />} title="Tickets semelhantes" />
+      <div className="mt-3 space-y-2">
+        {tickets.map((item) => (
+          <a
+            key={item.id}
+            href={getTicketUrl(item.id)}
+            target="_blank"
+            rel="noreferrer"
+            className="block rounded-md border border-border/45 bg-background/35 p-3 transition-colors hover:border-primary/35 hover:bg-primary/10 hover:no-underline"
+          >
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="font-mono text-primary">#{item.id}</span>
+              {item.status && <Badge variant="outline">{item.status}</Badge>}
+              {item.ai_triage && <Badge variant="secondary">IA {item.ai_triage.priority}</Badge>}
+              {item.trello_card_url && <Badge variant="outline">Trello</Badge>}
+            </div>
+            <p className="mt-2 line-clamp-2 text-sm font-medium text-foreground">{item.subject || 'Sem assunto'}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {item.reasons.length ? item.reasons.join(' · ') : `Similaridade ${item.score}`}
+            </p>
+            {item.ai_triage?.summary && (
+              <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-foreground/75">
+                {item.ai_triage.summary}
+              </p>
+            )}
+          </a>
+        ))}
+
+        {aiItems.map((item) => (
+          <div key={`ai-${item.id}`} className="rounded-md border border-border/45 bg-background/35 p-3">
+            <div className="font-mono text-xs text-primary">#{item.id}</div>
+            <p className="mt-1 text-sm font-medium text-foreground">{item.subject}</p>
+            {item.reason && <p className="mt-1 text-xs text-muted-foreground">{item.reason}</p>}
+          </div>
+        ))}
+      </div>
     </section>
   )
 }
@@ -257,9 +399,9 @@ function SuggestedCardPanel({
         </div>
       )}
       <div className="mt-4 flex flex-wrap gap-2">
-        <Button size="sm" onClick={onCreateCard} disabled={isBusy || !triage.shouldCreateCard}>
+        <Button size="sm" onClick={onCreateCard} disabled={isBusy}>
           <SquareKanban className="h-3.5 w-3.5" />
-          Criar card editar antes
+          Criar card no Trello
         </Button>
         <Button size="sm" variant="outline" onClick={onCopy} disabled={isBusy}>
           <Clipboard className="h-3.5 w-3.5" />
@@ -268,6 +410,84 @@ function SuggestedCardPanel({
         <Button size="sm" variant="ghost" onClick={onIgnore} disabled={isBusy}>
           Ignorar sugestão
         </Button>
+      </div>
+    </section>
+  )
+}
+
+function TriageChatPanel({
+  triageRecord,
+  isPending,
+  onSend,
+}: {
+  triageRecord: TicketAiTriage
+  isPending?: boolean
+  onSend: (message: string) => Promise<unknown>
+}) {
+  const [message, setMessage] = useState('')
+  const messages = triageRecord.follow_up_messages ?? []
+
+  const submit = async () => {
+    const trimmed = message.trim()
+    if (!trimmed || isPending) return
+    setMessage('')
+    await onSend(trimmed)
+  }
+
+  return (
+    <section className="rounded-lg border border-border/60 bg-card/60 p-4">
+      <PanelHeader icon={<MessageSquareText size={15} />} title="Mini chat da triagem" />
+      <div className="mt-3 space-y-3">
+        {messages.length === 0 ? (
+          <div className="rounded-md border border-border/45 bg-background/35 p-3 text-xs leading-relaxed text-muted-foreground">
+            Cole aqui o erro retornado por uma consulta, um log, ou uma hipótese sua. A resposta usa o contexto do ticket e da triagem salva.
+          </div>
+        ) : (
+          <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+            {messages.map((item, index) => (
+              <div
+                key={`${item.created_at}-${index}`}
+                className={`rounded-md border p-3 text-sm leading-relaxed ${
+                  item.role === 'user'
+                    ? 'border-primary/30 bg-primary/10 text-foreground'
+                    : 'border-border/45 bg-background/35 text-muted-foreground'
+                }`}
+              >
+                <div className="mb-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                  {item.role === 'user' ? 'Você' : 'IA'}
+                </div>
+                <div className="whitespace-pre-wrap">{item.content}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <textarea
+            value={message}
+            onChange={(event) => setMessage(event.target.value)}
+            onKeyDown={(event) => {
+              if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                event.preventDefault()
+                void submit()
+              }
+            }}
+            disabled={isPending}
+            rows={3}
+            placeholder="Cole o erro, resultado do SELECT ou sua ideia..."
+            className="min-h-20 flex-1 resize-y rounded-md border border-input bg-background/70 px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-1 focus:ring-ring"
+          />
+          <Button
+            type="button"
+            size="sm"
+            className="self-end gap-2"
+            onClick={() => void submit()}
+            disabled={isPending || !message.trim()}
+          >
+            {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CornerDownLeft className="h-3.5 w-3.5" />}
+            Enviar
+          </Button>
+        </div>
       </div>
     </section>
   )
@@ -291,25 +511,116 @@ function LabeledText({ label, text, strong }: { label: string; text: string; str
   )
 }
 
-function ListBlock({ title, items, ordered }: { title: string; items: string[]; ordered?: boolean }) {
+function stripLeadingNumber(value: string) {
+  return value.replace(/^\s*\d+[\).]\s*/, '').trim()
+}
+
+function getSuggestedCustomerReply(ticket: Ticket, triage: TicketAiTriageResult | null) {
+  const reply = triage?.suggestedCustomerReply?.trim()
+  if (reply) return reply
+
+  const questionText = triage?.customerQuestions?.length
+    ? ` Para avançarmos com mais precisão, poderia nos enviar: ${triage.customerQuestions.map(stripLeadingNumber).join('; ')}.`
+    : ''
+
+  return [
+    'Olá! Obrigado pelo contato.',
+    `Recebemos a solicitação${ticket.subject ? ` sobre "${ticket.subject}"` : ''} e já estamos analisando o cenário informado.`,
+    triage?.summary ? `Identificamos inicialmente: ${triage.summary}` : null,
+    questionText,
+    'Assim que tivermos uma atualização mais concreta, retornaremos por aqui.',
+  ]
+    .filter(Boolean)
+    .join(' ')
+}
+
+async function copyText(text: string) {
+  if (!text.trim()) {
+    throw new Error('Não há análise para copiar.')
+  }
+
+  if (navigator.clipboard?.writeText && window.isSecureContext) {
+    await navigator.clipboard.writeText(text)
+    return
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', '')
+  textarea.style.position = 'fixed'
+  textarea.style.left = '-9999px'
+  textarea.style.top = '0'
+  document.body.appendChild(textarea)
+  textarea.focus()
+  textarea.select()
+
+  try {
+    const copied = document.execCommand('copy')
+    if (!copied) {
+      throw new Error('O navegador bloqueou a cópia automática.')
+    }
+  } finally {
+    document.body.removeChild(textarea)
+  }
+}
+
+function splitStepAndSql(value: string) {
+  const text = stripLeadingNumber(value)
+  const match = text.match(/\b(SELECT|WITH)\b/i)
+  if (!match || match.index === undefined) {
+    return { text, sql: '' }
+  }
+
+  return {
+    text: text.slice(0, match.index).replace(/[:;\s]+$/, '').trim(),
+    sql: text.slice(match.index).replace(/;?\s*$/, ';').trim(),
+  }
+}
+
+function NextStepsBlock({ items }: { items: string[] }) {
+  if (!items.length) return null
+
+  return (
+    <div className="mt-4">
+      <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Próximos passos</p>
+      <div className="space-y-2">
+        {items.map((item, index) => {
+          const step = splitStepAndSql(item)
+
+          return (
+            <div key={`${index}-${item}`} className="rounded-lg border border-border/50 bg-background/35 p-3">
+              <div className="flex gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-primary/35 bg-primary/10 text-xs font-semibold tabular-nums text-primary">
+                  {index + 1}
+                </span>
+                <div className="min-w-0 flex-1 space-y-2">
+                  {step.text && <p className="text-sm leading-relaxed text-foreground">{step.text}</p>}
+                  {step.sql ? (
+                    <pre className="overflow-x-auto rounded-md border border-cyan-400/25 bg-cyan-950/20 p-3 font-mono text-xs leading-relaxed text-cyan-50">
+                      <code>{step.sql}</code>
+                    </pre>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function ListBlock({ title, items }: { title: string; items: string[] }) {
   if (!items.length) return null
 
   return (
     <div className="mt-4">
       <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">{title}</p>
-      {ordered ? (
-        <ol className="list-decimal space-y-1 pl-5 text-sm text-foreground">
-          {items.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ol>
-      ) : (
-        <ul className="list-disc space-y-1 pl-5 text-sm text-foreground">
-          {items.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
-      )}
+      <ul className="list-disc space-y-1 pl-5 text-sm text-foreground">
+        {items.map((item) => (
+          <li key={item}>{stripLeadingNumber(item)}</li>
+        ))}
+      </ul>
     </div>
   )
 }
@@ -330,7 +641,42 @@ function formatTriageForCopy(ticket: Ticket, triage: TicketAiTriageResult | null
     ...triage.evidence.map((item) => `- ${item}`),
     '',
     'Próximos passos:',
-    ...triage.nextSteps.map((item, index) => `${index + 1}. ${item}`),
+    ...triage.nextSteps.map((item, index) => `${index + 1}. ${stripLeadingNumber(item)}`),
+    '',
+    'Resposta sugerida ao cliente:',
+    getSuggestedCustomerReply(ticket, triage),
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+function buildTrelloLabels(triage: TicketAiTriageResult) {
+  return Array.from(
+    new Set([
+      ...triage.suggestedCard.labels,
+      ...triage.tags,
+      triage.priority !== 'baixa' ? triage.priority : null,
+    ].filter((label): label is string => Boolean(label?.trim()))),
+  ).slice(0, 8)
+}
+
+function formatTriageForTrello(ticket: Ticket, triage: TicketAiTriageResult | null) {
+  if (!triage) return ''
+
+  return [
+    `Resumo: ${triage.summary}`,
+    `Sintoma: ${triage.symptom}`,
+    `Área provável: ${triage.likelyArea}`,
+    `Hipótese técnica: ${triage.technicalHypothesis}`,
+    '',
+    'Evidências:',
+    ...triage.evidence.map((item) => `- ${stripLeadingNumber(item)}`),
+    '',
+    'Próximos passos:',
+    ...triage.nextSteps.map((item, index) => `${index + 1}. ${stripLeadingNumber(item)}`),
+    '',
+    'Resposta sugerida ao cliente:',
+    getSuggestedCustomerReply(ticket, triage),
   ]
     .filter(Boolean)
     .join('\n')

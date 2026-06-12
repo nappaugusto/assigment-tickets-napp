@@ -8,6 +8,32 @@ interface RawTicket {
 }
 
 const FINAL_STATUS_KEYWORDS = ['cancelado', 'resolvido', 'fechado'];
+const TRANSIENT_NETWORK_CODES = new Set([
+  'EAI_AGAIN',
+  'ECONNABORTED',
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'ENOTFOUND',
+]);
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getErrorCode(error: unknown) {
+  if (!error || typeof error !== 'object') return null;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' ? code : null;
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isTransientNetworkError(error: unknown) {
+  const code = getErrorCode(error);
+  return code ? TRANSIENT_NETWORK_CODES.has(code) : false;
+}
 
 @Injectable()
 export class SyncService {
@@ -21,6 +47,8 @@ export class SyncService {
   private readonly debugDateFieldsSampleSize: number;
   private readonly pageSize: number;
   private readonly maxPages: number;
+  private readonly retryAttempts: number;
+  private readonly retryDelayMs: number;
 
   constructor(
     private readonly config: ConfigService,
@@ -44,6 +72,14 @@ export class SyncService {
     this.maxPages = Math.max(
       1,
       Number(config.get('MOVIDESK_TICKETS_MAX_PAGES') ?? 10),
+    );
+    this.retryAttempts = Math.max(
+      1,
+      Number(config.get('MOVIDESK_API_RETRY_ATTEMPTS') ?? 3),
+    );
+    this.retryDelayMs = Math.max(
+      250,
+      Number(config.get('MOVIDESK_API_RETRY_DELAY_MS') ?? 1500),
     );
 
     // Parse query params from env string
@@ -323,58 +359,75 @@ export class SyncService {
   }
 
   private async fetchFromApi(): Promise<Record<string, unknown>[]> {
-    try {
-      const normalized: Record<string, unknown>[] = [];
+    const normalized: Record<string, unknown>[] = [];
 
-      for (let page = 0; page < this.maxPages; page++) {
-        const params: Record<string, string> = {
-          ...this.queryParams,
-          $top: String(this.pageSize),
-          $skip: String(page * this.pageSize),
-        };
-        if (this.apiToken) params['token'] = this.apiToken;
+    for (let page = 0; page < this.maxPages; page++) {
+      const params: Record<string, string> = {
+        ...this.queryParams,
+        $top: String(this.pageSize),
+        $skip: String(page * this.pageSize),
+      };
+      if (this.apiToken) params['token'] = this.apiToken;
 
-        const response = await axios.get(this.apiUrl, {
+      const response = await this.getMovideskPage(params, page);
+
+      let data = response.data as unknown;
+      if (Array.isArray(data)) {
+        // ok
+      } else if (data && typeof data === 'object') {
+        const obj = data as Record<string, unknown>;
+        for (const key of ['tickets', 'data', 'items', 'result', 'results']) {
+          if (Array.isArray(obj[key])) {
+            data = obj[key];
+            break;
+          }
+        }
+      }
+
+      if (!Array.isArray(data)) break;
+      const rawTickets = data as RawTicket[];
+      if (rawTickets.length === 0) break;
+
+      if (this.debugDateFields && page === 0) {
+        this.logDateFieldDiagnostics(rawTickets);
+      }
+
+      for (const item of rawTickets) {
+        const n = this.normalizeTicket(item);
+        if (n) normalized.push(n);
+      }
+
+      if (rawTickets.length < this.pageSize) break;
+    }
+
+    this.logger.log(`Fetched ${normalized.length} tickets from Movidesk API`);
+    return normalized;
+  }
+
+  private async getMovideskPage(params: Record<string, string>, page: number) {
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
+      try {
+        return await axios.get(this.apiUrl, {
           params,
           timeout: Number(this.config.get('MOVIDESK_API_TIMEOUT') ?? 10000),
           headers: { accept: 'application/json', 'user-agent': 'NestJS/1.0' },
         });
-
-        let data = response.data as unknown;
-        if (Array.isArray(data)) {
-          // ok
-        } else if (data && typeof data === 'object') {
-          const obj = data as Record<string, unknown>;
-          for (const key of ['tickets', 'data', 'items', 'result', 'results']) {
-            if (Array.isArray(obj[key])) {
-              data = obj[key];
-              break;
-            }
-          }
+      } catch (error) {
+        lastError = error;
+        if (!isTransientNetworkError(error) || attempt >= this.retryAttempts) {
+          break;
         }
 
-        if (!Array.isArray(data)) break;
-        const rawTickets = data as RawTicket[];
-        if (rawTickets.length === 0) break;
-
-        if (this.debugDateFields && page === 0) {
-          this.logDateFieldDiagnostics(rawTickets);
-        }
-
-        for (const item of rawTickets) {
-          const n = this.normalizeTicket(item);
-          if (n) normalized.push(n);
-        }
-
-        if (rawTickets.length < this.pageSize) break;
+        this.logger.warn(
+          `Movidesk API transient error on page ${page + 1} (${getErrorCode(error) ?? 'network'}). Retry ${attempt}/${this.retryAttempts - 1} in ${this.retryDelayMs}ms.`,
+        );
+        await sleep(this.retryDelayMs);
       }
-
-      this.logger.log(`Fetched ${normalized.length} tickets from Movidesk API`);
-      return normalized;
-    } catch (err) {
-      this.logger.error(`Error fetching tickets: ${(err as Error).message}`);
-      throw err;
     }
+
+    throw lastError;
   }
 
   async sync(force = false): Promise<{ synced: boolean; skipped: boolean }> {
@@ -398,8 +451,12 @@ export class SyncService {
       return { synced: true, skipped: false };
     } catch (err) {
       if (force) {
+        this.logger.error(`Error fetching tickets: ${getErrorMessage(err)}`);
         throw err;
       }
+      this.logger.warn(
+        `Sync skipped because Movidesk API is temporarily unavailable. Keeping local cached tickets. Cause: ${getErrorMessage(err)}`,
+      );
       return { synced: false, skipped: false };
     }
   }

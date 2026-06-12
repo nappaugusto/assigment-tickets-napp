@@ -20,6 +20,7 @@ interface KanbanColumnProps {
   currentUser: string
   onDelete: (columnId: string) => void
   onMoveTicketToColumn: (ticketId: number, columnId: string) => void
+  showTriageSummary: boolean
 }
 
 export function KanbanColumn({
@@ -35,6 +36,7 @@ export function KanbanColumn({
   currentUser,
   onDelete,
   onMoveTicketToColumn,
+  showTriageSummary,
 }: KanbanColumnProps) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -131,6 +133,7 @@ export function KanbanColumn({
                 columns={columns}
                 currentColumnId={column.id}
                 onMoveToColumn={onMoveTicketToColumn}
+                showTriageSummary={showTriageSummary}
               />
             ))
           )}

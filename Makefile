@@ -85,7 +85,10 @@ docker-build: ## Build da imagem Docker de produção
 
 .PHONY: docker-run
 docker-run: ## Roda apenas o app na porta 80 (requer DATABASE_URL acessível)
-	docker run --rm -p 80:8080 --env-file .env assigment-tickets-napp
+	docker run --rm -p 80:8080 --env-file .env \
+	  -v "$${HOME}/.claude:/root/.claude:ro" \
+	  -v "$${HOME}/.claude.json:/root/.claude.json:ro" \
+	  assigment-tickets-napp
 
 .PHONY: docker-up
 docker-up: ## Sobe via docker compose (build + run)

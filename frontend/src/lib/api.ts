@@ -67,6 +67,67 @@ export interface Ticket {
   trello_card_url: string | null
   trello_card_name: string | null
   trello_card_created_at: string | null
+  ai_triage: TicketAiTriagePreview | null
+}
+
+export interface TicketAiTriagePreview {
+  id: number
+  status: 'completed'
+  priority: 'baixa' | 'media' | 'alta' | 'critica'
+  summary: string
+  likelyArea: string
+  confidence: 'baixa' | 'media' | 'alta'
+  updated_at: string
+  finished_at: string | null
+}
+
+export interface TicketDetailInteraction {
+  id: number | null
+  type: 'public' | 'internal'
+  origin: number | null
+  status: string | null
+  author: string | null
+  authorEmail: string | null
+  createdDate: string | null
+  text: string
+  isDeleted: boolean
+}
+
+export interface TicketDetail {
+  id: number
+  subject: string | null
+  status: string | null
+  urgency: string | null
+  category: string | null
+  ownerTeam: string | null
+  ownerName: string | null
+  createdDate: string | null
+  lastUpdate: string | null
+  slaSolutionDate: string | null
+  clients: Array<{
+    name: string | null
+    email: string | null
+    organization: string | null
+  }>
+  serviceFull: string[]
+  tags: string[]
+  summary: string
+  interactions: TicketDetailInteraction[]
+  rawActionCount: number
+}
+
+export interface SimilarTicket {
+  id: number
+  subject: string | null
+  status: string | null
+  ownerTeam: string | null
+  responsavel: string | null
+  opened_at: string | null
+  slaSolutionDate: string | null
+  trello_card_url: string | null
+  score: number
+  reasons: string[]
+  ai_triage: TicketAiTriagePreview | null
 }
 
 export interface TicketMonthlyAnalyticsItem {
@@ -97,9 +158,12 @@ export interface TicketsPayload {
 export const ticketsApi = {
   refresh: (manual = false) =>
     get<TicketsPayload>(`/tickets/refresh${manual ? '?manual=1' : ''}`),
-  monthlyAnalytics: (months = 4, team?: string) => {
+  detail: (id: number) => get<{ detail: TicketDetail }>(`/tickets/${id}/detail`),
+  similar: (id: number) => get<{ tickets: SimilarTicket[] }>(`/tickets/${id}/similar`),
+  monthlyAnalytics: (months = 4, team?: string, responsavel?: string) => {
     const params = new URLSearchParams({ months: String(months) })
     if (team) params.set('team', team)
+    if (responsavel) params.set('responsavel', responsavel)
     return get<TicketMonthlyAnalyticsPayload>(`/tickets/analytics/monthly?${params.toString()}`)
   },
   assign: (id: number, responsavel: string) =>
@@ -189,6 +253,12 @@ export interface TicketAiTriageResult {
     description: string
     labels: string[]
   }
+  suggestedCustomerReply: string
+  similarTickets: Array<{
+    id: number
+    subject: string
+    reason: string
+  }>
   customerQuestions: string[]
   confidence: 'baixa' | 'media' | 'alta'
 }
@@ -203,9 +273,16 @@ export interface TicketAiTriage {
   input_summary: Record<string, unknown> | null
   error: string | null
   decision: string | null
+  follow_up_messages: TicketAiTriageMessage[]
   created_at: string
   updated_at: string
   finished_at: string | null
+}
+
+export interface TicketAiTriageMessage {
+  role: 'user' | 'assistant'
+  content: string
+  created_at: string
 }
 
 export const aiTriageApi = {
@@ -215,6 +292,10 @@ export const aiTriageApi = {
     post<{ triage: TicketAiTriage }>(`/tickets/${ticketId}/triage`),
   reanalyze: (ticketId: number) =>
     post<{ triage: TicketAiTriage }>(`/tickets/${ticketId}/triage/reanalyze`),
+  analyzeCode: (ticketId: number) =>
+    post<{ triage: TicketAiTriage }>(`/tickets/${ticketId}/triage/code-analysis`),
+  followUp: (id: number, message: string) =>
+    post<{ triage: TicketAiTriage }>(`/triage/${id}/messages`, { message }),
   decision: (id: number, decision: TriageDecision) =>
     http.patch<{ triage: TicketAiTriage }>(`/triage/${id}/decision`, { decision }).then((r) => r.data),
 }
@@ -289,6 +370,8 @@ export interface CreateTrelloCardPayload {
   listId?: string
   name?: string
   description?: string
+  extraDescription?: string
+  labels?: string[]
   forceNew?: boolean
 }
 

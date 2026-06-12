@@ -69,9 +69,32 @@ export class TicketsController {
   async monthlyAnalytics(
     @Query('months') months?: string,
     @Query('team') team?: string,
+    @Query('responsavel') responsavel?: string,
   ) {
     const parsedMonths = months ? Number(months) : undefined;
-    return this.ticketsService.getMonthlyAnalytics(parsedMonths, team);
+    return this.ticketsService.getMonthlyAnalytics(parsedMonths, team, responsavel);
+  }
+
+  @UseGuards(SessionGuard)
+  @Get('tickets/:id/detail')
+  async detail(@Param('id', ParseIntPipe) id: number) {
+    const ticket = await this.ticketsService.findById(id);
+    if (!ticket) {
+      throw new NotFoundException('Ticket não encontrado.');
+    }
+
+    return { detail: await this.ticketsService.getDetail(id) };
+  }
+
+  @UseGuards(SessionGuard)
+  @Get('tickets/:id/similar')
+  async similar(@Param('id', ParseIntPipe) id: number) {
+    const ticket = await this.ticketsService.findById(id);
+    if (!ticket) {
+      throw new NotFoundException('Ticket não encontrado.');
+    }
+
+    return { tickets: await this.ticketsService.getSimilarTickets(id) };
   }
 
   @Get('app-version')

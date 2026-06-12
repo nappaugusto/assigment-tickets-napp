@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { ExternalLink, Loader2, SquareKanban, X } from 'lucide-react'
 import { type Ticket } from '@/lib/api'
@@ -19,9 +19,20 @@ interface TrelloCardDialogProps {
   startCreateNew?: boolean
   suggestedName?: string
   suggestedDescription?: string
+  suggestedLabels?: string[]
+  onCreated?: () => void | Promise<void>
 }
 
-export function TrelloCardDialog({ ticket, open, onClose, startCreateNew }: TrelloCardDialogProps) {
+export function TrelloCardDialog({
+  ticket,
+  open,
+  onClose,
+  startCreateNew,
+  suggestedName,
+  suggestedDescription,
+  suggestedLabels,
+  onCreated,
+}: TrelloCardDialogProps) {
   if (!ticket) return null
 
   return (
@@ -30,6 +41,10 @@ export function TrelloCardDialog({ ticket, open, onClose, startCreateNew }: Trel
       open={open}
       onClose={onClose}
       startCreateNew={startCreateNew}
+      suggestedName={suggestedName}
+      suggestedDescription={suggestedDescription}
+      suggestedLabels={suggestedLabels}
+      onCreated={onCreated}
     />
   )
 }
@@ -41,6 +56,8 @@ function TrelloCardDialogContent({
   startCreateNew,
   suggestedName,
   suggestedDescription,
+  suggestedLabels = [],
+  onCreated,
 }: TrelloCardDialogProps & { ticket: Ticket }) {
   const status = useTrelloStatus()
   const canLoadTrello = open && status.data?.configured
@@ -51,6 +68,7 @@ function TrelloCardDialogContent({
   const [listId, setListId] = useState('')
   const [name, setName] = useState('')
   const [createNew, setCreateNew] = useState(false)
+  const [includeSuggestedDescription, setIncludeSuggestedDescription] = useState(true)
   const createCard = useCreateTrelloCard(ticket.id)
 
   useEffect(() => {
@@ -63,7 +81,16 @@ function TrelloCardDialogContent({
     setName(suggestedName || defaultCardName(ticket))
     setBoardId(status.data?.defaultBoardId ?? '')
     setListId(status.data?.defaultListId ?? '')
-  }, [open, startCreateNew, status.data?.defaultBoardId, status.data?.defaultListId, suggestedName, ticket])
+    setIncludeSuggestedDescription(Boolean(suggestedDescription))
+  }, [
+    open,
+    startCreateNew,
+    status.data?.defaultBoardId,
+    status.data?.defaultListId,
+    suggestedDescription,
+    suggestedName,
+    ticket,
+  ])
 
   useEffect(() => {
     if (!open || !lists.data?.length) return
@@ -72,10 +99,6 @@ function TrelloCardDialogContent({
     }
   }, [listId, lists.data, open])
 
-  const description = useMemo(
-    () => suggestedDescription || defaultCardDescription(ticket),
-    [suggestedDescription, ticket],
-  )
   const existingUrl = ticket.trello_card_url
   const showCreateForm = !existingUrl || createNew
   const selectedListMissing = showCreateForm && !listId
@@ -93,13 +116,15 @@ function TrelloCardDialogContent({
       boardId: boardId || undefined,
       listId,
       name,
-      description,
+      extraDescription: includeSuggestedDescription ? suggestedDescription : undefined,
+      labels: suggestedLabels,
       forceNew: !!existingUrl,
     })
 
     if (result.card.url) {
       window.open(result.card.url, '_blank', 'noreferrer')
     }
+    await onCreated?.()
     onClose()
   }
 
@@ -205,11 +230,63 @@ function TrelloCardDialogContent({
                   />
                 </label>
 
-                <div className="rounded-md border border-border/50 bg-muted/25 p-3">
-                  <p className="mb-2 text-xs font-medium text-muted-foreground">Descricao</p>
-                  <pre className="max-h-40 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">
-                    {description}
-                  </pre>
+                {suggestedDescription && (
+                  <label className="flex items-center gap-2 rounded-md border border-border/50 bg-muted/20 px-3 py-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={includeSuggestedDescription}
+                      onChange={(event) => setIncludeSuggestedDescription(event.target.checked)}
+                      disabled={isBusy}
+                      className="h-4 w-4 accent-primary"
+                    />
+                    <span>Incluir triagem IA junto com o ticket</span>
+                  </label>
+                )}
+
+                <div className="space-y-3 rounded-md border border-border/50 bg-muted/25 p-3">
+                  <div>
+                    <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                      Conteúdo enviado
+                    </p>
+                    <div className="space-y-1 text-xs leading-relaxed text-muted-foreground">
+                      <p>
+                        <strong className="text-foreground">Ticket completo:</strong> dados do chamado,
+                        interações e imagens/anexos encontrados.
+                      </p>
+                      {suggestedDescription && (
+                        <p>
+                          <strong className="text-foreground">Triagem IA:</strong>{' '}
+                          {includeSuggestedDescription ? 'será incluída no card.' : 'não será incluída.'}
+                        </p>
+                      )}
+                      {suggestedLabels.length > 0 && (
+                        <p>
+                          <strong className="text-foreground">Labels:</strong> serão criadas/reutilizadas no Trello e aplicadas automaticamente.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {suggestedLabels.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {suggestedLabels.map((label) => (
+                        <span key={label} className="rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-xs text-primary">
+                          {label}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {suggestedDescription && includeSuggestedDescription && (
+                    <div className="rounded-md border border-primary/20 bg-background/45 p-3">
+                      <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-primary">
+                        Prévia da triagem
+                      </p>
+                      <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap font-mono text-xs leading-relaxed text-muted-foreground">
+                        {suggestedDescription}
+                      </pre>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

@@ -169,6 +169,7 @@ export class DatabaseInitService implements OnModuleInit {
         input_summary JSONB,
         error       TEXT,
         decision    TEXT,
+        follow_up_messages JSONB NOT NULL DEFAULT '[]'::jsonb,
         created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
         updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
         finished_at TIMESTAMPTZ
@@ -268,6 +269,9 @@ export class DatabaseInitService implements OnModuleInit {
         ADD COLUMN IF NOT EXISTS trello_card_url TEXT,
         ADD COLUMN IF NOT EXISTS trello_card_name TEXT,
         ADD COLUMN IF NOT EXISTS trello_card_created_at TIMESTAMPTZ;
+
+      ALTER TABLE ticket_ai_triages
+        ADD COLUMN IF NOT EXISTS follow_up_messages JSONB NOT NULL DEFAULT '[]'::jsonb;
 
       CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_unique
         ON users (lower(email))

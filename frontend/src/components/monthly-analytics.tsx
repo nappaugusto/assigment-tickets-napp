@@ -1,13 +1,15 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Award, ChevronDown, ChevronUp, Gauge, PauseCircle, TrendingDown, TrendingUp, Workflow, type LucideIcon } from 'lucide-react'
+import { AlertTriangle, Award, ChevronDown, ChevronUp, Gauge, PauseCircle, TrendingDown, TrendingUp, UserRound, Workflow, type LucideIcon } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { preferencesApi, ticketsApi, type MonthlyAnalyticsPreference, type TicketMonthlyAnalyticsPayload } from '@/lib/api'
+import { preferencesApi, ticketsApi, type AssignmentPerson, type MonthlyAnalyticsPreference, type TicketMonthlyAnalyticsPayload } from '@/lib/api'
 
 interface MonthlyAnalyticsProps {
   analytics?: TicketMonthlyAnalyticsPayload
   teamOptions: string[]
+  agentOptions?: string[]
+  peopleDetails?: AssignmentPerson[]
   isLoading?: boolean
 }
 
@@ -78,6 +80,14 @@ function readStoredBoolean(key: string, cookieName: string) {
 function writeStoredBoolean(key: string, cookieName: string, value: boolean) {
   localStorage.setItem(key, value ? '1' : '0')
   writeCookieBoolean(cookieName, value)
+}
+
+function normalizeLabel(value: string | null | undefined) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .trim()
+    .toLowerCase()
 }
 
 function formatPercent(value: number | null) {
@@ -474,9 +484,16 @@ function MonthlyLineChart({ months }: { months: MonthlyChartPoint[] }) {
   )
 }
 
-export function MonthlyAnalytics({ analytics, teamOptions, isLoading }: MonthlyAnalyticsProps) {
+export function MonthlyAnalytics({
+  analytics,
+  teamOptions,
+  agentOptions = [],
+  peopleDetails = [],
+  isLoading,
+}: MonthlyAnalyticsProps) {
   const queryClient = useQueryClient()
   const [selectedTeam, setSelectedTeam] = useState('')
+  const [selectedResponsible, setSelectedResponsible] = useState('')
   const [isCollapsed, setIsCollapsed] = useState(
     () => readStoredBoolean(MONTHLY_ANALYTICS_COLLAPSED_KEY, MONTHLY_ANALYTICS_COLLAPSED_COOKIE),
   )
@@ -490,10 +507,12 @@ export function MonthlyAnalytics({ analytics, teamOptions, isLoading }: MonthlyA
     staleTime: Infinity,
   })
 
-  const teamAnalyticsQuery = useQuery({
-    queryKey: ['monthly-analytics', selectedTeam],
-    queryFn: () => ticketsApi.monthlyAnalytics(4, selectedTeam),
-    enabled: selectedTeam !== '',
+  const hasAnalyticsFilter = selectedTeam !== '' || selectedResponsible !== ''
+
+  const monthlyAnalyticsQuery = useQuery({
+    queryKey: ['monthly-analytics', selectedTeam, selectedResponsible],
+    queryFn: () => ticketsApi.monthlyAnalytics(4, selectedTeam, selectedResponsible),
+    enabled: hasAnalyticsFilter,
     staleTime: 20_000,
   })
 
@@ -508,9 +527,32 @@ export function MonthlyAnalytics({ analytics, teamOptions, isLoading }: MonthlyA
   const storedPreference = preferenceQuery.data
   const resolvedCollapsed = storedPreference?.collapsed ?? isCollapsed
   const resolvedSummaryCollapsed = storedPreference?.summaryCollapsed ?? isSummaryCollapsed
-  const resolvedAnalytics = selectedTeam ? teamAnalyticsQuery.data : analytics
-  const analyticsLoading = isLoading || (selectedTeam !== '' && teamAnalyticsQuery.isLoading)
+  const resolvedAnalytics = hasAnalyticsFilter ? monthlyAnalyticsQuery.data : analytics
+  const analyticsLoading = isLoading || (hasAnalyticsFilter && monthlyAnalyticsQuery.isLoading)
   const analyticsTeamLabel = selectedTeam || 'Todas as equipes'
+  const analyticsFilterLabel = selectedResponsible
+    ? `${analyticsTeamLabel} | ${selectedResponsible}`
+    : analyticsTeamLabel
+
+  const responsibleOptions = useMemo(() => {
+    const selectedTeamKey = normalizeLabel(selectedTeam)
+    const namesFromDetails = peopleDetails
+      .filter((person) => {
+        if (!selectedTeamKey) return true
+        return person.teams.some((team) => normalizeLabel(team) === selectedTeamKey)
+      })
+      .map((person) => person.businessName || person.email || person.id)
+      .filter(Boolean)
+
+    const source = namesFromDetails.length > 0 ? namesFromDetails : agentOptions
+    return Array.from(new Set(source)).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  }, [agentOptions, peopleDetails, selectedTeam])
+
+  useEffect(() => {
+    if (selectedResponsible && !responsibleOptions.includes(selectedResponsible)) {
+      setSelectedResponsible('')
+    }
+  }, [responsibleOptions, selectedResponsible])
 
   const savePreference = (preference: MonthlyAnalyticsPreference) => {
     writeStoredBoolean(MONTHLY_ANALYTICS_COLLAPSED_KEY, MONTHLY_ANALYTICS_COLLAPSED_COOKIE, preference.collapsed)
@@ -568,7 +610,7 @@ export function MonthlyAnalytics({ analytics, teamOptions, isLoading }: MonthlyA
               <p className="mt-1 text-sm text-muted-foreground">
                 Recorte atual: <strong className="text-foreground">{currentMonth.label}</strong>
                 <span className="mx-2 text-muted-foreground/55">|</span>
-                <span>{analyticsTeamLabel}</span>
+                <span>{analyticsFilterLabel}</span>
               </p>
             )}
           </div>
@@ -578,13 +620,30 @@ export function MonthlyAnalytics({ analytics, teamOptions, isLoading }: MonthlyA
                 <Workflow className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <select
                   value={selectedTeam}
-                  onChange={(event) => setSelectedTeam(event.target.value)}
+                  onChange={(event) => {
+                    setSelectedTeam(event.target.value)
+                    setSelectedResponsible('')
+                  }}
                   className="h-9 w-full rounded-full border border-input bg-background/70 pl-9 pr-9 text-xs text-foreground shadow-inner outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring"
                   aria-label="Filtrar visão mensal por equipe"
                 >
                   <option value="">Todas as equipes</option>
                   {teamOptions.map((team) => (
                     <option key={team} value={team}>{team}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="relative min-w-[240px] flex-1 sm:flex-none">
+                <UserRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <select
+                  value={selectedResponsible}
+                  onChange={(event) => setSelectedResponsible(event.target.value)}
+                  className="h-9 w-full rounded-full border border-input bg-background/70 pl-9 pr-9 text-xs text-foreground shadow-inner outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring"
+                  aria-label="Filtrar visão mensal por responsável"
+                >
+                  <option value="">Todos os responsáveis</option>
+                  {responsibleOptions.map((person) => (
+                    <option key={person} value={person}>{person}</option>
                   ))}
                 </select>
               </label>

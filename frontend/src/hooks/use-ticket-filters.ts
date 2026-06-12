@@ -8,8 +8,12 @@ export type QuickFilter =
   | 'in_progress'
   | 'waiting'
   | 'sla_interrupt'
+  | 'sla_risk'
   | 'due_today'
   | 'unassigned'
+  | 'without_ai'
+  | 'with_ai'
+  | 'trello'
 
 export type SortKey = 'id' | 'slaSolutionDate' | 'closed_at' | 'responsavel' | ''
 export type SortDir = 'asc' | 'desc'
@@ -47,7 +51,19 @@ const DEFAULT_FILTERS: StoredTicketFilters = {
 }
 
 const DATE_FIELDS: DateFilterField[] = ['slaSolutionDate', 'opened_at', 'closed_at', 'last_update']
-const QUICK_FILTERS: QuickFilter[] = ['all', 'new', 'in_progress', 'waiting', 'sla_interrupt', 'due_today', 'unassigned']
+const QUICK_FILTERS: QuickFilter[] = [
+  'all',
+  'new',
+  'in_progress',
+  'waiting',
+  'sla_interrupt',
+  'sla_risk',
+  'due_today',
+  'unassigned',
+  'without_ai',
+  'with_ai',
+  'trello',
+]
 const SORT_KEYS: SortKey[] = ['id', 'slaSolutionDate', 'closed_at', 'responsavel', '']
 const SORT_DIRS: SortDir[] = ['asc', 'desc']
 
@@ -86,6 +102,13 @@ function readInitialFilters() {
 function matchesQuickFilter(ticket: Ticket, filter: QuickFilter): boolean {
   if (filter === 'all') return true
   if (filter === 'unassigned') return !ticket.responsavel
+  if (filter === 'without_ai') return !ticket.ai_triage
+  if (filter === 'with_ai') return Boolean(ticket.ai_triage)
+  if (filter === 'trello') return Boolean(ticket.trello_card_url)
+  if (filter === 'sla_risk') {
+    const sla = getSlaStatus(ticket.slaSolutionDate, ticket.slaSolutionDateIsPaused)
+    return sla === 'warning' || sla === 'expired'
+  }
   if (filter === 'due_today') {
     const sla = getSlaStatus(ticket.slaSolutionDate, ticket.slaSolutionDateIsPaused)
     return sla === 'warning' || sla === 'expired'
@@ -116,6 +139,10 @@ function buildSearchHaystack(ticket: Ticket): string {
       ticket.status,
       ticket.ownerTeam,
       ticket.responsavel,
+      ticket.trello_card_name,
+      ticket.ai_triage?.priority,
+      ticket.ai_triage?.summary,
+      ticket.ai_triage?.likelyArea,
       ticket.slaSolutionDate,
       ticket.slaSolutionDate ? formatDate(ticket.slaSolutionDate) : '',
       ticket.opened_at,

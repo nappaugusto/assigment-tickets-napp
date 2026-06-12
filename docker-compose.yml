@@ -18,13 +18,34 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      db-proxy-forwarder:
+        condition: service_started
     ports:
       - "80:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    dns:
+      - 192.168.8.1
+      - 1.1.1.1
+      - 8.8.8.8
     env_file:
       - .env
     environment:
       DATABASE_URL: postgres://assignment_tickets:assignment_tickets@postgres:5432/assignment_tickets
       NGINX_PORT: 8080
+    volumes:
+      - ${HOME}/.claude:/root/.claude:ro
+      - ${HOME}/.claude.json:/root/.claude.json:ro
+      - ${HOME}/.ssh:/root/.ssh:ro
+      - /home/kauetorres/Documentos/PlatformBackend/platform-backend:/workspace/platform-backend
+    restart: unless-stopped
+
+  db-proxy-forwarder:
+    image: alpine/socat:latest
+    network_mode: host
+    command:
+      - TCP-LISTEN:5436,bind=172.17.0.1,fork,reuseaddr
+      - TCP:127.0.0.1:5435
     restart: unless-stopped
 
 volumes:

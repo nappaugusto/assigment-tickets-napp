@@ -1,19 +1,31 @@
-import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleInit,
+} from '@nestjs/common';
 import axios from 'axios';
+import { spawn } from 'child_process';
 import { promises as fs } from 'fs';
 import { basename, extname, join, relative, resolve } from 'path';
 import { Pool } from 'pg';
 import { DB_TOKEN } from '../database/database.module';
 import { TicketsService } from '../tickets/tickets.service';
+import { TrelloService } from '../trello/trello.service';
 import {
   CodeSnippetDto,
   TicketAiTriageDto,
+  TicketAiTriageMessageDto,
   TicketAiTriageResult,
   TriageDecision,
 } from './ai-triage.dto';
 
-const DEFAULT_MODEL = 'claude-sonnet-4-20250514';
+const DEFAULT_API_MODEL = 'claude-sonnet-4-20250514';
+const DEFAULT_CLI_MODEL = 'sonnet';
 const ANTHROPIC_VERSION = '2023-06-01';
+const CLAUDE_CLI_TIMEOUT_MS = Number(process.env.CLAUDE_CLI_TIMEOUT_MS || 300_000);
+const GIT_PULL_TIMEOUT_MS = Number(process.env.AI_TRIAGE_GIT_PULL_TIMEOUT_MS || 60_000);
 const MAX_CODE_FILES = 12;
 const MAX_SNIPPET_CHARS = 1_800;
 const MAX_FILE_BYTES = 120_000;
@@ -59,6 +71,10 @@ interface AnthropicMessageResponse {
   content?: AnthropicTextBlock[];
 }
 
+type AiTriageProvider = 'claude_cli' | 'anthropic_api';
+type AiTriageMode = 'triage' | 'code_analysis';
+type ClaudeCliStartupStatus = 'pending' | 'ready' | 'failed' | 'disabled';
+
 interface TriageRow {
   id: number;
   ticket_id: number;
@@ -69,9 +85,21 @@ interface TriageRow {
   input_summary: Record<string, unknown> | null;
   error: string | null;
   decision: string | null;
+  follow_up_messages: TicketAiTriageMessageDto[] | null;
   created_at: string;
   updated_at: string;
   finished_at: string | null;
+}
+
+export interface ClaudeCliStatus {
+  provider: AiTriageProvider;
+  command: string;
+  model: string;
+  repoRoot: string;
+  status: ClaudeCliStartupStatus;
+  version: string | null;
+  error: string | null;
+  checkedAt: string | null;
 }
 
 function normalize(value: string) {
@@ -96,6 +124,9 @@ function toDto(row: TriageRow): TicketAiTriageDto {
     input_summary: row.input_summary,
     error: row.error,
     decision: row.decision,
+    follow_up_messages: Array.isArray(row.follow_up_messages)
+      ? row.follow_up_messages
+      : [],
     created_at: row.created_at,
     updated_at: row.updated_at,
     finished_at: row.finished_at,
@@ -107,25 +138,109 @@ function getErrorMessage(error: unknown) {
 }
 
 @Injectable()
-export class AiTriageService {
+export class AiTriageService implements OnModuleInit {
   private readonly logger = new Logger(AiTriageService.name);
-  private readonly model = process.env.ANTHROPIC_MODEL || DEFAULT_MODEL;
+  private readonly provider = this.getProvider();
+  private readonly model = this.getModel();
+  private readonly claudeCommand = process.env.CLAUDE_CLI_COMMAND || 'claude';
   private readonly repoRoot = resolve(process.env.AI_TRIAGE_REPO_ROOT || join(process.cwd(), '..'));
+  private readonly diagnosticMcpEntrypoint =
+    process.env.AI_DIAGNOSTIC_MCP_ENTRYPOINT ||
+    join(this.repoRoot, 'mcp-db-readonly', 'dist', 'index.js');
+  private readonly shouldGitPull =
+    String(process.env.AI_TRIAGE_GIT_PULL || 'true').toLowerCase() !== 'false';
+  private claudeCliStatus: ClaudeCliStatus = {
+    provider: this.provider,
+    command: this.claudeCommand,
+    model: this.model,
+    repoRoot: this.repoRoot,
+    status: this.provider === 'claude_cli' ? 'pending' : 'disabled',
+    version: null,
+    error: null,
+    checkedAt: null,
+  };
 
   constructor(
     @Inject(DB_TOKEN) private readonly db: Pool,
     private readonly ticketsService: TicketsService,
+    private readonly trelloService: TrelloService,
   ) {}
+
+  onModuleInit() {
+    if (this.provider !== 'claude_cli') {
+      this.logger.log('Triagem IA usando Anthropic API; Claude CLI desativado.');
+      return;
+    }
+
+    if (String(process.env.CLAUDE_CLI_STARTUP_CHECK || 'true').toLowerCase() === 'false') {
+      this.claudeCliStatus = {
+        ...this.claudeCliStatus,
+        status: 'disabled',
+        checkedAt: new Date().toISOString(),
+      };
+      this.logger.warn('Verificação automática do Claude CLI desativada.');
+      return;
+    }
+
+    void this.refreshClaudeCliStatus();
+  }
+
+  getClaudeStatus() {
+    return this.claudeCliStatus;
+  }
+
+  async refreshClaudeCliStatus() {
+    if (this.provider !== 'claude_cli') {
+      return this.claudeCliStatus;
+    }
+
+    try {
+      const version = await this.runClaudeVersionCheck();
+      this.claudeCliStatus = {
+        ...this.claudeCliStatus,
+        status: 'ready',
+        version,
+        error: null,
+        checkedAt: new Date().toISOString(),
+      };
+      this.logger.log(`Claude CLI pronto no backend: ${version}`);
+    } catch (error) {
+      this.claudeCliStatus = {
+        ...this.claudeCliStatus,
+        status: 'failed',
+        version: null,
+        error: getErrorMessage(error),
+        checkedAt: new Date().toISOString(),
+      };
+      this.logger.error(`Claude CLI indisponível no backend: ${getErrorMessage(error)}`);
+    }
+
+    return this.claudeCliStatus;
+  }
 
   async getLatestForTicket(ticketId: number): Promise<TicketAiTriageDto | null> {
     const result = await this.db.query<TriageRow>(
-      `SELECT * FROM ticket_ai_triages WHERE ticket_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      `SELECT *
+         FROM ticket_ai_triages
+        WHERE ticket_id = $1
+        ORDER BY
+          CASE
+            WHEN status IN ('pending', 'running') THEN 0
+            WHEN status = 'completed' THEN 1
+            ELSE 2
+          END,
+          created_at DESC,
+          id DESC
+        LIMIT 1`,
       [ticketId],
     );
     return result.rows[0] ? toDto(result.rows[0]) : null;
   }
 
-  async start(ticketId: number): Promise<{ triage: TicketAiTriageDto }> {
+  async start(
+    ticketId: number,
+    mode: AiTriageMode = 'triage',
+  ): Promise<{ triage: TicketAiTriageDto }> {
     const ticket = await this.ticketsService.findById(ticketId);
     if (!ticket) throw new NotFoundException('Ticket não encontrado.');
 
@@ -137,7 +252,7 @@ export class AiTriageService {
     );
     const triage = toDto(result.rows[0]);
 
-    void this.runAnalysis(triage.id, ticketId).catch((error) => {
+    void this.runAnalysis(triage.id, ticketId, mode).catch((error) => {
       this.logger.error(`Triagem IA ${triage.id} falhou`, error);
     });
 
@@ -158,21 +273,71 @@ export class AiTriageService {
     return result.rows[0] ? toDto(result.rows[0]) : null;
   }
 
-  private async runAnalysis(id: number, ticketId: number) {
+  async sendFollowUp(
+    id: number,
+    message: string,
+  ): Promise<TicketAiTriageDto | null> {
+    const current = await this.db.query<TriageRow>(
+      `SELECT * FROM ticket_ai_triages WHERE id = $1`,
+      [id],
+    );
+    const row = current.rows[0];
+    if (!row) return null;
+
+    const ticket = await this.ticketsService.findById(row.ticket_id);
+    if (!ticket) throw new NotFoundException('Ticket não encontrado.');
+
+    const existingMessages = Array.isArray(row.follow_up_messages)
+      ? row.follow_up_messages
+      : [];
+    const userMessage: TicketAiTriageMessageDto = {
+      role: 'user',
+      content: message.trim(),
+      created_at: new Date().toISOString(),
+    };
+    const assistantMessage: TicketAiTriageMessageDto = {
+      role: 'assistant',
+      content: await this.callFollowUpAssistant({
+        ticket,
+        triage: row.triage,
+        messages: [...existingMessages, userMessage],
+      }),
+      created_at: new Date().toISOString(),
+    };
+    const messages = [...existingMessages, userMessage, assistantMessage].slice(-30);
+
+    const updated = await this.db.query<TriageRow>(
+      `UPDATE ticket_ai_triages
+         SET follow_up_messages = $1,
+             updated_at = now()
+       WHERE id = $2
+       RETURNING *`,
+      [JSON.stringify(messages), id],
+    );
+
+    return updated.rows[0] ? toDto(updated.rows[0]) : null;
+  }
+
+  private async runAnalysis(id: number, ticketId: number, mode: AiTriageMode) {
     await this.updateStatus(id, 'running');
 
     try {
       const ticket = await this.ticketsService.findById(ticketId);
       if (!ticket) throw new NotFoundException('Ticket não encontrado.');
 
+      const gitPull = mode === 'code_analysis' && this.shouldGitPull
+        ? await this.gitPullRepo()
+        : null;
       const snippets = await this.findRelevantCodeSnippets(ticket);
       const inputSummary = {
+        mode,
+        gitPull,
         ticket,
         codeSnippetCount: snippets.length,
         codePaths: snippets.map((snippet) => snippet.path),
       };
 
-      const triage = await this.callClaude(ticket, snippets);
+      const triage = await this.callClaude(ticket, snippets, mode);
 
       await this.db.query(
         `UPDATE ticket_ai_triages
@@ -185,6 +350,8 @@ export class AiTriageService {
          WHERE id = $3`,
         [JSON.stringify(triage), JSON.stringify(inputSummary), id],
       );
+
+      await this.applyTrelloLabels(ticket, triage);
     } catch (error) {
       await this.db.query(
         `UPDATE ticket_ai_triages
@@ -199,6 +366,36 @@ export class AiTriageService {
     }
   }
 
+  private async applyTrelloLabels(
+    ticket: NonNullable<Awaited<ReturnType<TicketsService['findById']>>>,
+    triage: TicketAiTriageResult,
+  ) {
+    if (!ticket.trello_card_id) return;
+
+    try {
+      await this.trelloService.applyLabelsToTicketCard(
+        ticket,
+        this.buildTrelloLabels(triage),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Não foi possível aplicar labels da triagem IA no card Trello do ticket #${ticket.id}: ${getErrorMessage(error)}`,
+      );
+    }
+  }
+
+  private buildTrelloLabels(triage: TicketAiTriageResult) {
+    return Array.from(
+      new Set(
+        [
+          ...triage.suggestedCard.labels,
+          ...triage.tags,
+          triage.priority !== 'baixa' ? triage.priority : null,
+        ].filter((label): label is string => Boolean(label?.trim())),
+      ),
+    ).slice(0, 8);
+  }
+
   private async updateStatus(id: number, status: TicketAiTriageDto['status']) {
     await this.db.query(
       `UPDATE ticket_ai_triages SET status = $1, updated_at = now() WHERE id = $2`,
@@ -209,15 +406,111 @@ export class AiTriageService {
   private async callClaude(
     ticket: Awaited<ReturnType<TicketsService['findById']>>,
     snippets: CodeSnippetDto[],
+    mode: AiTriageMode,
   ): Promise<TicketAiTriageResult> {
     if (!ticket) throw new NotFoundException('Ticket não encontrado.');
 
+    const similarTickets = await this.ticketsService.getSimilarTickets(ticket.id, 5);
+    const prompt = this.buildPrompt(ticket, snippets, mode, similarTickets);
+    const text =
+      this.provider === 'anthropic_api'
+        ? await this.callAnthropicApi(prompt)
+        : await this.callClaudeCli(prompt, mode);
+
+    if (!text) throw new Error('Claude não retornou texto para a triagem.');
+    return this.parseTriageResult(text, ticket);
+  }
+
+  private async callFollowUpAssistant({
+    ticket,
+    triage,
+    messages,
+  }: {
+    ticket: NonNullable<Awaited<ReturnType<TicketsService['findById']>>>;
+    triage: TicketAiTriageResult | null;
+    messages: TicketAiTriageMessageDto[];
+  }) {
+    const prompt = JSON.stringify(
+      {
+        instruction:
+          'Responda ao analista com base no ticket, na triagem salva e no histórico. O usuário pode colar erro, resultado de SELECT, hipótese ou ideia. Seja objetivo, explique o que o erro indica, diga se muda a hipótese e sugira próximos passos práticos. Não invente dados, não diga que corrigiu nada e não peça para executar alterações destrutivas.',
+        ticket,
+        triage,
+        conversation: messages,
+      },
+      null,
+      2,
+    );
+
+    if (this.provider === 'anthropic_api') {
+      return this.callAnthropicFollowUp(prompt);
+    }
+
+    const systemPrompt = [
+      'Você é um analista técnico de suporte e engenharia da Napp.',
+      'Você responde follow-ups de uma triagem já feita.',
+      'Não altere código, não crie commits, não afirme que algo foi corrigido.',
+      'Responda em português, em texto claro e curto. Markdown simples é permitido.',
+    ].join(' ');
+
+    const text = await this.runClaudeCli([
+      '--print',
+      '--output-format',
+      'text',
+      '--no-session-persistence',
+      '--permission-mode',
+      'dontAsk',
+      '--tools',
+      '',
+      '--model',
+      this.model,
+      '--system-prompt',
+      systemPrompt,
+      prompt,
+    ]);
+
+    return text || 'Não consegui gerar uma resposta para esse retorno.';
+  }
+
+  private async callAnthropicFollowUp(prompt: string) {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       throw new Error('ANTHROPIC_API_KEY não configurada no backend.');
     }
 
-    const prompt = this.buildPrompt(ticket, snippets);
+    const response = await axios.post<AnthropicMessageResponse>(
+      'https://api.anthropic.com/v1/messages',
+      {
+        model: this.model,
+        max_tokens: 1400,
+        temperature: 0.2,
+        system:
+          'Você é um analista técnico de suporte e engenharia da Napp. Responda follow-ups de triagem em português, de forma objetiva. Não altere código e não invente dados.',
+        messages: [{ role: 'user', content: prompt }],
+      },
+      {
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': ANTHROPIC_VERSION,
+        },
+        timeout: 60_000,
+      },
+    );
+
+    return response.data.content
+      ?.filter((block): block is AnthropicTextBlock => block.type === 'text')
+      .map((block) => block.text)
+      .join('\n')
+      .trim() || 'Não consegui gerar uma resposta para esse retorno.';
+  }
+
+  private async callAnthropicApi(prompt: string) {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      throw new Error('ANTHROPIC_API_KEY não configurada no backend.');
+    }
+
     const response = await axios.post<AnthropicMessageResponse>(
       'https://api.anthropic.com/v1/messages',
       {
@@ -242,24 +535,266 @@ export class AiTriageService {
       },
     );
 
-    const text = response.data.content
+    return response.data.content
       ?.filter((block): block is AnthropicTextBlock => block.type === 'text')
       .map((block) => block.text)
       .join('\n')
       .trim();
+  }
 
-    if (!text) throw new Error('Claude não retornou texto para a triagem.');
-    return this.parseTriageResult(text, ticket);
+  private async callClaudeCli(prompt: string, mode: AiTriageMode) {
+    const hasDbDiagnostics = mode === 'code_analysis' && this.hasDbDiagnostics();
+    const systemPrompt = [
+      'Você é um analista técnico de suporte e engenharia da Napp.',
+      'Você faz triagem de tickets usando somente dados do chamado e trechos de código fornecidos no prompt.',
+      'Você não pode alterar código, criar commits, executar comandos ou afirmar que algo foi corrigido.',
+      hasDbDiagnostics
+        ? 'Você pode usar ferramentas MCP de banco somente para investigar com SELECTs read-only. Use no máximo 5 chamadas de ferramentas de banco. Prefira consultar tabelas por nomes ligados ao ticket. Nunca tente escrever, alterar schema ou executar comandos destrutivos.'
+        : mode === 'triage'
+          ? 'Esta é uma triagem rápida: não use banco de dados nem ferramentas externas. Baseie-se no ticket e nos trechos de código fornecidos.'
+          : 'Você não tem acesso ao banco de dados nesta execução.',
+      'Você deve orientar um humano e responder somente JSON válido, sem markdown.',
+    ].join(' ');
+
+    const args = [
+      '--print',
+      '--output-format',
+      'text',
+      '--no-session-persistence',
+      '--permission-mode',
+      'dontAsk',
+      '--model',
+      this.model,
+      '--system-prompt',
+      systemPrompt,
+      prompt,
+    ];
+
+    if (hasDbDiagnostics) {
+      args.splice(
+        6,
+        0,
+        '--mcp-config',
+        JSON.stringify(this.buildDiagnosticMcpConfig()),
+        '--allowedTools',
+        [
+          'mcp__db-readonly__listar_schemas',
+          'mcp__db-readonly__listar_tabelas',
+          'mcp__db-readonly__descrever_tabela',
+          'mcp__db-readonly__executar_select',
+        ].join(','),
+      );
+    } else {
+      args.splice(6, 0, '--tools', '');
+    }
+
+    return this.runClaudeCli(args);
+  }
+
+  private hasDbDiagnostics() {
+    return Boolean(process.env.AI_DIAGNOSTIC_DB_URL?.trim());
+  }
+
+  private buildDiagnosticMcpConfig() {
+    return {
+      mcpServers: {
+        'db-readonly': {
+          command: process.env.AI_DIAGNOSTIC_MCP_COMMAND || 'node',
+          args: [this.diagnosticMcpEntrypoint],
+          env: {
+            AI_DIAGNOSTIC_DB_URL: process.env.AI_DIAGNOSTIC_DB_URL,
+            AI_DIAGNOSTIC_DB_SCHEMA: process.env.AI_DIAGNOSTIC_DB_SCHEMA || 'public',
+            AI_DIAGNOSTIC_DB_MAX_ROWS: process.env.AI_DIAGNOSTIC_DB_MAX_ROWS || '100',
+            AI_DIAGNOSTIC_DB_STATEMENT_TIMEOUT_MS:
+              process.env.AI_DIAGNOSTIC_DB_STATEMENT_TIMEOUT_MS || '5000',
+          },
+        },
+      },
+    };
+  }
+
+  private runClaudeVersionCheck() {
+    return new Promise<string>((resolvePromise, reject) => {
+      const child = spawn(this.claudeCommand, ['--version'], {
+        cwd: this.repoRoot,
+        env: process.env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      const timeout = setTimeout(() => {
+        child.kill('SIGTERM');
+        reject(new Error('Claude CLI não respondeu ao check de inicialização em 10s.'));
+      }, 10_000);
+
+      const stdout: Buffer[] = [];
+      const stderr: Buffer[] = [];
+
+      child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk));
+      child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
+      child.on('error', (error) => {
+        clearTimeout(timeout);
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          reject(
+            new Error(
+              `Claude CLI não encontrado no backend. Verifique CLAUDE_CLI_COMMAND="${this.claudeCommand}" ou instale o Claude Code CLI no ambiente do servidor.`,
+            ),
+          );
+          return;
+        }
+        reject(error);
+      });
+      child.on('close', (code) => {
+        clearTimeout(timeout);
+        const output = Buffer.concat(stdout).toString('utf8').trim();
+        const errorOutput = Buffer.concat(stderr).toString('utf8').trim();
+
+        if (code !== 0) {
+          reject(
+            new Error(
+              `Claude CLI check terminou com código ${code}.${errorOutput ? ` ${errorOutput}` : ''}`,
+            ),
+          );
+          return;
+        }
+
+        resolvePromise(output || 'Claude CLI instalado');
+      });
+    });
+  }
+
+  private runClaudeCli(args: string[]) {
+    return new Promise<string>((resolvePromise, reject) => {
+      const child = spawn(this.claudeCommand, args, {
+        cwd: this.repoRoot,
+        env: process.env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      const timeout = setTimeout(() => {
+        child.kill('SIGTERM');
+        reject(new Error(`Claude CLI excedeu ${CLAUDE_CLI_TIMEOUT_MS}ms.`));
+      }, CLAUDE_CLI_TIMEOUT_MS);
+
+      const stdout: Buffer[] = [];
+      const stderr: Buffer[] = [];
+
+      child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk));
+      child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
+      child.on('error', (error) => {
+        clearTimeout(timeout);
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          reject(
+            new Error(
+              `Claude CLI não encontrado no backend. Verifique CLAUDE_CLI_COMMAND="${this.claudeCommand}" ou instale o Claude Code CLI no ambiente do servidor.`,
+            ),
+          );
+          return;
+        }
+        reject(error);
+      });
+      child.on('close', (code) => {
+        clearTimeout(timeout);
+        const output = Buffer.concat(stdout).toString('utf8').trim();
+        const errorOutput = Buffer.concat(stderr).toString('utf8').trim();
+
+        if (code !== 0) {
+          reject(
+            new Error(
+              `Claude CLI terminou com código ${code}.${errorOutput ? ` ${errorOutput}` : ''}`,
+            ),
+          );
+          return;
+        }
+
+        resolvePromise(output);
+      });
+    });
+  }
+
+  private gitPullRepo() {
+    return new Promise<{ command: string; output: string }>((resolvePromise, reject) => {
+      const args = [
+        '-c',
+        `safe.directory=${this.repoRoot}`,
+        '-C',
+        this.repoRoot,
+        'pull',
+        '--ff-only',
+      ];
+      const child = spawn('git', args, {
+        cwd: this.repoRoot,
+        env: {
+          ...process.env,
+          GIT_TERMINAL_PROMPT: '0',
+          GIT_SSH_COMMAND:
+            process.env.GIT_SSH_COMMAND ||
+            'ssh -o StrictHostKeyChecking=accept-new',
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      const timeout = setTimeout(() => {
+        child.kill('SIGTERM');
+        reject(new Error(`git pull excedeu ${GIT_PULL_TIMEOUT_MS}ms.`));
+      }, GIT_PULL_TIMEOUT_MS);
+
+      const stdout: Buffer[] = [];
+      const stderr: Buffer[] = [];
+
+      child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk));
+      child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
+      child.on('error', (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+      child.on('close', (code) => {
+        clearTimeout(timeout);
+        const output = [
+          Buffer.concat(stdout).toString('utf8').trim(),
+          Buffer.concat(stderr).toString('utf8').trim(),
+        ]
+          .filter(Boolean)
+          .join('\n');
+
+        if (code !== 0) {
+          reject(
+            new Error(
+              `Não foi possível atualizar o repositório antes da análise. Rode ou corrija manualmente: git -C ${this.repoRoot} pull --ff-only\n${output}`,
+            ),
+          );
+          return;
+        }
+
+        resolvePromise({
+          command: `git -C ${this.repoRoot} pull --ff-only`,
+          output,
+        });
+      });
+    });
+  }
+
+  private getProvider(): AiTriageProvider {
+    const provider = process.env.AI_TRIAGE_PROVIDER || 'claude_cli';
+    return provider === 'anthropic_api' ? 'anthropic_api' : 'claude_cli';
+  }
+
+  private getModel() {
+    if (this.provider === 'anthropic_api') {
+      return process.env.ANTHROPIC_MODEL || DEFAULT_API_MODEL;
+    }
+    return process.env.CLAUDE_CLI_MODEL || DEFAULT_CLI_MODEL;
   }
 
   private buildPrompt(
     ticket: NonNullable<Awaited<ReturnType<TicketsService['findById']>>>,
     snippets: CodeSnippetDto[],
+    mode: AiTriageMode,
+    similarTickets: Awaited<ReturnType<TicketsService['getSimilarTickets']>>,
   ) {
     return JSON.stringify(
       {
+        mode,
         instruction:
-          'Analise o ticket e os trechos de código. Gere uma triagem operacional para o suporte decidir se cria card técnico. Responda exatamente no schema solicitado.',
+          mode === 'code_analysis'
+            ? 'Faça uma análise técnica mais profunda do ticket usando os trechos de código. Se ferramentas MCP de banco estiverem disponíveis, use somente SELECTs para buscar evidências relevantes antes de concluir, com no máximo 5 chamadas de ferramenta de banco. Não faça exploração ampla de schema. Responda exatamente no schema solicitado.'
+            : 'Faça uma triagem rápida e operacional do ticket usando os dados do chamado e trechos de código fornecidos. Não use banco de dados. Foque em resumo, sintoma, prioridade, hipótese inicial e próximos passos. Responda exatamente no schema solicitado.',
         schema: {
           tags: ['string'],
           priority: 'baixa | media | alta | critica',
@@ -277,10 +812,28 @@ export class AiTriageService {
             description: 'string',
             labels: ['string'],
           },
+          suggestedCustomerReply:
+            'string em português, pronto para enviar ao cliente, sem prometer correção e sem inventar prazo',
+          similarTickets: [{ id: 'number', subject: 'string', reason: 'string' }],
           customerQuestions: ['string'],
           confidence: 'baixa | media | alta',
         },
         ticket,
+        similarTickets: similarTickets.map((item) => ({
+          id: item.id,
+          subject: item.subject,
+          status: item.status,
+          ownerTeam: item.ownerTeam,
+          score: item.score,
+          reasons: item.reasons,
+          previousTriage: item.ai_triage
+            ? {
+                priority: item.ai_triage.priority,
+                summary: item.ai_triage.summary,
+                likelyArea: item.ai_triage.likelyArea,
+              }
+            : null,
+        })),
         codeSnippets: snippets,
       },
       null,
@@ -325,6 +878,24 @@ export class AiTriageService {
           ? parsed.suggestedCard.labels.map(String).slice(0, 8)
           : [],
       },
+      suggestedCustomerReply: String(
+        parsed.suggestedCustomerReply ||
+          [
+            'Olá! Obrigado pelo contato.',
+            'Já recebemos sua solicitação e estamos analisando o cenário informado.',
+            'Caso tenha prints, exemplos de produtos impactados ou mensagens de erro, pode nos encaminhar para acelerar a investigação.',
+          ].join(' '),
+      ),
+      similarTickets: Array.isArray(parsed.similarTickets)
+        ? parsed.similarTickets
+            .map((item) => ({
+              id: Number(item?.id) || 0,
+              subject: String(item?.subject || ''),
+              reason: String(item?.reason || ''),
+            }))
+            .filter((item) => item.id && item.subject)
+            .slice(0, 5)
+        : [],
       customerQuestions: Array.isArray(parsed.customerQuestions)
         ? parsed.customerQuestions.map(String).slice(0, 8)
         : [],

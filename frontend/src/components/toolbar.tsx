@@ -1,4 +1,4 @@
-import { Bot, CalendarDays, Columns3, RefreshCw, Search, Table2, Users, Workflow, X } from 'lucide-react'
+import { Bot, CalendarDays, Columns3, RefreshCw, Search, Sparkles, Table2, Users, Workflow, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -28,6 +28,8 @@ interface ToolbarProps {
   hasActiveFilters: boolean
   keepFilters: boolean
   onKeepFiltersChange: (v: boolean) => void
+  showTriageSummary: boolean
+  onShowTriageSummaryChange: (v: boolean) => void
   onClearFilters: () => void
   onOpenMcpDesk?: () => void
 }
@@ -56,6 +58,8 @@ export function Toolbar({
   hasActiveFilters,
   keepFilters,
   onKeepFiltersChange,
+  showTriageSummary,
+  onShowTriageSummaryChange,
   onClearFilters,
   onOpenMcpDesk,
 }: ToolbarProps) {
@@ -200,6 +204,16 @@ export function Toolbar({
               aria-label="Manter filtros"
             />
             Manter filtros
+          </label>
+
+          <label className="flex h-8 items-center gap-2 rounded-lg border border-border/60 bg-background/60 px-3 text-xs text-muted-foreground">
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            <Checkbox
+              checked={showTriageSummary}
+              onCheckedChange={(checked) => onShowTriageSummaryChange(checked === true)}
+              aria-label="Exibir resumo da triagem"
+            />
+            Resumo IA
           </label>
         </div>
 

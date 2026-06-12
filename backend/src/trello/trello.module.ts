@@ -8,5 +8,6 @@ import { TrelloService } from './trello.service';
   imports: [TicketsModule, McpModule],
   providers: [TrelloService],
   controllers: [TrelloController],
+  exports: [TrelloService],
 })
 export class TrelloModule {}
