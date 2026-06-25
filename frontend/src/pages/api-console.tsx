@@ -94,7 +94,9 @@ function parseHeaders(value: string) {
   if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
     throw new Error('Headers precisa ser um objeto JSON')
   }
-  return parsed as Record<string, string>
+  return Object.fromEntries(
+    Object.entries(parsed as Record<string, string>).filter(([key]) => !shouldIgnoreImportedHeader(key)),
+  )
 }
 
 function parseVariables(value: string) {
@@ -164,6 +166,16 @@ function splitHeader(header: string) {
   }
 }
 
+function shouldIgnoreImportedHeader(key: string) {
+  return [
+    'host',
+    'content-length',
+    'user-agent',
+    'accept-encoding',
+    'connection',
+  ].includes(key.toLowerCase())
+}
+
 function inferAuth(headers: Record<string, string>): Pick<DraftRequest, 'authType' | 'authConfig'> {
   const authEntry = Object.entries(headers).find(([key]) => key.toLowerCase() === 'authorization')
   if (authEntry) {
@@ -231,7 +243,9 @@ function parseCurlToDraft(input: string, currentDraft: DraftRequest): DraftReque
 
     if (token === '-H' || token === '--header') {
       const header = splitHeader(readValue(tokens, i, token))
-      if (header?.key) headers[header.key] = header.value
+      if (header?.key && !shouldIgnoreImportedHeader(header.key)) {
+        headers[header.key] = header.value
+      }
       i += 1
       continue
     }
