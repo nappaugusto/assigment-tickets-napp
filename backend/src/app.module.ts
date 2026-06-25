@@ -19,6 +19,7 @@ import { CasesModule } from './cases/cases.module';
 import { TeamsModule } from './teams/teams.module';
 import { AiTriageModule } from './ai-triage/ai-triage.module';
 import { ApiIntegrationsModule } from './api-integrations/api-integrations.module';
+import { PubsubToolsModule } from './pubsub-tools/pubsub-tools.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { ApiIntegrationsModule } from './api-integrations/api-integrations.modul
     TeamsModule,
     AiTriageModule,
     ApiIntegrationsModule,
+    PubsubToolsModule,
   ],
   providers: [DatabaseInitService],
 })

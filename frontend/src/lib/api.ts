@@ -333,6 +333,34 @@ export const apiIntegrationsApi = {
     post<ApiRunResponse>(`/api-integrations/requests/${requestId}/run`),
 }
 
+export const PUBSUB_TRIER_TOPICS = [
+  'platform-service-tpc-order-to-trier-sistemas-legacy-prd',
+  'platform-service-tpc-order-to-trier-sistemas-prd',
+  'platform-service-tpc-order-to-hos-sistemas-prd',
+] as const
+
+export interface PublishTrierOrderPayload {
+  topic: (typeof PUBSUB_TRIER_TOPICS)[number]
+  orderId: string
+  token: string
+  apiUrl: string
+  defaultDeliveryFee: string
+  extraConfig: Record<string, unknown>
+}
+
+export interface PublishTrierOrderResponse {
+  success: boolean
+  topic: string
+  messageId: string
+  orderId: string
+  message: Record<string, unknown>
+}
+
+export const pubsubToolsApi = {
+  publishTrierOrder: (payload: PublishTrierOrderPayload) =>
+    post<PublishTrierOrderResponse>('/pubsub-tools/trier-order', payload),
+}
+
 export type TriageStatus = 'pending' | 'running' | 'completed' | 'failed'
 export type TriageDecision = 'accepted' | 'ignored' | 'copied' | 'card_created'
 
