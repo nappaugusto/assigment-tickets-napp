@@ -74,6 +74,16 @@ const emptyPubsubResult = {
   error: null as string | null,
 }
 
+const TRIER_DEFAULT_API_URL = 'https://api-sgf-gateway.triersistemas.com.br/sgfpod1'
+const TRIER_CONFIG_CORE_FIELDS = [
+  'api_url',
+  'token',
+  'default_delivery_fee',
+  'tenant',
+  'user',
+  'company_document',
+]
+
 const requestToDraft = (request: ApiRequestConfig): DraftRequest => ({
   id: request.id,
   name: request.name,
@@ -344,7 +354,7 @@ export function ApiConsolePage() {
   const [pubsubTopic, setPubsubTopic] = useState<(typeof PUBSUB_TRIER_TOPICS)[number]>(PUBSUB_TRIER_TOPICS[1])
   const [pubsubOrderId, setPubsubOrderId] = useState('')
   const [pubsubToken, setPubsubToken] = useState('')
-  const [pubsubApiUrl, setPubsubApiUrl] = useState('https://api-sgf-gateway.triersistemas.com.br/sgfpod1')
+  const [pubsubApiUrl, setPubsubApiUrl] = useState(TRIER_DEFAULT_API_URL)
   const [pubsubDeliveryFee, setPubsubDeliveryFee] = useState('')
   const [pubsubConfigSource, setPubsubConfigSource] = useState('')
   const [pubsubExtraConfig, setPubsubExtraConfig] = useState('{\n  \n}')
@@ -593,9 +603,12 @@ export function ApiConsolePage() {
         typeof parsed.default_delivery_fee === 'string' || typeof parsed.default_delivery_fee === 'number'
           ? String(parsed.default_delivery_fee)
           : ''
+      const cloudConfig = Object.fromEntries(
+        Object.entries(parsed).filter(([key]) => ['tenant', 'user', 'company_document'].includes(key)),
+      )
 
-      if (!apiUrl && !token && !deliveryFee) {
-        throw new Error('Não encontrei api_url, token ou default_delivery_fee nesse JSON')
+      if (!apiUrl && !token && !deliveryFee && Object.keys(cloudConfig).length === 0) {
+        throw new Error('Não encontrei token ou campos reconhecidos nesse JSON')
       }
 
       if (apiUrl) setPubsubApiUrl(apiUrl)
@@ -603,9 +616,9 @@ export function ApiConsolePage() {
       if (deliveryFee) setPubsubDeliveryFee(deliveryFee)
 
       const extraConfig = Object.fromEntries(
-        Object.entries(parsed).filter(([key]) => !['api_url', 'token', 'default_delivery_fee'].includes(key)),
+        Object.entries(parsed).filter(([key]) => !TRIER_CONFIG_CORE_FIELDS.includes(key)),
       )
-      setPubsubExtraConfig(JSON.stringify(extraConfig, null, 2))
+      setPubsubExtraConfig(JSON.stringify({ ...cloudConfig, ...extraConfig }, null, 2))
       toast.success('Config Trier extraída')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'JSON inválido para extrair token')
@@ -644,7 +657,7 @@ export function ApiConsolePage() {
                     label="Config Trier"
                     value={pubsubConfigSource}
                     onChange={setPubsubConfigSource}
-                    placeholder={'{"api_url":"https://api-sgf-gateway.triersistemas.com.br/sgfpod1","token":"...","default_delivery_fee":"85853"}'}
+                    placeholder={'{"api_url":"https://api-sgf-gateway.triersistemas.com.br/sgfpod1","token":"...","default_delivery_fee":"85853"}\n\n{"token":"...","tenant":"f17872","user":"suporte@f17872","company_document":"28.466.181/0001-65"}'}
                     rows={4}
                   />
                   <div className="mt-3 flex justify-end">
