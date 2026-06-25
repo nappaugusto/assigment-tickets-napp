@@ -67,7 +67,8 @@ export function useAnalyzeCodeAiTriage(ticketId: number) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: () => aiTriageApi.analyzeCode(ticketId),
+    mutationFn: (context: { sellerIds?: string[]; eans?: string[]; notes?: string }) =>
+      aiTriageApi.analyzeCode(ticketId, context),
     onSuccess: (data) => {
       queryClient.setQueryData(aiTriageQueryKey(ticketId), data)
       toast.success('Análise de código iniciada')
@@ -82,8 +83,7 @@ export function useAiTriageDecision(ticketId: number) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ id, decision }: { id: number; decision: TriageDecision }) =>
-      aiTriageApi.decision(id, decision),
+    mutationFn: ({ id, decision }: { id: number; decision: TriageDecision }) => aiTriageApi.decision(id, decision),
     onSuccess: (data) => {
       queryClient.setQueryData(aiTriageQueryKey(ticketId), data)
     },
@@ -97,8 +97,7 @@ export function useAiTriageFollowUp(ticketId: number) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ id, message }: { id: number; message: string }) =>
-      aiTriageApi.followUp(id, message),
+    mutationFn: ({ id, message }: { id: number; message: string }) => aiTriageApi.followUp(id, message),
     onSuccess: (data) => {
       queryClient.setQueryData(aiTriageQueryKey(ticketId), data)
     },

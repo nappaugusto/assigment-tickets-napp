@@ -15,34 +15,51 @@ http.interceptors.response.use(
   (res) => res,
   (err: AxiosError<{ error?: string; message?: string }>) => {
     const data = err.response?.data
-    const message =
-      data?.error ?? data?.message ?? `HTTP ${err.response?.status ?? 'unknown'}`
+    const message = data?.error ?? data?.message ?? `HTTP ${err.response?.status ?? 'unknown'}`
     return Promise.reject(new Error(message))
   },
 )
 
 const get = <T>(path: string) => http.get<T>(path).then((r) => r.data)
-const post = <T>(path: string, body?: unknown) =>
-  http.post<T>(path, body).then((r) => r.data)
+const post = <T>(path: string, body?: unknown) => http.post<T>(path, body).then((r) => r.data)
+const patch = <T>(path: string, body?: unknown) => http.patch<T>(path, body).then((r) => r.data)
 const del = <T>(path: string) => http.delete<T>(path).then((r) => r.data)
 
 // Auth
-export interface AuthUser { id: number; name: string; email: string | null; role: 'admin' | 'user' }
-export interface MeResponse { authenticated: boolean; user: AuthUser | null }
-export interface AuthResponse { success: boolean; user?: AuthUser; error?: string }
+export interface AuthUser {
+  id: number
+  name: string
+  email: string | null
+  role: 'admin' | 'user'
+}
+export interface MeResponse {
+  authenticated: boolean
+  user: AuthUser | null
+}
+export interface AuthResponse {
+  success: boolean
+  user?: AuthUser
+  error?: string
+}
 
 export const authApi = {
   me: () => get<MeResponse>('/auth/me'),
   login: (username: string, password: string, remember_me = false) =>
     post<AuthResponse>('/auth/login', { username, password, remember_me }),
   register: (name: string, username: string, password: string, confirm_password: string) =>
-    post<AuthResponse>('/auth/register', { name, username, password, confirm_password }),
+    post<AuthResponse>('/auth/register', {
+      name,
+      username,
+      password,
+      confirm_password,
+    }),
   logout: () => post<{ success: boolean }>('/auth/logout'),
   googleLoginUrl: () => '/auth/google',
   forgotPassword: (username: string) =>
-    post<{ success: boolean; message: string }>('/auth/forgot-password', { username }),
-  validateResetToken: (token: string) =>
-    get<{ valid: boolean }>(`/auth/reset-password/${token}`),
+    post<{ success: boolean; message: string }>('/auth/forgot-password', {
+      username,
+    }),
+  validateResetToken: (token: string) => get<{ valid: boolean }>(`/auth/reset-password/${token}`),
   resetPassword: (token: string, password: string, confirm_password: string) =>
     post<{ success: boolean; message?: string }>(`/auth/reset-password/${token}`, {
       password,
@@ -156,8 +173,7 @@ export interface TicketsPayload {
 }
 
 export const ticketsApi = {
-  refresh: (manual = false) =>
-    get<TicketsPayload>(`/tickets/refresh${manual ? '?manual=1' : ''}`),
+  refresh: (manual = false) => get<TicketsPayload>(`/tickets/refresh${manual ? '?manual=1' : ''}`),
   detail: (id: number) => get<{ detail: TicketDetail }>(`/tickets/${id}/detail`),
   similar: (id: number) => get<{ tickets: SimilarTicket[] }>(`/tickets/${id}/similar`),
   monthlyAnalytics: (months = 4, team?: string, responsavel?: string) => {
@@ -168,16 +184,24 @@ export const ticketsApi = {
   },
   assign: (id: number, responsavel: string) =>
     http
-      .post<{ success: boolean; message: string; ticket_id: number; responsavel: string | null; now: string }>(
-        `/atribuir/${id}`,
-        new URLSearchParams({ responsavel }),
-        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
-      )
+      .post<{
+        success: boolean
+        message: string
+        ticket_id: number
+        responsavel: string | null
+        now: string
+      }>(`/atribuir/${id}`, new URLSearchParams({ responsavel }), {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      })
       .then((r) => r.data),
   unassign: (id: number) =>
-    post<{ success: boolean; message: string; ticket_id: number; responsavel: null; now: string }>(
-      `/desatribuir/${id}`,
-    ),
+    post<{
+      success: boolean
+      message: string
+      ticket_id: number
+      responsavel: null
+      now: string
+    }>(`/desatribuir/${id}`),
   appVersion: () => get<{ version: string }>('/app-version'),
 }
 
@@ -233,6 +257,73 @@ export const mcpMovideskApi = {
     }),
 }
 
+export type ApiHttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+export type ApiAuthType = 'none' | 'bearer' | 'basic' | 'apiKey'
+
+export interface ApiRequestConfig {
+  id: number
+  channelId: number
+  name: string
+  description: string
+  method: ApiHttpMethod
+  url: string
+  authType: ApiAuthType
+  authConfig: Record<string, string>
+  queryParams: string
+  headers: Record<string, string>
+  body: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ApiChannel {
+  id: number
+  name: string
+  description: string
+  createdAt: string
+  updatedAt: string
+  requests: ApiRequestConfig[]
+}
+
+export interface SaveApiRequestPayload {
+  name: string
+  description: string
+  method: ApiHttpMethod
+  url: string
+  authType: ApiAuthType
+  authConfig: Record<string, string>
+  queryParams: string
+  headers: Record<string, string>
+  body: string
+}
+
+export interface ApiRunResponse {
+  status: number
+  statusText: string
+  durationMs: number
+  headers: Record<string, string>
+  body: string
+  ok: boolean
+}
+
+export const apiIntegrationsApi = {
+  list: () => get<{ channels: ApiChannel[] }>('/api-integrations'),
+  createChannel: (name: string, description = '') =>
+    post<ApiChannel>('/api-integrations/channels', { name, description }),
+  updateChannel: (channelId: number, name: string, description = '') =>
+    patch<ApiChannel>(`/api-integrations/channels/${channelId}`, { name, description }),
+  deleteChannel: (channelId: number) =>
+    del<{ success: boolean }>(`/api-integrations/channels/${channelId}`),
+  createRequest: (channelId: number, payload: SaveApiRequestPayload) =>
+    post<ApiRequestConfig>(`/api-integrations/channels/${channelId}/requests`, payload),
+  updateRequest: (requestId: number, payload: SaveApiRequestPayload) =>
+    patch<ApiRequestConfig>(`/api-integrations/requests/${requestId}`, payload),
+  deleteRequest: (requestId: number) =>
+    del<{ success: boolean }>(`/api-integrations/requests/${requestId}`),
+  runRequest: (requestId: number) =>
+    post<ApiRunResponse>(`/api-integrations/requests/${requestId}/run`),
+}
+
 export type TriageStatus = 'pending' | 'running' | 'completed' | 'failed'
 export type TriageDecision = 'accepted' | 'ignored' | 'copied' | 'card_created'
 
@@ -247,6 +338,29 @@ export interface TicketAiTriageResult {
   technicalHypothesis: string
   evidence: string[]
   relevantFiles: Array<{ path: string; reason: string }>
+  diagnosticQueries: Array<{
+    title: string
+    purpose: string
+    sql: string
+    expectedEvidence: string
+  }>
+  executedQueries: Array<{
+    title: string
+    sql: string
+    status: 'completed' | 'failed' | 'skipped'
+    rowCount: number | null
+    durationMs: number
+    error: string
+    columns?: string[]
+    sampleRows?: Array<Record<string, unknown>>
+    sampleTruncated?: boolean
+  }>
+  codeInvestigationPaths: Array<{
+    path: string
+    symbol: string
+    reason: string
+    check: string
+  }>
   nextSteps: string[]
   suggestedCard: {
     title: string
@@ -286,16 +400,12 @@ export interface TicketAiTriageMessage {
 }
 
 export const aiTriageApi = {
-  latest: (ticketId: number) =>
-    get<{ triage: TicketAiTriage | null }>(`/tickets/${ticketId}/triage`),
-  start: (ticketId: number) =>
-    post<{ triage: TicketAiTriage }>(`/tickets/${ticketId}/triage`),
-  reanalyze: (ticketId: number) =>
-    post<{ triage: TicketAiTriage }>(`/tickets/${ticketId}/triage/reanalyze`),
-  analyzeCode: (ticketId: number) =>
-    post<{ triage: TicketAiTriage }>(`/tickets/${ticketId}/triage/code-analysis`),
-  followUp: (id: number, message: string) =>
-    post<{ triage: TicketAiTriage }>(`/triage/${id}/messages`, { message }),
+  latest: (ticketId: number) => get<{ triage: TicketAiTriage | null }>(`/tickets/${ticketId}/triage`),
+  start: (ticketId: number) => post<{ triage: TicketAiTriage }>(`/tickets/${ticketId}/triage`),
+  reanalyze: (ticketId: number) => post<{ triage: TicketAiTriage }>(`/tickets/${ticketId}/triage/reanalyze`),
+  analyzeCode: (ticketId: number, context: { sellerIds?: string[]; eans?: string[]; notes?: string } = {}) =>
+    post<{ triage: TicketAiTriage }>(`/tickets/${ticketId}/triage/code-analysis`, context),
+  followUp: (id: number, message: string) => post<{ triage: TicketAiTriage }>(`/triage/${id}/messages`, { message }),
   decision: (id: number, decision: TriageDecision) =>
     http.patch<{ triage: TicketAiTriage }>(`/triage/${id}/decision`, { decision }).then((r) => r.data),
 }
@@ -314,8 +424,7 @@ export interface KanbanBoard {
 
 export const kanbanApi = {
   getBoard: () => get<KanbanBoard>('/kanban/board'),
-  saveBoard: (board: KanbanBoard) =>
-    http.put<{ success: boolean }>('/kanban/board', board).then((r) => r.data),
+  saveBoard: (board: KanbanBoard) => http.put<{ success: boolean }>('/kanban/board', board).then((r) => r.data),
 }
 
 export interface MonthlyAnalyticsPreference {
@@ -331,12 +440,10 @@ export const preferencesApi = {
 
 // Ticket Notes
 export const notesApi = {
-  getNote: (ticketId: number) =>
-    get<{ content: string }>(`/notes/${ticketId}`),
+  getNote: (ticketId: number) => get<{ content: string }>(`/notes/${ticketId}`),
   saveNote: (ticketId: number, content: string) =>
     http.put<{ success: boolean }>(`/notes/${ticketId}`, { content }).then((r) => r.data),
-  getTicketsWithNotes: () =>
-    get<{ ticketIds: number[] }>('/notes/tickets-with-notes'),
+  getTicketsWithNotes: () => get<{ ticketIds: number[] }>('/notes/tickets-with-notes'),
 }
 
 // Trello
@@ -382,8 +489,7 @@ export const trelloApi = {
     get<TrelloList[]>(`/trello/lists${boardId ? `?boardId=${encodeURIComponent(boardId)}` : ''}`),
   createCardFromTicket: (ticketId: number, payload: CreateTrelloCardPayload) =>
     post<{ card: TrelloCard; ticket: Ticket }>(`/trello/tickets/${ticketId}/cards`, payload),
-  detachCardFromTicket: (ticketId: number) =>
-    del<{ ticket: Ticket }>(`/trello/tickets/${ticketId}/card`),
+  detachCardFromTicket: (ticketId: number) => del<{ ticket: Ticket }>(`/trello/tickets/${ticketId}/card`),
 }
 
 // Internal Cases
@@ -499,15 +605,12 @@ export const casesApi = {
   slaPolicies: () => get<{ policies: InternalCaseSlaPolicy[] }>('/cases/sla-policies'),
   updateSlaPolicy: (payload: { priority: string; durationHours: number }) =>
     http.patch<InternalCaseSlaPolicy>('/cases/sla-policies', payload).then((r) => r.data),
-  create: (payload: CreateInternalCasePayload) =>
-    post<InternalCase>('/cases', payload),
+  create: (payload: CreateInternalCasePayload) => post<InternalCase>('/cases', payload),
   get: (id: number) => get<InternalCase>(`/cases/${id}`),
   updateStatus: (id: number, status: InternalCase['status']) =>
     http.patch<InternalCase>(`/cases/${id}/status`, { status }).then((r) => r.data),
-  addComment: (id: number, content: string) =>
-    post<InternalCaseComment>(`/cases/${id}/comments`, { content }),
-  attachmentUrl: (caseId: number, attachmentId: number) =>
-    `/cases/${caseId}/attachments/${attachmentId}`,
+  addComment: (id: number, content: string) => post<InternalCaseComment>(`/cases/${id}/comments`, { content }),
+  attachmentUrl: (caseId: number, attachmentId: number) => `/cases/${caseId}/attachments/${attachmentId}`,
 }
 
 export interface InternalTeamMember {
@@ -538,16 +641,12 @@ export interface InternalUser {
 export const internalTeamsApi = {
   list: () => get<{ teams: InternalTeam[] }>('/internal-teams'),
   users: () => get<{ users: InternalUser[] }>('/internal-teams/users'),
-  create: (payload: { name: string; description?: string }) =>
-    post<InternalTeam>('/internal-teams', payload),
-  syncMovidesk: () =>
-    post<{ teams: InternalTeam[]; syncedCount: number }>('/internal-teams/sync-movidesk'),
+  create: (payload: { name: string; description?: string }) => post<InternalTeam>('/internal-teams', payload),
+  syncMovidesk: () => post<{ teams: InternalTeam[]; syncedCount: number }>('/internal-teams/sync-movidesk'),
   update: (teamId: number, payload: { name?: string; description?: string }) =>
     http.patch<InternalTeam>(`/internal-teams/${teamId}`, payload).then((r) => r.data),
-  delete: (teamId: number) =>
-    del<{ success: boolean }>(`/internal-teams/${teamId}`),
+  delete: (teamId: number) => del<{ success: boolean }>(`/internal-teams/${teamId}`),
   addMember: (teamId: number, payload: { userId: number; isAdmin?: boolean }) =>
     post<InternalTeam>(`/internal-teams/${teamId}/members`, payload),
-  removeMember: (teamId: number, userId: number) =>
-    del<InternalTeam>(`/internal-teams/${teamId}/members/${userId}`),
+  removeMember: (teamId: number, userId: number) => del<InternalTeam>(`/internal-teams/${teamId}/members/${userId}`),
 }

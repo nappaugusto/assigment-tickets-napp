@@ -33,11 +33,12 @@ services:
     environment:
       DATABASE_URL: postgres://assignment_tickets:assignment_tickets@postgres:5432/assignment_tickets
       NGINX_PORT: 8080
+      AI_TRIAGE_GIT_PULL: "false"
     volumes:
       - ${HOME}/.claude:/root/.claude:ro
       - ${HOME}/.claude.json:/root/.claude.json:ro
       - ${HOME}/.ssh:/root/.ssh:ro
-      - /home/kauetorres/Documentos/PlatformBackend/platform-backend:/workspace/platform-backend
+      - /home/kauetorres/Documentos/Platform/platform-backend:/workspace/platform-backend:ro
     restart: unless-stopped
 
   db-proxy-forwarder:

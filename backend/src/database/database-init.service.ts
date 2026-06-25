@@ -175,6 +175,24 @@ export class DatabaseInitService implements OnModuleInit {
         finished_at TIMESTAMPTZ
       );
 
+      CREATE TABLE IF NOT EXISTS ai_triage_memories (
+        id                 INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+        fingerprint        TEXT        NOT NULL UNIQUE,
+        status             TEXT        NOT NULL DEFAULT 'candidate',
+        source_triage_id   INTEGER     REFERENCES ticket_ai_triages(id) ON DELETE SET NULL,
+        source_ticket_id   INTEGER,
+        keywords           TEXT[]      NOT NULL DEFAULT '{}',
+        likely_area        TEXT        NOT NULL DEFAULT '',
+        technical_pattern  TEXT        NOT NULL DEFAULT '',
+        code_paths         JSONB       NOT NULL DEFAULT '[]'::jsonb,
+        diagnostic_queries JSONB       NOT NULL DEFAULT '[]'::jsonb,
+        confidence         TEXT        NOT NULL DEFAULT 'media',
+        use_count          INTEGER     NOT NULL DEFAULT 0,
+        last_used_at       TIMESTAMPTZ,
+        created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+
       CREATE TABLE IF NOT EXISTS user_preferences (
         id         INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
         user_id    INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -182,6 +200,33 @@ export class DatabaseInitService implements OnModuleInit {
         value      JSONB       NOT NULL DEFAULT '{}'::jsonb,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         UNIQUE(user_id, key)
+      );
+
+      CREATE TABLE IF NOT EXISTS api_channels (
+        id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+        user_id     INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name        TEXT        NOT NULL,
+        description TEXT,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE(user_id, name)
+      );
+
+      CREATE TABLE IF NOT EXISTS api_requests (
+        id           INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+        channel_id   INTEGER     NOT NULL REFERENCES api_channels(id) ON DELETE CASCADE,
+        user_id      INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name         TEXT        NOT NULL,
+        description  TEXT,
+        method       TEXT        NOT NULL DEFAULT 'GET',
+        url          TEXT        NOT NULL,
+        auth_type    TEXT        NOT NULL DEFAULT 'none',
+        auth_config  JSONB       NOT NULL DEFAULT '{}'::jsonb,
+        query_params TEXT        NOT NULL DEFAULT '',
+        headers      JSONB       NOT NULL DEFAULT '{}'::jsonb,
+        body         TEXT        NOT NULL DEFAULT '',
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
       );
 
       CREATE TABLE IF NOT EXISTS internal_cases (
@@ -235,6 +280,10 @@ export class DatabaseInitService implements OnModuleInit {
       CREATE INDEX IF NOT EXISTS tickets_status_idx ON tickets (status);
       CREATE INDEX IF NOT EXISTS tickets_opened_at_idx ON tickets (opened_at);
       CREATE INDEX IF NOT EXISTS ticket_ai_triages_ticket_id_idx ON ticket_ai_triages (ticket_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS ai_triage_memories_keywords_idx
+        ON ai_triage_memories USING GIN (keywords);
+      CREATE INDEX IF NOT EXISTS ai_triage_memories_status_idx
+        ON ai_triage_memories (status, updated_at DESC);
       CREATE INDEX IF NOT EXISTS tickets_responsavel_idx ON tickets (responsavel);
       CREATE INDEX IF NOT EXISTS tickets_updated_at_idx ON tickets (updated_at);
       CREATE INDEX IF NOT EXISTS password_resets_expires_at_idx ON password_resets (expires_at);
@@ -243,6 +292,12 @@ export class DatabaseInitService implements OnModuleInit {
         WHERE content <> '';
       CREATE INDEX IF NOT EXISTS user_preferences_user_key_idx
         ON user_preferences (user_id, key);
+      CREATE INDEX IF NOT EXISTS api_channels_user_idx
+        ON api_channels (user_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS api_requests_user_idx
+        ON api_requests (user_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS api_requests_channel_idx
+        ON api_requests (channel_id, updated_at DESC);
       CREATE INDEX IF NOT EXISTS internal_cases_status_idx ON internal_cases (status);
       CREATE INDEX IF NOT EXISTS internal_cases_created_at_idx ON internal_cases (created_at);
       CREATE INDEX IF NOT EXISTS internal_cases_requester_idx ON internal_cases (requester_id);

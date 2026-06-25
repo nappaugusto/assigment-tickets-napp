@@ -18,6 +18,7 @@ import { TrelloModule } from './trello/trello.module';
 import { CasesModule } from './cases/cases.module';
 import { TeamsModule } from './teams/teams.module';
 import { AiTriageModule } from './ai-triage/ai-triage.module';
+import { ApiIntegrationsModule } from './api-integrations/api-integrations.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { AiTriageModule } from './ai-triage/ai-triage.module';
     CasesModule,
     TeamsModule,
     AiTriageModule,
+    ApiIntegrationsModule,
   ],
   providers: [DatabaseInitService],
 })

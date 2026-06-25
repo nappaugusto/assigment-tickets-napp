@@ -11,7 +11,11 @@ import {
 } from '@nestjs/common';
 import { SessionGuard } from '../auth/auth.guard';
 import { AiTriageService } from './ai-triage.service';
-import { TriageDecisionDto, TriageFollowUpDto } from './ai-triage.dto';
+import {
+  CodeAnalysisContextDto,
+  TriageDecisionDto,
+  TriageFollowUpDto,
+} from './ai-triage.dto';
 
 @UseGuards(SessionGuard)
 @Controller()
@@ -50,8 +54,11 @@ export class AiTriageController {
   }
 
   @Post('tickets/:ticketId/triage/code-analysis')
-  analyzeCode(@Param('ticketId', ParseIntPipe) ticketId: number) {
-    return this.aiTriageService.start(ticketId, 'code_analysis');
+  analyzeCode(
+    @Param('ticketId', ParseIntPipe) ticketId: number,
+    @Body() context: CodeAnalysisContextDto,
+  ) {
+    return this.aiTriageService.start(ticketId, 'code_analysis', context);
   }
 
   @Patch('triage/:id/decision')

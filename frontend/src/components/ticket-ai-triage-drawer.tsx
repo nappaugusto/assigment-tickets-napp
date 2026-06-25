@@ -7,11 +7,13 @@ import {
   Clipboard,
   Code2,
   CornerDownLeft,
+  Database,
   ExternalLink,
   FileCode2,
   Loader2,
   MessageSquareText,
   RefreshCw,
+  Route,
   Sparkles,
   SquareKanban,
   X,
@@ -47,20 +49,10 @@ const PRIORITY_VARIANT: Record<string, 'destructive' | 'warning' | 'secondary' |
 export function TicketAiTriageDrawer({ ticket, open, onClose }: TicketAiTriageDrawerProps) {
   if (!ticket) return null
 
-  return (
-    <TicketAiTriageDrawerContent
-      ticket={ticket}
-      open={open}
-      onClose={onClose}
-    />
-  )
+  return <TicketAiTriageDrawerContent ticket={ticket} open={open} onClose={onClose} />
 }
 
-function TicketAiTriageDrawerContent({
-  ticket,
-  open,
-  onClose,
-}: TicketAiTriageDrawerProps & { ticket: Ticket }) {
+function TicketAiTriageDrawerContent({ ticket, open, onClose }: TicketAiTriageDrawerProps & { ticket: Ticket }) {
   const triageQuery = useTicketAiTriage(ticket.id, open)
   const similarQuery = useQuery({
     queryKey: ['similar-tickets', ticket.id],
@@ -74,8 +66,12 @@ function TicketAiTriageDrawerContent({
   const decision = useAiTriageDecision(ticket.id)
   const followUp = useAiTriageFollowUp(ticket.id)
   const [trelloOpen, setTrelloOpen] = useState(false)
+  const [sellerIdsInput, setSellerIdsInput] = useState('')
+  const [eansInput, setEansInput] = useState('')
+  const [technicalNotes, setTechnicalNotes] = useState('')
   const triageRecord = triageQuery.data?.triage ?? null
   const triage = triageRecord?.triage ?? null
+  const isCodeAnalysis = analyzeCode.isPending || triageRecord?.input_summary?.mode === 'code_analysis'
   const trelloLabels = triage ? buildTrelloLabels(triage) : []
   const isWorking =
     startTriage.isPending ||
@@ -111,10 +107,27 @@ function TicketAiTriageDrawerContent({
     toast.success('Sugestão ignorada')
   }
 
+  const accept = async () => {
+    if (!triageRecord) return
+    await decision.mutateAsync({ id: triageRecord.id, decision: 'accepted' })
+    toast.success('Análise validada e adicionada à memória técnica')
+  }
+
   const markCardCreated = async () => {
     if (triageRecord) {
-      await decision.mutateAsync({ id: triageRecord.id, decision: 'card_created' })
+      await decision.mutateAsync({
+        id: triageRecord.id,
+        decision: 'card_created',
+      })
     }
+  }
+
+  const analyzeWithContext = () => {
+    analyzeCode.mutate({
+      sellerIds: splitTechnicalValues(sellerIdsInput),
+      eans: splitTechnicalValues(eansInput),
+      notes: technicalNotes.trim() || undefined,
+    })
   }
 
   return (
@@ -152,7 +165,7 @@ function TicketAiTriageDrawerContent({
                 onClick={() => reanalyze.mutate()}
               >
                 {isWorking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                Re-analisar
+                Refazer triagem
               </Button>
               <Button
                 type="button"
@@ -160,10 +173,14 @@ function TicketAiTriageDrawerContent({
                 size="sm"
                 className="h-8 gap-2"
                 disabled={isWorking}
-                onClick={() => analyzeCode.mutate()}
+                onClick={analyzeWithContext}
               >
-                {analyzeCode.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Code2 className="h-3.5 w-3.5" />}
-                Analisar código
+                {analyzeCode.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Code2 className="h-3.5 w-3.5" />
+                )}
+                Investigação técnica
               </Button>
               <Dialog.Close asChild>
                 <button className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
@@ -173,11 +190,56 @@ function TicketAiTriageDrawerContent({
             </div>
           </div>
 
+          <div className="grid gap-3 border-b border-border/45 bg-muted/10 px-5 py-3 md:grid-cols-2">
+            <div className="md:col-span-2">
+              <p className="text-xs font-medium text-foreground">Filtros da investigação técnica</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Usados somente ao investigar código e banco; não afetam a triagem rápida.
+              </p>
+            </div>
+            <label className="space-y-1.5">
+              <span className="text-xs font-medium text-muted-foreground">FK seller IDs</span>
+              <textarea
+                rows={2}
+                value={sellerIdsInput}
+                onChange={(event) => setSellerIdsInput(event.target.value)}
+                disabled={isWorking}
+                placeholder="UUIDs separados por vírgula ou linha"
+                className="w-full resize-y rounded-md border border-input bg-background/70 px-3 py-2 font-mono text-xs outline-none focus:border-ring focus:ring-1 focus:ring-ring"
+              />
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-xs font-medium text-muted-foreground">EANs</span>
+              <textarea
+                rows={2}
+                value={eansInput}
+                onChange={(event) => setEansInput(event.target.value)}
+                disabled={isWorking}
+                placeholder="EANs separados por vírgula ou linha"
+                className="w-full resize-y rounded-md border border-input bg-background/70 px-3 py-2 font-mono text-xs outline-none focus:border-ring focus:ring-1 focus:ring-ring"
+              />
+            </label>
+            <label className="space-y-1.5 md:col-span-2">
+              <span className="text-xs font-medium text-muted-foreground">
+                Contexto adicional para limitar a consulta
+              </span>
+              <input
+                value={technicalNotes}
+                onChange={(event) => setTechnicalNotes(event.target.value)}
+                disabled={isWorking}
+                placeholder="Ex.: analisar somente as lojas informadas e o canal Vupt"
+                className="h-9 w-full rounded-md border border-input bg-background/70 px-3 text-sm outline-none focus:border-ring focus:ring-1 focus:ring-ring"
+              />
+            </label>
+          </div>
+
           <div className="flex-1 overflow-y-auto p-5">
             {isWorking ? (
               <div className="flex min-h-72 flex-col items-center justify-center gap-3 rounded-lg border border-border/45 bg-muted/15 text-sm text-muted-foreground">
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                {analyzeCode.isPending ? 'Analisando código e evidências do banco...' : 'Analisando ticket...'}
+                {isCodeAnalysis
+                  ? 'Investigando código, banco e evidências...'
+                  : 'Fazendo triagem operacional do ticket...'}
               </div>
             ) : triageRecord?.status === 'failed' ? (
               <div className="rounded-lg border border-destructive/35 bg-destructive/10 p-4 text-sm">
@@ -186,7 +248,7 @@ function TicketAiTriageDrawerContent({
               </div>
             ) : triage && triageRecord ? (
               <div className="space-y-4">
-                <TriagePanel triage={triage} />
+                <TriagePanel triage={triage} triageRecord={triageRecord} />
                 <QuickCopyPanel ticket={ticket} triage={triage} />
                 <CustomerReplyPanel text={getSuggestedCustomerReply(ticket, triage)} />
                 <SimilarTicketsPanel
@@ -201,6 +263,7 @@ function TicketAiTriageDrawerContent({
                 />
                 <SuggestedCardPanel
                   triage={triage}
+                  onAccept={accept}
                   onCopy={copyTriage}
                   onIgnore={ignore}
                   onCreateCard={() => setTrelloOpen(true)}
@@ -288,11 +351,20 @@ function QuickCopyPanel({ ticket, triage }: { ticket: Ticket; triage: TicketAiTr
   )
 }
 
-function TriagePanel({ triage }: { triage: TicketAiTriageResult }) {
+function TriagePanel({ triage, triageRecord }: { triage: TicketAiTriageResult; triageRecord: TicketAiTriage }) {
+  const memoryCount = Number(triageRecord.input_summary?.memoryCount || 0)
+  const isTechnical = triageRecord.input_summary?.mode === 'code_analysis'
+
   return (
     <section className="rounded-lg border border-border/60 bg-card/60 p-4">
-      <PanelHeader icon={<Bot size={15} />} title="Triagem" />
+      <PanelHeader
+        icon={isTechnical ? <Code2 size={15} /> : <Bot size={15} />}
+        title={isTechnical ? 'Investigação técnica' : 'Triagem operacional'}
+      />
       <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Badge variant="secondary">
+          {isTechnical ? 'código + banco' : 'ticket + histórico'}
+        </Badge>
         {triage.tags.map((tag) => (
           <Badge key={tag} variant="outline" className="border-primary/40 bg-primary/10 text-primary">
             {tag}
@@ -300,24 +372,32 @@ function TriagePanel({ triage }: { triage: TicketAiTriageResult }) {
         ))}
         <Badge variant={PRIORITY_VARIANT[triage.priority] ?? 'outline'}>{triage.priority}</Badge>
         <span className="text-xs text-muted-foreground">confiança: {triage.confidence}</span>
+        {memoryCount > 0 && (
+          <Badge variant="secondary">
+            {memoryCount} memória{memoryCount === 1 ? '' : 's'} consultada{memoryCount === 1 ? '' : 's'}
+          </Badge>
+        )}
       </div>
 
       <div className="mt-4 space-y-3 text-sm leading-relaxed">
         <LabeledText label="Resumo" text={triage.summary} strong />
         <LabeledText label="Sintoma" text={triage.symptom} strong />
-        <LabeledText label="Repo" text={triage.likelyArea} />
-        {triage.technicalHypothesis && (
-          <LabeledText label="Hipótese" text={triage.technicalHypothesis} />
-        )}
-        {triage.reasoning && (
-          <p className="text-xs leading-relaxed text-muted-foreground">{triage.reasoning}</p>
-        )}
+        <LabeledText label={isTechnical ? 'Área técnica' : 'Área provável'} text={triage.likelyArea} />
+        {triage.technicalHypothesis && <LabeledText label="Hipótese" text={triage.technicalHypothesis} />}
+        {triage.reasoning && <p className="text-xs leading-relaxed text-muted-foreground">{triage.reasoning}</p>}
       </div>
 
       <ListBlock title="Evidências" items={triage.evidence} />
+      {isTechnical && (
+        <>
+          <ExecutedQueriesBlock items={triage.executedQueries ?? []} />
+          <DiagnosticQueriesBlock items={triage.diagnosticQueries ?? []} />
+          <CodeInvestigationBlock items={triage.codeInvestigationPaths ?? []} />
+        </>
+      )}
       <NextStepsBlock items={triage.nextSteps} />
 
-      {triage.relevantFiles.length > 0 && (
+      {isTechnical && triage.relevantFiles.length > 0 && (
         <div className="mt-4">
           <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
             <FileCode2 size={14} />
@@ -325,7 +405,10 @@ function TriagePanel({ triage }: { triage: TicketAiTriageResult }) {
           </div>
           <div className="space-y-2">
             {triage.relevantFiles.map((file) => (
-              <div key={`${file.path}-${file.reason}`} className="rounded-md border border-border/45 bg-background/35 p-2">
+              <div
+                key={`${file.path}-${file.reason}`}
+                className="rounded-md border border-border/45 bg-background/35 p-2"
+              >
                 <p className="font-mono text-xs text-foreground">{file.path}</p>
                 {file.reason && <p className="mt-1 text-xs text-muted-foreground">{file.reason}</p>}
               </div>
@@ -375,9 +458,7 @@ function SimilarTicketsPanel({
   triageSimilarTickets: TicketAiTriageResult['similarTickets']
   isLoading?: boolean
 }) {
-  const aiItems = triageSimilarTickets.filter(
-    (item) => !tickets.some((ticket) => ticket.id === item.id),
-  )
+  const aiItems = triageSimilarTickets.filter((item) => !tickets.some((ticket) => ticket.id === item.id))
 
   if (isLoading) {
     return (
@@ -413,9 +494,7 @@ function SimilarTicketsPanel({
               {item.reasons.length ? item.reasons.join(' · ') : `Similaridade ${item.score}`}
             </p>
             {item.ai_triage?.summary && (
-              <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-foreground/75">
-                {item.ai_triage.summary}
-              </p>
+              <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-foreground/75">{item.ai_triage.summary}</p>
             )}
           </a>
         ))}
@@ -434,12 +513,14 @@ function SimilarTicketsPanel({
 
 function SuggestedCardPanel({
   triage,
+  onAccept,
   onCopy,
   onIgnore,
   onCreateCard,
   isBusy,
 }: {
   triage: TicketAiTriageResult
+  onAccept: () => void
   onCopy: () => void
   onIgnore: () => void
   onCreateCard: () => void
@@ -455,11 +536,17 @@ function SuggestedCardPanel({
       {triage.suggestedCard.labels.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
           {triage.suggestedCard.labels.map((label) => (
-            <Badge key={label} variant="secondary">{label}</Badge>
+            <Badge key={label} variant="secondary">
+              {label}
+            </Badge>
           ))}
         </div>
       )}
       <div className="mt-4 flex flex-wrap gap-2">
+        <Button size="sm" variant="outline" onClick={onAccept} disabled={isBusy}>
+          <CheckSquare className="h-3.5 w-3.5" />
+          Validar análise
+        </Button>
         <Button size="sm" onClick={onCreateCard} disabled={isBusy}>
           <SquareKanban className="h-3.5 w-3.5" />
           Criar card no Trello
@@ -501,7 +588,8 @@ function TriageChatPanel({
       <div className="mt-3 space-y-3">
         {messages.length === 0 ? (
           <div className="rounded-md border border-border/45 bg-background/35 p-3 text-xs leading-relaxed text-muted-foreground">
-            Cole aqui o erro retornado por uma consulta, um log, ou uma hipótese sua. A resposta usa o contexto do ticket e da triagem salva.
+            Cole aqui o erro retornado por uma consulta, um log, ou uma hipótese sua. A resposta usa o contexto do
+            ticket e da triagem salva.
           </div>
         ) : (
           <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
@@ -576,6 +664,17 @@ function stripLeadingNumber(value: string) {
   return value.replace(/^\s*\d+[).]\s*/, '').trim()
 }
 
+function splitTechnicalValues(value: string) {
+  return Array.from(
+    new Set(
+      value
+        .split(/[\s,;]+/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  )
+}
+
 function getSuggestedCustomerReply(ticket: Ticket, triage: TicketAiTriageResult | null) {
   const reply = triage?.suggestedCustomerReply?.trim()
   if (reply) return reply
@@ -633,8 +732,14 @@ function splitStepAndSql(value: string) {
   }
 
   return {
-    text: text.slice(0, match.index).replace(/[:;\s]+$/, '').trim(),
-    sql: text.slice(match.index).replace(/;?\s*$/, ';').trim(),
+    text: text
+      .slice(0, match.index)
+      .replace(/[:;\s]+$/, '')
+      .trim(),
+    sql: text
+      .slice(match.index)
+      .replace(/;?\s*$/, ';')
+      .trim(),
   }
 }
 
@@ -666,6 +771,207 @@ function NextStepsBlock({ items }: { items: string[] }) {
             </div>
           )
         })}
+      </div>
+    </div>
+  )
+}
+
+function DiagnosticQueriesBlock({ items }: { items: TicketAiTriageResult['diagnosticQueries'] }) {
+  if (!items.length) return null
+
+  const copySql = async (sql: string) => {
+    try {
+      await copyText(sql)
+      toast.success('SELECT copiado')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível copiar o SELECT')
+    }
+  }
+
+  return (
+    <div className="mt-4">
+      <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+        <Database size={14} />
+        SELECTs para diagnóstico
+      </div>
+      <div className="space-y-2">
+        {items.map((item, index) => (
+          <div key={`${item.title}-${index}`} className="rounded-lg border border-cyan-400/20 bg-cyan-950/10 p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  Query {index + 1}: {item.title}
+                </p>
+                {item.purpose && <p className="mt-1 text-xs text-muted-foreground">{item.purpose}</p>}
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 shrink-0 gap-1.5 text-xs"
+                onClick={() => void copySql(item.sql)}
+              >
+                <Clipboard className="h-3 w-3" />
+                Copiar
+              </Button>
+            </div>
+            <pre className="mt-3 overflow-x-auto rounded-md border border-cyan-400/25 bg-cyan-950/25 p-3 font-mono text-xs leading-relaxed text-cyan-50">
+              <code>{item.sql}</code>
+            </pre>
+            {item.expectedEvidence && (
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                <span className="font-medium text-foreground">Como interpretar: </span>
+                {item.expectedEvidence}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ExecutedQueriesBlock({ items }: { items: TicketAiTriageResult['executedQueries'] }) {
+  if (!items.length) return null
+
+  return (
+    <div className="mt-4">
+      <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+        <Database size={14} />
+        Consultas realmente executadas
+      </div>
+      <div className="space-y-2">
+        {items.map((item, index) => (
+          <div key={`${item.title}-${index}`} className="rounded-lg border border-border/50 bg-background/35 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-medium text-foreground">
+                Query {index + 1}: {item.title}
+              </p>
+              <div className="flex items-center gap-2 text-xs">
+                <Badge
+                  variant={
+                    item.status === 'completed' ? 'default' : item.status === 'failed' ? 'destructive' : 'secondary'
+                  }
+                >
+                  {item.status === 'completed' ? 'executada' : item.status === 'failed' ? 'falhou' : 'ignorada'}
+                </Badge>
+                <span className="text-muted-foreground">{item.durationMs} ms</span>
+                {item.rowCount !== null && <span className="text-muted-foreground">{item.rowCount} linhas</span>}
+              </div>
+            </div>
+            <pre className="mt-3 overflow-x-auto rounded-md border border-border/45 bg-muted/20 p-3 font-mono text-xs leading-relaxed text-foreground">
+              <code>{item.sql}</code>
+            </pre>
+            {item.status === 'completed' && (
+              <QueryResultPreview
+                columns={item.columns ?? []}
+                rows={item.sampleRows ?? []}
+                truncated={Boolean(item.sampleTruncated)}
+                rowCount={item.rowCount}
+              />
+            )}
+            {item.error && <p className="mt-2 text-xs text-destructive">{item.error}</p>}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function QueryResultPreview({
+  columns,
+  rows,
+  truncated,
+  rowCount,
+}: {
+  columns: string[]
+  rows: Array<Record<string, unknown>>
+  truncated: boolean
+  rowCount: number | null
+}) {
+  if (!rows.length) {
+    return (
+      <p className="mt-2 text-xs text-muted-foreground">
+        Resultado: a consulta foi executada e não retornou registros.
+      </p>
+    )
+  }
+
+  const visibleColumns = columns.length ? columns : Object.keys(rows[0])
+
+  return (
+    <div className="mt-3">
+      <p className="mb-2 text-xs font-medium text-muted-foreground">
+        Prévia do retorno ({rows.length}
+        {rowCount !== null ? ` de ${rowCount}` : ''} linha{rows.length === 1 ? '' : 's'})
+      </p>
+      <div className="overflow-x-auto rounded-md border border-border/45">
+        <table className="min-w-full divide-y divide-border/45 text-left font-mono text-xs">
+          <thead className="bg-muted/30">
+            <tr>
+              {visibleColumns.map((column) => (
+                <th key={column} className="whitespace-nowrap px-3 py-2 font-medium text-muted-foreground">
+                  {column}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/35">
+            {rows.map((row, rowIndex) => (
+              <tr key={rowIndex}>
+                {visibleColumns.map((column) => (
+                  <td key={column} className="max-w-80 whitespace-pre-wrap break-words px-3 py-2 text-foreground">
+                    {formatQueryCell(row[column])}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {truncated && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Exibindo apenas as 10 primeiras linhas; o total permanece indicado acima.
+        </p>
+      )}
+    </div>
+  )
+}
+
+function formatQueryCell(value: unknown) {
+  if (value === null || value === undefined) return 'NULL'
+  if (typeof value === 'string') return value
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
+
+function CodeInvestigationBlock({ items }: { items: TicketAiTriageResult['codeInvestigationPaths'] }) {
+  if (!items.length) return null
+
+  return (
+    <div className="mt-4">
+      <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+        <Route size={14} />
+        Caminhos no código
+      </div>
+      <div className="space-y-2">
+        {items.map((item, index) => (
+          <div
+            key={`${item.path}-${item.symbol}-${index}`}
+            className="rounded-md border border-border/45 bg-background/35 p-3"
+          >
+            <p className="break-all font-mono text-xs text-primary">
+              {item.path}
+              {item.symbol ? ` → ${item.symbol}` : ''}
+            </p>
+            {item.reason && <p className="mt-2 text-xs text-muted-foreground">{item.reason}</p>}
+            {item.check && (
+              <p className="mt-2 text-sm leading-relaxed text-foreground">
+                <span className="text-muted-foreground">Conferir: </span>
+                {item.check}
+              </p>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -704,6 +1010,14 @@ function formatTriageForCopy(ticket: Ticket, triage: TicketAiTriageResult | null
     'Próximos passos:',
     ...triage.nextSteps.map((item, index) => `${index + 1}. ${stripLeadingNumber(item)}`),
     '',
+    'SELECTs sugeridos:',
+    ...(triage.diagnosticQueries ?? []).map((item) => `-- ${item.title}\n${item.sql}`),
+    '',
+    'Caminhos no código:',
+    ...(triage.codeInvestigationPaths ?? []).map(
+      (item) => `- ${item.path}${item.symbol ? ` → ${item.symbol}` : ''}: ${item.check || item.reason}`,
+    ),
+    '',
     'Resposta sugerida ao cliente:',
     getSuggestedCustomerReply(ticket, triage),
   ]
@@ -717,7 +1031,9 @@ function formatExecutiveSummary(ticket: Ticket, triage: TicketAiTriageResult) {
     `Prioridade: ${triage.priority} | Confiança: ${triage.confidence}`,
     `Resumo: ${triage.summary}`,
     `Área provável: ${triage.likelyArea}`,
-    triage.shouldCreateCard ? 'Recomendação: criar card para acompanhamento técnico.' : 'Recomendação: tratar na fila de atendimento.',
+    triage.shouldCreateCard
+      ? 'Recomendação: criar card para acompanhamento técnico.'
+      : 'Recomendação: tratar na fila de atendimento.',
   ].join('\n')
 }
 
@@ -740,18 +1056,16 @@ function formatTechnicalDescription(ticket: Ticket, triage: TicketAiTriageResult
 }
 
 function formatChecklist(triage: TicketAiTriageResult) {
-  return triage.nextSteps
-    .map((item) => `- [ ] ${stripLeadingNumber(item)}`)
-    .join('\n')
+  return triage.nextSteps.map((item) => `- [ ] ${stripLeadingNumber(item)}`).join('\n')
 }
 
 function buildTrelloLabels(triage: TicketAiTriageResult) {
   return Array.from(
-    new Set([
-      ...triage.suggestedCard.labels,
-      ...triage.tags,
-      triage.priority !== 'baixa' ? triage.priority : null,
-    ].filter((label): label is string => Boolean(label?.trim()))),
+    new Set(
+      [...triage.suggestedCard.labels, ...triage.tags, triage.priority !== 'baixa' ? triage.priority : null].filter(
+        (label): label is string => Boolean(label?.trim()),
+      ),
+    ),
   ).slice(0, 8)
 }
 

@@ -1,4 +1,13 @@
-import { IsIn, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsIn,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export type TriageStatus = 'pending' | 'running' | 'completed' | 'failed';
 export type TriageDecision = 'accepted' | 'ignored' | 'copied' | 'card_created';
@@ -23,6 +32,29 @@ export interface TicketAiTriageResult {
   relevantFiles: Array<{
     path: string;
     reason: string;
+  }>;
+  diagnosticQueries: Array<{
+    title: string;
+    purpose: string;
+    sql: string;
+    expectedEvidence: string;
+  }>;
+  executedQueries: Array<{
+    title: string;
+    sql: string;
+    status: 'completed' | 'failed' | 'skipped';
+    rowCount: number | null;
+    durationMs: number;
+    error: string;
+    columns: string[];
+    sampleRows: Array<Record<string, unknown>>;
+    sampleTruncated: boolean;
+  }>;
+  codeInvestigationPaths: Array<{
+    path: string;
+    symbol: string;
+    reason: string;
+    check: string;
   }>;
   nextSteps: string[];
   suggestedCard: {
@@ -62,6 +94,16 @@ export interface TicketAiTriageMessageDto {
   created_at: string;
 }
 
+export interface AiTriageMemoryDto {
+  id: number;
+  status: 'candidate' | 'validated' | 'rejected';
+  likelyArea: string;
+  technicalPattern: string;
+  codePaths: TicketAiTriageResult['codeInvestigationPaths'];
+  diagnosticQueries: TicketAiTriageResult['diagnosticQueries'];
+  confidence: TicketAiTriageResult['confidence'];
+}
+
 export class TriageDecisionDto {
   @IsIn(['accepted', 'ignored', 'copied', 'card_created'])
   decision!: TriageDecision;
@@ -72,4 +114,23 @@ export class TriageFollowUpDto {
   @MinLength(2)
   @MaxLength(4000)
   message!: string;
+}
+
+export class CodeAnalysisContextDto {
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @IsUUID(undefined, { each: true })
+  sellerIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(200)
+  @IsString({ each: true })
+  eans?: string[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1500)
+  notes?: string;
 }
