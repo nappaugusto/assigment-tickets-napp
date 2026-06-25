@@ -618,8 +618,8 @@ export function ApiConsolePage() {
             </div>
           </aside>
 
-          <section className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_420px]">
-            <form onSubmit={handleSaveRequest} className="flex flex-col gap-4 rounded-md border border-border/45 bg-card/45 p-4">
+          <section className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1fr)_420px]">
+            <form onSubmit={handleSaveRequest} className="flex min-w-0 flex-col gap-4 rounded-md border border-border/45 bg-card/45 p-4">
               <div className="flex flex-col gap-3 border-b border-border/40 pb-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                   <div className="grid flex-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
@@ -926,7 +926,7 @@ function ResponsePanel({
   onCopy: () => void
 }) {
   return (
-    <aside className="flex min-h-[520px] flex-col rounded-md border border-border/45 bg-card/45 p-4">
+    <aside className="flex min-w-0 min-h-[520px] flex-col overflow-hidden rounded-md border border-border/45 bg-card/45 p-4">
       <div className="mb-4 flex items-start justify-between gap-3 border-b border-border/40 pb-4">
         <div>
           <p className="text-[11px] font-medium uppercase tracking-[0.26em] text-primary/85">Resposta</p>
@@ -957,7 +957,7 @@ function ResponsePanel({
           <div className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Requisição enviada
           </div>
-          <pre className="mb-4 max-h-44 overflow-auto rounded-md border border-border/45 bg-background/55 p-3 text-xs leading-relaxed text-muted-foreground">
+          <pre className="mb-4 max-h-44 max-w-full overflow-auto whitespace-pre-wrap break-all rounded-md border border-border/45 bg-background/55 p-3 text-xs leading-relaxed text-muted-foreground">
             {JSON.stringify(response.result.request, null, 2)}
           </pre>
         </>
@@ -967,7 +967,7 @@ function ResponsePanel({
         <Braces className="h-4 w-4" />
         Body
       </div>
-      <pre className="min-h-0 flex-1 overflow-auto rounded-md border border-border/45 bg-background/55 p-3 text-xs leading-relaxed text-foreground">
+      <pre className="min-h-0 max-w-full flex-1 overflow-auto whitespace-pre-wrap break-all rounded-md border border-border/45 bg-background/55 p-3 text-xs leading-relaxed text-foreground">
         {response.result?.body || 'A resposta da consulta aparecerá aqui.'}
       </pre>
 
@@ -976,7 +976,7 @@ function ResponsePanel({
           <div className="mb-3 mt-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Headers
           </div>
-          <pre className="max-h-44 overflow-auto rounded-md border border-border/45 bg-background/55 p-3 text-xs leading-relaxed text-muted-foreground">
+          <pre className="max-h-44 max-w-full overflow-auto whitespace-pre-wrap break-all rounded-md border border-border/45 bg-background/55 p-3 text-xs leading-relaxed text-muted-foreground">
             {JSON.stringify(response.result.headers, null, 2)}
           </pre>
         </>
