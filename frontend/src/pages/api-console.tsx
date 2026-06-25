@@ -7,6 +7,7 @@ import {
   Copy,
   FolderKanban,
   Globe2,
+  Import,
   KeyRound,
   Plus,
   Play,
@@ -91,6 +92,194 @@ function parseHeaders(value: string) {
   return parsed as Record<string, string>
 }
 
+function tokenizeCurl(input: string) {
+  const tokens: string[] = []
+  let current = ''
+  let quote: '"' | "'" | null = null
+  let escaping = false
+
+  for (const char of input.replace(/\\\r?\n/g, ' ')) {
+    if (escaping) {
+      current += char
+      escaping = false
+      continue
+    }
+
+    if (char === '\\' && quote !== "'") {
+      escaping = true
+      continue
+    }
+
+    if ((char === '"' || char === "'") && !quote) {
+      quote = char
+      continue
+    }
+
+    if (char === quote) {
+      quote = null
+      continue
+    }
+
+    if (/\s/.test(char) && !quote) {
+      if (current) {
+        tokens.push(current)
+        current = ''
+      }
+      continue
+    }
+
+    current += char
+  }
+
+  if (current) tokens.push(current)
+  return tokens
+}
+
+function splitHeader(header: string) {
+  const index = header.indexOf(':')
+  if (index < 0) return null
+
+  return {
+    key: header.slice(0, index).trim(),
+    value: header.slice(index + 1).trim(),
+  }
+}
+
+function inferAuth(headers: Record<string, string>): Pick<DraftRequest, 'authType' | 'authConfig'> {
+  const authEntry = Object.entries(headers).find(([key]) => key.toLowerCase() === 'authorization')
+  if (authEntry) {
+    const value = authEntry[1]
+    if (/^bearer\s+/i.test(value)) {
+      delete headers[authEntry[0]]
+      return { authType: 'bearer', authConfig: { token: value.replace(/^bearer\s+/i, '') } }
+    }
+    if (/^basic\s+/i.test(value)) {
+      const encoded = value.replace(/^basic\s+/i, '')
+      delete headers[authEntry[0]]
+      try {
+        const [username, ...passwordParts] = atob(encoded).split(':')
+        return { authType: 'basic', authConfig: { username, password: passwordParts.join(':') } }
+      } catch {
+        return { authType: 'basic', authConfig: { username: '', password: '' } }
+      }
+    }
+  }
+
+  const apiKeyEntry = Object.entries(headers).find(([key]) =>
+    ['x-api-key', 'apikey', 'api-key'].includes(key.toLowerCase()),
+  )
+  if (apiKeyEntry) {
+    delete headers[apiKeyEntry[0]]
+    return {
+      authType: 'apiKey',
+      authConfig: { headerName: apiKeyEntry[0], value: apiKeyEntry[1] },
+    }
+  }
+
+  return { authType: 'none', authConfig: { headerName: 'x-api-key' } }
+}
+
+function parseCurlToDraft(input: string, currentDraft: DraftRequest): DraftRequest {
+  const tokens = tokenizeCurl(input)
+  if (tokens[0]?.toLowerCase() === 'curl') tokens.shift()
+  if (tokens.length === 0) throw new Error('Cole um comando cURL válido')
+
+  let method: ApiHttpMethod | null = null
+  let url = ''
+  let body = ''
+  let basicAuth = ''
+  const headers: Record<string, string> = {}
+  const queryParams: string[] = []
+
+  const readValue = (tokensList: string[], index: number, flag: string) => {
+    const value = tokensList[index + 1]
+    if (!value) throw new Error(`Valor ausente para ${flag}`)
+    return value
+  }
+
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i]
+
+    if (token === '-X' || token === '--request') {
+      const value = readValue(tokens, i, token).toUpperCase()
+      if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(value)) {
+        throw new Error(`Método não suportado: ${value}`)
+      }
+      method = value as ApiHttpMethod
+      i += 1
+      continue
+    }
+
+    if (token === '-H' || token === '--header') {
+      const header = splitHeader(readValue(tokens, i, token))
+      if (header?.key) headers[header.key] = header.value
+      i += 1
+      continue
+    }
+
+    if (['-d', '--data', '--data-raw', '--data-binary', '--data-ascii', '--form'].includes(token)) {
+      body = readValue(tokens, i, token)
+      if (!method) method = 'POST'
+      i += 1
+      continue
+    }
+
+    if (token === '-u' || token === '--user') {
+      basicAuth = readValue(tokens, i, token)
+      i += 1
+      continue
+    }
+
+    if (token === '-G' || token === '--get') {
+      method = 'GET'
+      continue
+    }
+
+    if (token === '--url') {
+      url = readValue(tokens, i, token)
+      i += 1
+      continue
+    }
+
+    if (token === '--compressed' || token === '-s' || token === '-i' || token === '-L') {
+      continue
+    }
+
+    if (!token.startsWith('-') && /^https?:\/\//i.test(token)) {
+      url = token
+    }
+  }
+
+  if (!url) throw new Error('Não encontrei a URL no cURL')
+
+  const parsedUrl = new URL(url)
+  parsedUrl.searchParams.forEach((value, key) => {
+    queryParams.push(`${key}=${value}`)
+  })
+  parsedUrl.search = ''
+
+  let auth = inferAuth(headers)
+  if (basicAuth) {
+    const [username, ...passwordParts] = basicAuth.split(':')
+    auth = {
+      authType: 'basic',
+      authConfig: { username, password: passwordParts.join(':') },
+    }
+  }
+
+  return {
+    ...currentDraft,
+    name: currentDraft.name === 'Nova consulta' ? parsedUrl.pathname.split('/').filter(Boolean).at(-1) ?? 'Nova consulta' : currentDraft.name,
+    method: method ?? currentDraft.method,
+    url: parsedUrl.toString(),
+    authType: auth.authType,
+    authConfig: auth.authConfig,
+    queryParams: queryParams.join('\n'),
+    headersText: JSON.stringify(headers, null, 2),
+    body: body || currentDraft.body,
+  }
+}
+
 export function ApiConsolePage() {
   const navigate = useNavigate()
   const { logout } = useAuth()
@@ -104,6 +293,8 @@ export function ApiConsolePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isRunning, setIsRunning] = useState(false)
+  const [curlImportOpen, setCurlImportOpen] = useState(false)
+  const [curlImportValue, setCurlImportValue] = useState('')
   const [copied, setCopied] = useState(false)
   const [response, setResponse] = useState<ResponseState>({ result: null, error: null })
 
@@ -288,6 +479,19 @@ export function ApiConsolePage() {
     }))
   }
 
+  const handleImportCurl = () => {
+    try {
+      setDraft((current) => parseCurlToDraft(curlImportValue, current))
+      setCurlImportOpen(false)
+      setCurlImportValue('')
+      setSelectedRequestId(null)
+      setResponse({ result: null, error: null })
+      toast.success('cURL importado')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Erro ao importar cURL')
+    }
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.08))]">
       <Header onLogout={handleLogout} />
@@ -428,6 +632,15 @@ export function ApiConsolePage() {
                     <Plus className="h-4 w-4" />
                     Nova API
                   </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setCurlImportOpen((open) => !open)}
+                    disabled={!selectedChannel}
+                  >
+                    <Import className="h-4 w-4" />
+                    Importar cURL
+                  </Button>
                   <Button type="button" variant="outline" onClick={handleDeleteRequest} disabled={!draft.id}>
                     <Trash2 className="h-4 w-4" />
                     Excluir API
@@ -442,6 +655,27 @@ export function ApiConsolePage() {
                   </Button>
                 </div>
               </div>
+
+              {curlImportOpen && (
+                <div className="rounded-md border border-border/45 bg-background/30 p-3">
+                  <TextAreaField
+                    label="cURL"
+                    value={curlImportValue}
+                    onChange={setCurlImportValue}
+                    placeholder={'curl -X POST "https://api.exemplo.com/orders?status=open" \\\n  -H "Authorization: Bearer token" \\\n  -H "Content-Type: application/json" \\\n  --data-raw \'{"page":1}\''}
+                    rows={7}
+                  />
+                  <div className="mt-3 flex justify-end gap-2">
+                    <Button type="button" variant="ghost" onClick={() => setCurlImportOpen(false)}>
+                      Cancelar
+                    </Button>
+                    <Button type="button" onClick={handleImportCurl}>
+                      <Import className="h-4 w-4" />
+                      Adaptar
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_140px]">
                 <Field label="Nome">
