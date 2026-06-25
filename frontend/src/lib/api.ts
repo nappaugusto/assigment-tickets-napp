@@ -273,6 +273,8 @@ export interface ApiRequestConfig {
   headers: Record<string, string>
   variables: Record<string, string>
   body: string
+  lastResponse: ApiRunResponse | null
+  lastRunAt: string | null
   createdAt: string
   updatedAt: string
 }

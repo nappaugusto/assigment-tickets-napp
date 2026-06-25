@@ -367,6 +367,7 @@ export function ApiConsolePage() {
 
     setSelectedRequestId(nextRequest?.id ?? null)
     setDraft(nextRequest ? requestToDraft(nextRequest) : emptyDraft())
+    setResponse({ result: nextRequest?.lastResponse ?? null, error: null })
   }
 
   useEffect(() => {
@@ -388,13 +389,13 @@ export function ApiConsolePage() {
     const firstRequest = channel.requests[0] ?? null
     setSelectedRequestId(firstRequest?.id ?? null)
     setDraft(firstRequest ? requestToDraft(firstRequest) : emptyDraft())
-    setResponse({ result: null, error: null })
+    setResponse({ result: firstRequest?.lastResponse ?? null, error: null })
   }
 
   const handleSelectRequest = (request: ApiRequestConfig) => {
     setSelectedRequestId(request.id)
     setDraft(requestToDraft(request))
-    setResponse({ result: null, error: null })
+    setResponse({ result: request.lastResponse, error: null })
   }
 
   const handleCreateChannel = async () => {

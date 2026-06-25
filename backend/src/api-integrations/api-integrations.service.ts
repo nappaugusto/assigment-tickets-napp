@@ -36,6 +36,8 @@ interface RequestRow {
   headers: Record<string, string> | string | null;
   variables: Record<string, string> | string | null;
   body: string | null;
+  last_response: Record<string, unknown> | string | null;
+  last_run_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -77,9 +79,23 @@ function toRequestDto(row: RequestRow) {
     headers: parseJsonObject(row.headers),
     variables: parseJsonObject(row.variables),
     body: row.body ?? '',
+    lastResponse: parseUnknownJson(row.last_response),
+    lastRunAt: row.last_run_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function parseUnknownJson(value: unknown): unknown {
+  if (!value) return null;
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value) as unknown;
+    } catch {
+      return null;
+    }
+  }
+  return value;
 }
 
 function applyVariables(value: string, variables: Record<string, string>) {
@@ -343,7 +359,7 @@ export class ApiIntegrationsService {
       const durationMs = Math.round(performance.now() - startedAt);
       const text = await response.text();
 
-      return {
+      const result = {
         status: response.status,
         statusText: response.statusText,
         durationMs,
@@ -356,6 +372,9 @@ export class ApiIntegrationsService {
           headers: redactHeaders(headers),
         },
       };
+
+      await this.saveLastResponse(userId, requestId, result);
+      return result;
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         throw new BadRequestException('Tempo limite de 30s excedido.');
@@ -366,6 +385,23 @@ export class ApiIntegrationsService {
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  private async saveLastResponse(
+    userId: number,
+    requestId: number,
+    response: Record<string, unknown>,
+  ) {
+    await this.db.query(
+      `
+        UPDATE api_requests
+           SET last_response = $3::jsonb,
+               last_run_at = now()
+         WHERE id = $1
+           AND user_id = $2
+      `,
+      [requestId, userId, JSON.stringify(response)],
+    );
   }
 
   private formatBody(text: string) {
