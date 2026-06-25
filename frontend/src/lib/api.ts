@@ -306,6 +306,11 @@ export interface ApiRunResponse {
   headers: Record<string, string>
   body: string
   ok: boolean
+  request?: {
+    method: ApiHttpMethod
+    url: string
+    headers: Record<string, string>
+  }
 }
 
 export const apiIntegrationsApi = {

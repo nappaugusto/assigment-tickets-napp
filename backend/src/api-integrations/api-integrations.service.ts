@@ -100,6 +100,21 @@ function applyVariablesToRecord(
   );
 }
 
+function redactHeaders(headers: Record<string, string>) {
+  return Object.fromEntries(
+    Object.entries(headers).map(([key, value]) => {
+      const normalizedKey = key.toLowerCase();
+      const isSensitive =
+        normalizedKey.includes('authorization') ||
+        normalizedKey.includes('token') ||
+        normalizedKey.includes('key') ||
+        normalizedKey.includes('secret');
+
+      return [key, isSensitive ? '••••••' : value];
+    }),
+  );
+}
+
 function buildUrl(rawUrl: string, rawParams: string | null) {
   const url = new URL(rawUrl);
 
@@ -318,7 +333,8 @@ export class ApiIntegrationsService {
     try {
       const hasBody =
         !['GET', 'DELETE'].includes(request.method) && !!body.trim();
-      const response = await fetch(buildUrl(url, queryParams), {
+      const resolvedUrl = buildUrl(url, queryParams);
+      const response = await fetch(resolvedUrl, {
         method: request.method,
         headers,
         body: hasBody ? body : undefined,
@@ -334,6 +350,11 @@ export class ApiIntegrationsService {
         headers: Object.fromEntries(response.headers.entries()),
         body: this.formatBody(text),
         ok: response.ok,
+        request: {
+          method: request.method,
+          url: resolvedUrl,
+          headers: redactHeaders(headers),
+        },
       };
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {

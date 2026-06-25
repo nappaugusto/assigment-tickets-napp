@@ -938,6 +938,17 @@ function ResponsePanel({
         </div>
       )}
 
+      {response.result?.request && (
+        <>
+          <div className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Requisição enviada
+          </div>
+          <pre className="mb-4 max-h-44 overflow-auto rounded-md border border-border/45 bg-background/55 p-3 text-xs leading-relaxed text-muted-foreground">
+            {JSON.stringify(response.result.request, null, 2)}
+          </pre>
+        </>
+      )}
+
       <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
         <Braces className="h-4 w-4" />
         Body
