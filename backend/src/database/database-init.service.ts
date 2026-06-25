@@ -369,6 +369,66 @@ export class DatabaseInitService implements OnModuleInit {
        WHERE id = (SELECT min(id) FROM users)
          AND NOT EXISTS (SELECT 1 FROM users WHERE role = 'admin');
     `);
+
+    await this.db.query(`
+      WITH target_users AS (
+        SELECT id
+          FROM users
+      ),
+      channels AS (
+        INSERT INTO api_channels (user_id, name, description, updated_at)
+        SELECT id, 'AIqfome', 'APIs do canal AIqfome', now()
+          FROM target_users
+        ON CONFLICT(user_id, name) DO UPDATE SET
+          description = COALESCE(api_channels.description, excluded.description),
+          updated_at = api_channels.updated_at
+        RETURNING id, user_id
+      ),
+      existing_requests AS (
+        SELECT r.id
+          FROM api_requests r
+          JOIN channels c ON c.id = r.channel_id
+         WHERE r.name = 'Order -> List Orders'
+      ),
+      updated_requests AS (
+        UPDATE api_requests r
+           SET headers = '{"Accept":"application/json","User-Agent":"napp","Aiq-User-Agent":"napp"}'::jsonb,
+               auth_type = 'bearer',
+               auth_config = '{"token":"{{token}}"}'::jsonb,
+               variables = CASE
+                 WHEN r.variables ? 'token' THEN r.variables
+                 ELSE r.variables || '{"token":""}'::jsonb
+               END,
+               updated_at = now()
+         WHERE r.id IN (SELECT id FROM existing_requests)
+         RETURNING r.id
+      )
+      INSERT INTO api_requests (
+        channel_id, user_id, name, description, method, url, auth_type,
+        auth_config, query_params, headers, variables, body, updated_at
+      )
+      SELECT
+        c.id,
+        c.user_id,
+        'Order -> List Orders',
+        'Lista pedidos pela API aiqfome V0 (Alfredo). Endpoint GET /alfredo/orders/search.',
+        'GET',
+        'https://purple-box.aiqfome.com/alfredo/orders/search',
+        'bearer',
+        '{"token":"{{token}}"}'::jsonb,
+        '',
+        '{"Accept":"application/json","User-Agent":"napp","Aiq-User-Agent":"napp"}'::jsonb,
+        '{"token":""}'::jsonb,
+        '',
+        now()
+      FROM channels c
+      WHERE NOT EXISTS (
+        SELECT 1
+          FROM api_requests r
+         WHERE r.channel_id = c.id
+           AND r.name = 'Order -> List Orders'
+      );
+    `);
   }
 
   private sleep(ms: number) {

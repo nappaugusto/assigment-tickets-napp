@@ -116,9 +116,7 @@ function parseHeaders(value: string) {
   if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
     throw new Error('Headers precisa ser um objeto JSON')
   }
-  return Object.fromEntries(
-    Object.entries(parsed as Record<string, string>).filter(([key]) => !shouldIgnoreImportedHeader(key)),
-  )
+  return parsed as Record<string, string>
 }
 
 function parseVariables(value: string) {
