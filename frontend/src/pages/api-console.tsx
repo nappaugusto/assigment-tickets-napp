@@ -346,6 +346,7 @@ export function ApiConsolePage() {
   const [pubsubToken, setPubsubToken] = useState('')
   const [pubsubApiUrl, setPubsubApiUrl] = useState('https://api-sgf-gateway.triersistemas.com.br/sgfpod1')
   const [pubsubDeliveryFee, setPubsubDeliveryFee] = useState('')
+  const [pubsubConfigSource, setPubsubConfigSource] = useState('')
   const [pubsubExtraConfig, setPubsubExtraConfig] = useState('{\n  \n}')
   const [pubsubResult, setPubsubResult] = useState(emptyPubsubResult)
   const [isPublishingPubsub, setIsPublishingPubsub] = useState(false)
@@ -583,6 +584,34 @@ export function ApiConsolePage() {
     })
   }
 
+  const handleExtractPubsubConfig = () => {
+    try {
+      const parsed = JSON.parse(pubsubConfigSource) as Record<string, unknown>
+      const apiUrl = typeof parsed.api_url === 'string' ? parsed.api_url : ''
+      const token = typeof parsed.token === 'string' ? parsed.token : ''
+      const deliveryFee =
+        typeof parsed.default_delivery_fee === 'string' || typeof parsed.default_delivery_fee === 'number'
+          ? String(parsed.default_delivery_fee)
+          : ''
+
+      if (!apiUrl && !token && !deliveryFee) {
+        throw new Error('Não encontrei api_url, token ou default_delivery_fee nesse JSON')
+      }
+
+      if (apiUrl) setPubsubApiUrl(apiUrl)
+      if (token) setPubsubToken(token)
+      if (deliveryFee) setPubsubDeliveryFee(deliveryFee)
+
+      const extraConfig = Object.fromEntries(
+        Object.entries(parsed).filter(([key]) => !['api_url', 'token', 'default_delivery_fee'].includes(key)),
+      )
+      setPubsubExtraConfig(JSON.stringify(extraConfig, null, 2))
+      toast.success('Config Trier extraída')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'JSON inválido para extrair token')
+    }
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.08))]">
       <Header onLogout={handleLogout} />
@@ -610,6 +639,22 @@ export function ApiConsolePage() {
 
             {!pubsubCollapsed && (
               <>
+                <div className="mb-4 rounded-md border border-border/45 bg-background/30 p-3">
+                  <TextAreaField
+                    label="Config Trier"
+                    value={pubsubConfigSource}
+                    onChange={setPubsubConfigSource}
+                    placeholder={'{"api_url":"https://api-sgf-gateway.triersistemas.com.br/sgfpod1","token":"...","default_delivery_fee":"85853"}'}
+                    rows={4}
+                  />
+                  <div className="mt-3 flex justify-end">
+                    <Button type="button" variant="secondary" onClick={handleExtractPubsubConfig}>
+                      <KeyRound className="h-4 w-4" />
+                      Extrair token
+                    </Button>
+                  </div>
+                </div>
+
                 <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_180px]">
                   <Field label="Tópico">
                     <select
