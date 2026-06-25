@@ -79,10 +79,12 @@ const TRIER_CONFIG_CORE_FIELDS = [
   'api_url',
   'token',
   'default_delivery_fee',
+  'seller_channel_in_id',
   'tenant',
   'user',
   'company_document',
 ]
+const HOS_TOPIC = 'platform-service-tpc-order-to-hos-sistemas-prd'
 
 const requestToDraft = (request: ApiRequestConfig): DraftRequest => ({
   id: request.id,
@@ -356,6 +358,7 @@ export function ApiConsolePage() {
   const [pubsubToken, setPubsubToken] = useState('')
   const [pubsubApiUrl, setPubsubApiUrl] = useState(TRIER_DEFAULT_API_URL)
   const [pubsubDeliveryFee, setPubsubDeliveryFee] = useState('')
+  const [pubsubSendOrderToChannelIn, setPubsubSendOrderToChannelIn] = useState(false)
   const [pubsubConfigSource, setPubsubConfigSource] = useState('')
   const [pubsubExtraConfig, setPubsubExtraConfig] = useState('{\n  \n}')
   const [pubsubResult, setPubsubResult] = useState(emptyPubsubResult)
@@ -570,8 +573,9 @@ export function ApiConsolePage() {
         topic: pubsubTopic,
         orderId: pubsubOrderId,
         token: pubsubToken,
-        apiUrl: pubsubApiUrl,
-        defaultDeliveryFee: pubsubDeliveryFee,
+        apiUrl: pubsubApiUrl || undefined,
+        defaultDeliveryFee: pubsubDeliveryFee || undefined,
+        sendOrderToChannelIn: pubsubSendOrderToChannelIn,
         extraConfig,
       })
       setPubsubResult({ result, error: null })
@@ -606,11 +610,20 @@ export function ApiConsolePage() {
       const cloudConfig = Object.fromEntries(
         Object.entries(parsed).filter(([key]) => ['tenant', 'user', 'company_document'].includes(key)),
       )
+      const hosConfig = Object.fromEntries(
+        Object.entries(parsed).filter(([key]) => ['seller_channel_in_id'].includes(key)),
+      )
 
-      if (!apiUrl && !token && !deliveryFee && Object.keys(cloudConfig).length === 0) {
+      if (!apiUrl && !token && !deliveryFee && Object.keys(cloudConfig).length === 0 && Object.keys(hosConfig).length === 0) {
         throw new Error('Não encontrei token ou campos reconhecidos nesse JSON')
       }
 
+      if (Object.keys(hosConfig).length > 0) {
+        setPubsubTopic(HOS_TOPIC)
+        setPubsubSendOrderToChannelIn(true)
+        setPubsubApiUrl('')
+        setPubsubDeliveryFee('')
+      }
       if (apiUrl) setPubsubApiUrl(apiUrl)
       if (token) setPubsubToken(token)
       if (deliveryFee) setPubsubDeliveryFee(deliveryFee)
@@ -618,7 +631,7 @@ export function ApiConsolePage() {
       const extraConfig = Object.fromEntries(
         Object.entries(parsed).filter(([key]) => !TRIER_CONFIG_CORE_FIELDS.includes(key)),
       )
-      setPubsubExtraConfig(JSON.stringify({ ...cloudConfig, ...extraConfig }, null, 2))
+      setPubsubExtraConfig(JSON.stringify({ ...cloudConfig, ...hosConfig, ...extraConfig }, null, 2))
       toast.success('Config Trier extraída')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'JSON inválido para extrair token')
@@ -657,7 +670,7 @@ export function ApiConsolePage() {
                     label="Config Trier"
                     value={pubsubConfigSource}
                     onChange={setPubsubConfigSource}
-                    placeholder={'{"api_url":"https://api-sgf-gateway.triersistemas.com.br/sgfpod1","token":"...","default_delivery_fee":"85853"}\n\n{"token":"...","tenant":"f17872","user":"suporte@f17872","company_document":"28.466.181/0001-65"}'}
+                    placeholder={'{"api_url":"https://api-sgf-gateway.triersistemas.com.br/sgfpod1","token":"...","default_delivery_fee":"85853"}\n\n{"token":"...","tenant":"f17872","user":"suporte@f17872","company_document":"28.466.181/0001-65"}\n\n{"seller_channel_in_id":"95","token":"92B17464B2BE9E8481284B52D4FB64DD5BA79F09"}'}
                     rows={4}
                   />
                   <div className="mt-3 flex justify-end">
@@ -689,16 +702,20 @@ export function ApiConsolePage() {
                       placeholder="4795efe4-69b0-11f1-ac58-93a44a325670"
                     />
                   </Field>
-                  <Field label="Delivery fee">
-                    <Input
-                      value={pubsubDeliveryFee}
-                      onChange={(event) => setPubsubDeliveryFee(event.target.value)}
-                      placeholder="117903"
-                    />
+                  <Field label="Channel In">
+                    <label className="flex h-9 items-center gap-2 rounded-md border border-input bg-background/30 px-3 text-sm text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={pubsubSendOrderToChannelIn}
+                        onChange={(event) => setPubsubSendOrderToChannelIn(event.target.checked)}
+                        className="h-4 w-4 accent-primary"
+                      />
+                      Enviar
+                    </label>
                   </Field>
                 </div>
 
-                <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+                <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_180px]">
                   <Field label="API URL">
                     <Input
                       value={pubsubApiUrl}
@@ -708,6 +725,13 @@ export function ApiConsolePage() {
                   </Field>
                   <Field label="Token">
                     <SecretInput value={pubsubToken} onChange={setPubsubToken} />
+                  </Field>
+                  <Field label="Delivery fee">
+                    <Input
+                      value={pubsubDeliveryFee}
+                      onChange={(event) => setPubsubDeliveryFee(event.target.value)}
+                      placeholder="117903"
+                    />
                   </Field>
                 </div>
 

@@ -343,8 +343,9 @@ export interface PublishTrierOrderPayload {
   topic: (typeof PUBSUB_TRIER_TOPICS)[number]
   orderId: string
   token: string
-  apiUrl: string
-  defaultDeliveryFee: string
+  apiUrl?: string
+  defaultDeliveryFee?: string
+  sendOrderToChannelIn?: boolean
   extraConfig: Record<string, unknown>
 }
 

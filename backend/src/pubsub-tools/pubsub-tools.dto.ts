@@ -1,5 +1,6 @@
 import {
   IsIn,
+  IsBoolean,
   IsObject,
   IsOptional,
   IsString,
@@ -27,14 +28,19 @@ export class PublishTrierOrderDto {
   @MinLength(10)
   token!: string;
 
+  @IsOptional()
   @IsUrl({ require_tld: false, protocols: ['http', 'https'] })
   @MaxLength(2000)
-  apiUrl!: string;
+  apiUrl?: string;
 
+  @IsOptional()
   @IsString()
-  @MinLength(1)
   @MaxLength(80)
-  defaultDeliveryFee!: string;
+  defaultDeliveryFee?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  sendOrderToChannelIn?: boolean;
 
   @IsOptional()
   @IsObject()

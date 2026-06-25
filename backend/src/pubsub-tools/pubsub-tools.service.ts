@@ -17,17 +17,22 @@ export class PubsubToolsService {
       ...(credentialsFile ? { keyFilename: credentialsFile } : {}),
     });
 
-    const channelInConfig = {
-      token: dto.token,
-      api_url: dto.apiUrl,
-      default_delivery_fee: dto.defaultDeliveryFee,
+    const channelInConfig: Record<string, unknown> = {
+      ...(dto.token ? { token: dto.token } : {}),
+      ...(dto.apiUrl ? { api_url: dto.apiUrl } : {}),
+      ...(dto.defaultDeliveryFee
+        ? { default_delivery_fee: dto.defaultDeliveryFee }
+        : {}),
       ...(dto.extraConfig ?? {}),
     };
 
-    const message = {
+    const message: Record<string, unknown> = {
       order_id: dto.orderId,
       channel_in_config: JSON.stringify(channelInConfig),
     };
+    if (dto.sendOrderToChannelIn) {
+      message.send_order_to_channel_in = true;
+    }
 
     try {
       const messageId = await pubsub
