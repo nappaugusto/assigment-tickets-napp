@@ -742,7 +742,7 @@ export function ApiConsolePage() {
               </Field>
 
               <TextAreaField
-                label="Variáveis para usar como {{externalId}}"
+                label="Variáveis"
                 value={draft.variablesText}
                 onChange={(value) => setDraft({ ...draft, variablesText: value })}
                 placeholder={'externalId=123456\norderId=987654\nstoreId=loja-01'}
