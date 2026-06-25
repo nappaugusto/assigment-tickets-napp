@@ -18,7 +18,7 @@ export function Header({ onLogout }: HeaderProps) {
             <span className="text-[11px] font-semibold uppercase tracking-[0.28em] text-primary/90">Napp Solutions</span>
             <h1 className="text-xl font-semibold text-foreground">Atribuição de Tickets</h1>
           </div>
-          <nav className="hidden items-center gap-1 rounded-full border border-border/50 bg-card/55 p-1 md:flex">
+          <nav className="hidden shrink-0 items-center gap-1 rounded-full border border-border/50 bg-card/55 p-1 md:flex">
             <HeaderLink to="/" icon={<Ticket className="h-3.5 w-3.5" />}>
               Movidesk
             </HeaderLink>
@@ -26,7 +26,7 @@ export function Header({ onLogout }: HeaderProps) {
               Tickets internos
             </HeaderLink>
             <HeaderLink to="/apis" icon={<Globe2 className="h-3.5 w-3.5" />}>
-              APIs
+              Consultar APIs
             </HeaderLink>
           </nav>
         </div>
