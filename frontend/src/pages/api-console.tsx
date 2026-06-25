@@ -448,7 +448,7 @@ export function ApiConsolePage() {
     body: draft.body,
   })
 
-  const handleSaveRequest = async (event?: FormEvent) => {
+  const handleSaveRequest = async (event?: FormEvent, options: { silent?: boolean } = {}) => {
     event?.preventDefault()
     if (!selectedChannel) {
       toast.error('Crie ou selecione um canal antes de salvar a API')
@@ -462,7 +462,7 @@ export function ApiConsolePage() {
         ? await apiIntegrationsApi.updateRequest(draft.id, payload)
         : await apiIntegrationsApi.createRequest(selectedChannel.id, payload)
       await loadChannels(selectedChannel.id, saved.id)
-      toast.success('API salva')
+      if (!options.silent) toast.success('API salva')
       return saved
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Erro ao salvar API')
@@ -489,8 +489,8 @@ export function ApiConsolePage() {
     setResponse({ result: null, error: null })
 
     try {
-      const saved = draft.id ? null : await handleSaveRequest()
-      const requestId = draft.id ?? saved?.id
+      const saved = await handleSaveRequest(undefined, { silent: true })
+      const requestId = saved?.id
       if (!requestId) return
       const result = await apiIntegrationsApi.runRequest(requestId)
       setResponse({ result, error: result.ok ? null : 'A API retornou erro HTTP' })
