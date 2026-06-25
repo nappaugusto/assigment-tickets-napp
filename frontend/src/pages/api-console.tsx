@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import {
   Braces,
   Check,
+  ChevronDown,
   Copy,
   FolderKanban,
   Globe2,
@@ -348,6 +349,9 @@ export function ApiConsolePage() {
   const [pubsubExtraConfig, setPubsubExtraConfig] = useState('{\n  \n}')
   const [pubsubResult, setPubsubResult] = useState(emptyPubsubResult)
   const [isPublishingPubsub, setIsPublishingPubsub] = useState(false)
+  const [pubsubCollapsed, setPubsubCollapsed] = useState(() => {
+    return localStorage.getItem('pubsubTrierCollapsed') === 'true'
+  })
 
   const selectedChannel = channels.find((channel) => channel.id === selectedChannelId) ?? null
   const selectedRequest = selectedChannel?.requests.find((request) => request.id === selectedRequestId) ?? null
@@ -571,6 +575,14 @@ export function ApiConsolePage() {
     }
   }
 
+  const handlePubsubCollapsed = () => {
+    setPubsubCollapsed((current) => {
+      const next = !current
+      localStorage.setItem('pubsubTrierCollapsed', String(next))
+      return next
+    })
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.08))]">
       <Header onLogout={handleLogout} />
@@ -578,80 +590,89 @@ export function ApiConsolePage() {
       <main className="flex-1 overflow-y-auto p-4 md:p-6">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4">
           <section className="rounded-md border border-border/45 bg-card/45 p-4">
-            <div className="mb-4 flex flex-col gap-3 border-b border-border/40 pb-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-[11px] font-medium uppercase tracking-[0.26em] text-primary/85">
-                  Pub/Sub
-                </p>
-                <h2 className="mt-1 text-xl font-semibold text-foreground">Publicar pedido Trier</h2>
-              </div>
-              <Button type="button" onClick={handlePublishPubsub} disabled={isPublishingPubsub}>
-                <Radio className="h-4 w-4" />
-                {isPublishingPubsub ? 'Publicando' : 'Publicar'}
-              </Button>
+            <div className={`${pubsubCollapsed ? '' : 'mb-4 border-b border-border/40 pb-4'} flex flex-col gap-3 md:flex-row md:items-center md:justify-between`}>
+              <button type="button" onClick={handlePubsubCollapsed} className="flex min-w-0 items-center gap-3 text-left">
+                <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${pubsubCollapsed ? '-rotate-90' : ''}`} />
+                <span className="min-w-0">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.26em] text-primary/85">
+                    Pub/Sub
+                  </p>
+                  <h2 className="mt-1 text-xl font-semibold text-foreground">Publicar pedido Trier</h2>
+                </span>
+              </button>
+              {!pubsubCollapsed && (
+                <Button type="button" onClick={handlePublishPubsub} disabled={isPublishingPubsub}>
+                  <Radio className="h-4 w-4" />
+                  {isPublishingPubsub ? 'Publicando' : 'Publicar'}
+                </Button>
+              )}
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_180px]">
-              <Field label="Tópico">
-                <select
-                  value={pubsubTopic}
-                  onChange={(event) => setPubsubTopic(event.target.value as (typeof PUBSUB_TRIER_TOPICS)[number])}
-                  className="h-9 w-full rounded-md border border-input bg-background/30 px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                >
-                  {PUBSUB_TRIER_TOPICS.map((topic) => (
-                    <option key={topic} value={topic}>
-                      {topic}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Order ID">
-                <Input
-                  value={pubsubOrderId}
-                  onChange={(event) => setPubsubOrderId(event.target.value)}
-                  placeholder="4795efe4-69b0-11f1-ac58-93a44a325670"
-                />
-              </Field>
-              <Field label="Delivery fee">
-                <Input
-                  value={pubsubDeliveryFee}
-                  onChange={(event) => setPubsubDeliveryFee(event.target.value)}
-                  placeholder="117903"
-                />
-              </Field>
-            </div>
+            {!pubsubCollapsed && (
+              <>
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_180px]">
+                  <Field label="Tópico">
+                    <select
+                      value={pubsubTopic}
+                      onChange={(event) => setPubsubTopic(event.target.value as (typeof PUBSUB_TRIER_TOPICS)[number])}
+                      className="h-9 w-full rounded-md border border-input bg-background/30 px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    >
+                      {PUBSUB_TRIER_TOPICS.map((topic) => (
+                        <option key={topic} value={topic}>
+                          {topic}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Order ID">
+                    <Input
+                      value={pubsubOrderId}
+                      onChange={(event) => setPubsubOrderId(event.target.value)}
+                      placeholder="4795efe4-69b0-11f1-ac58-93a44a325670"
+                    />
+                  </Field>
+                  <Field label="Delivery fee">
+                    <Input
+                      value={pubsubDeliveryFee}
+                      onChange={(event) => setPubsubDeliveryFee(event.target.value)}
+                      placeholder="117903"
+                    />
+                  </Field>
+                </div>
 
-            <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-              <Field label="API URL">
-                <Input
-                  value={pubsubApiUrl}
-                  onChange={(event) => setPubsubApiUrl(event.target.value)}
-                  placeholder="https://api-sgf-gateway.triersistemas.com.br/sgfpod1"
-                />
-              </Field>
-              <Field label="Token">
-                <SecretInput value={pubsubToken} onChange={setPubsubToken} />
-              </Field>
-            </div>
+                <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+                  <Field label="API URL">
+                    <Input
+                      value={pubsubApiUrl}
+                      onChange={(event) => setPubsubApiUrl(event.target.value)}
+                      placeholder="https://api-sgf-gateway.triersistemas.com.br/sgfpod1"
+                    />
+                  </Field>
+                  <Field label="Token">
+                    <SecretInput value={pubsubToken} onChange={setPubsubToken} />
+                  </Field>
+                </div>
 
-            <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_420px]">
-              <TextAreaField
-                label="Config extra"
-                value={pubsubExtraConfig}
-                onChange={setPubsubExtraConfig}
-                placeholder={'{\n  "cod_filial": "1"\n}'}
-                rows={6}
-              />
-              <div className="min-w-0">
-                <Label>Resultado</Label>
-                <pre className="mt-2 max-h-44 max-w-full overflow-auto whitespace-pre-wrap break-all rounded-md border border-border/45 bg-background/55 p-3 text-xs leading-relaxed text-muted-foreground">
-                  {pubsubResult.error ??
-                    (pubsubResult.result
-                      ? JSON.stringify(pubsubResult.result, null, 2)
-                      : 'O retorno da publicação aparecerá aqui.')}
-                </pre>
-              </div>
-            </div>
+                <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_420px]">
+                  <TextAreaField
+                    label="Config extra"
+                    value={pubsubExtraConfig}
+                    onChange={setPubsubExtraConfig}
+                    placeholder={'{\n  "cod_filial": "1"\n}'}
+                    rows={6}
+                  />
+                  <div className="min-w-0">
+                    <Label>Resultado</Label>
+                    <pre className="mt-2 max-h-44 max-w-full overflow-auto whitespace-pre-wrap break-all rounded-md border border-border/45 bg-background/55 p-3 text-xs leading-relaxed text-muted-foreground">
+                      {pubsubResult.error ??
+                        (pubsubResult.result
+                          ? JSON.stringify(pubsubResult.result, null, 2)
+                          : 'O retorno da publicação aparecerá aqui.')}
+                    </pre>
+                  </div>
+                </div>
+              </>
+            )}
           </section>
 
           <div className="grid w-full gap-4 xl:grid-cols-[330px_minmax(0,1fr)]">
