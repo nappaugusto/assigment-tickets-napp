@@ -34,6 +34,7 @@ interface RequestRow {
   auth_config: Record<string, string> | string | null;
   query_params: string | null;
   headers: Record<string, string> | string | null;
+  variables: Record<string, string> | string | null;
   body: string | null;
   created_at: string;
   updated_at: string;
@@ -74,10 +75,29 @@ function toRequestDto(row: RequestRow) {
     authConfig: parseJsonObject(row.auth_config),
     queryParams: row.query_params ?? '',
     headers: parseJsonObject(row.headers),
+    variables: parseJsonObject(row.variables),
     body: row.body ?? '',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function applyVariables(value: string, variables: Record<string, string>) {
+  return value.replace(/\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g, (_match, key) => {
+    return variables[key] ?? '';
+  });
+}
+
+function applyVariablesToRecord(
+  value: Record<string, string>,
+  variables: Record<string, string>,
+) {
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entryValue]) => [
+      applyVariables(key, variables),
+      applyVariables(String(entryValue), variables),
+    ]),
+  );
 }
 
 function buildUrl(rawUrl: string, rawParams: string | null) {
@@ -207,9 +227,9 @@ export class ApiIntegrationsService {
       `
         INSERT INTO api_requests (
           channel_id, user_id, name, description, method, url, auth_type,
-          auth_config, query_params, headers, body, updated_at
+          auth_config, query_params, headers, variables, body, updated_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11, now())
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11::jsonb, $12, now())
         RETURNING *
       `,
       [
@@ -223,6 +243,7 @@ export class ApiIntegrationsService {
         JSON.stringify(dto.authConfig ?? {}),
         dto.queryParams ?? '',
         JSON.stringify(dto.headers ?? {}),
+        JSON.stringify(dto.variables ?? {}),
         dto.body ?? '',
       ],
     );
@@ -242,7 +263,8 @@ export class ApiIntegrationsService {
                auth_config = $8::jsonb,
                query_params = $9,
                headers = $10::jsonb,
-               body = $11,
+               variables = $11::jsonb,
+               body = $12,
                updated_at = now()
          WHERE id = $1
            AND user_id = $2
@@ -259,6 +281,7 @@ export class ApiIntegrationsService {
         JSON.stringify(dto.authConfig ?? {}),
         dto.queryParams ?? '',
         JSON.stringify(dto.headers ?? {}),
+        JSON.stringify(dto.variables ?? {}),
         dto.body ?? '',
       ],
     );
@@ -276,24 +299,29 @@ export class ApiIntegrationsService {
 
   async runRequest(userId: number, requestId: number) {
     const request = await this.findRequest(userId, requestId);
+    const variables = parseJsonObject(request.variables);
+    const authConfig = applyVariablesToRecord(
+      parseJsonObject(request.auth_config),
+      variables,
+    );
     const headers = {
-      ...parseJsonObject(request.headers),
-      ...buildAuthHeaders(
-        request.auth_type,
-        parseJsonObject(request.auth_config),
-      ),
+      ...applyVariablesToRecord(parseJsonObject(request.headers), variables),
+      ...buildAuthHeaders(request.auth_type, authConfig),
     };
+    const url = applyVariables(request.url, variables);
+    const queryParams = applyVariables(request.query_params ?? '', variables);
+    const body = applyVariables(request.body ?? '', variables);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30_000);
     const startedAt = performance.now();
 
     try {
       const hasBody =
-        !['GET', 'DELETE'].includes(request.method) && !!request.body?.trim();
-      const response = await fetch(buildUrl(request.url, request.query_params), {
+        !['GET', 'DELETE'].includes(request.method) && !!body.trim();
+      const response = await fetch(buildUrl(url, queryParams), {
         method: request.method,
         headers,
-        body: hasBody ? request.body ?? undefined : undefined,
+        body: hasBody ? body : undefined,
         signal: controller.signal,
       });
       const durationMs = Math.round(performance.now() - startedAt);

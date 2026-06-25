@@ -71,6 +71,10 @@ export class SaveApiRequestDto {
   headers?: Record<string, string>;
 
   @IsOptional()
+  @IsObject()
+  variables?: Record<string, string>;
+
+  @IsOptional()
   @IsString()
   @MaxLength(20000)
   body?: string;

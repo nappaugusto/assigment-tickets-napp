@@ -41,6 +41,7 @@ interface DraftRequest {
   authConfig: Record<string, string>
   queryParams: string
   headersText: string
+  variablesText: string
   body: string
 }
 
@@ -59,6 +60,7 @@ const emptyDraft = (): DraftRequest => ({
   authConfig: { headerName: 'x-api-key' },
   queryParams: '',
   headersText: '{\n  "Content-Type": "application/json"\n}',
+  variablesText: 'externalId=\norderId=\nstoreId=',
   body: '{\n  \n}',
 })
 
@@ -72,6 +74,9 @@ const requestToDraft = (request: ApiRequestConfig): DraftRequest => ({
   authConfig: request.authConfig ?? {},
   queryParams: request.queryParams,
   headersText: JSON.stringify(request.headers ?? {}, null, 2),
+  variablesText: Object.entries(request.variables ?? {})
+    .map(([key, value]) => `${key}=${value}`)
+    .join('\n'),
   body: request.body,
 })
 
@@ -90,6 +95,20 @@ function parseHeaders(value: string) {
     throw new Error('Headers precisa ser um objeto JSON')
   }
   return parsed as Record<string, string>
+}
+
+function parseVariables(value: string) {
+  const variables: Record<string, string> = {}
+  value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .forEach((line) => {
+      const [key, ...valueParts] = line.split('=')
+      if (!key.trim()) return
+      variables[key.trim()] = valueParts.join('=').trim()
+    })
+  return variables
 }
 
 function tokenizeCurl(input: string) {
@@ -276,6 +295,7 @@ function parseCurlToDraft(input: string, currentDraft: DraftRequest): DraftReque
     authConfig: auth.authConfig,
     queryParams: queryParams.join('\n'),
     headersText: JSON.stringify(headers, null, 2),
+    variablesText: currentDraft.variablesText,
     body: body || currentDraft.body,
   }
 }
@@ -410,6 +430,7 @@ export function ApiConsolePage() {
     authConfig: draft.authConfig,
     queryParams: draft.queryParams,
     headers: parseHeaders(draft.headersText),
+    variables: parseVariables(draft.variablesText),
     body: draft.body,
   })
 
@@ -719,6 +740,14 @@ export function ApiConsolePage() {
                   />
                 </div>
               </Field>
+
+              <TextAreaField
+                label="Variáveis para usar como {{externalId}}"
+                value={draft.variablesText}
+                onChange={(value) => setDraft({ ...draft, variablesText: value })}
+                placeholder={'externalId=123456\norderId=987654\nstoreId=loja-01'}
+                rows={5}
+              />
 
               <div className="grid gap-4 lg:grid-cols-2">
                 <Field label="Autenticação">

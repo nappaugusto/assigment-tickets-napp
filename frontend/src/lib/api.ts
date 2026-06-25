@@ -271,6 +271,7 @@ export interface ApiRequestConfig {
   authConfig: Record<string, string>
   queryParams: string
   headers: Record<string, string>
+  variables: Record<string, string>
   body: string
   createdAt: string
   updatedAt: string
@@ -294,6 +295,7 @@ export interface SaveApiRequestPayload {
   authConfig: Record<string, string>
   queryParams: string
   headers: Record<string, string>
+  variables: Record<string, string>
   body: string
 }
 

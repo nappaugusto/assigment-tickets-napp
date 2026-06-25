@@ -224,6 +224,7 @@ export class DatabaseInitService implements OnModuleInit {
         auth_config  JSONB       NOT NULL DEFAULT '{}'::jsonb,
         query_params TEXT        NOT NULL DEFAULT '',
         headers      JSONB       NOT NULL DEFAULT '{}'::jsonb,
+        variables    JSONB       NOT NULL DEFAULT '{}'::jsonb,
         body         TEXT        NOT NULL DEFAULT '',
         created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
         updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -327,6 +328,9 @@ export class DatabaseInitService implements OnModuleInit {
 
       ALTER TABLE ticket_ai_triages
         ADD COLUMN IF NOT EXISTS follow_up_messages JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+      ALTER TABLE api_requests
+        ADD COLUMN IF NOT EXISTS variables JSONB NOT NULL DEFAULT '{}'::jsonb;
 
       CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_unique
         ON users (lower(email))
