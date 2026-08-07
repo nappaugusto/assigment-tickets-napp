@@ -55,7 +55,7 @@ RUN npm run build
 # ─────────────────────────────────────────────
 FROM node:20-alpine AS production
 
-RUN apk add --no-cache nginx gettext git openssh-client
+RUN apk add --no-cache nginx gettext git openssh-client kubectl
 
 # ── Backend runtime ──────────────────────────
 WORKDIR /app/backend

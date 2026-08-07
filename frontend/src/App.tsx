@@ -7,6 +7,7 @@ import { ResetPasswordPage } from '@/pages/reset-password'
 import { DashboardPage } from '@/pages/dashboard'
 import { InternalTicketsPage } from '@/pages/internal-tickets'
 import { ApiConsolePage } from '@/pages/api-console'
+import { OpsPage } from '@/pages/ops'
 
 export default function App() {
   return (
@@ -36,6 +37,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <ApiConsolePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/ops"
+        element={
+          <ProtectedRoute>
+            <OpsPage />
           </ProtectedRoute>
         }
       />

@@ -27,7 +27,7 @@ Sistema de atribuição e acompanhamento de tickets integrado com a API do Movid
 
 ## Pré-requisitos
 
-- Node.js ≥ 20
+- Node.js ≥ 20.19 (use a versão definida em `.nvmrc`)
 - pnpm ≥ 9
 - Docker (opcional, para produção)
 
@@ -132,6 +132,78 @@ Se quiser pular a checagem de inicialização, defina:
 CLAUDE_CLI_STARTUP_CHECK=false
 ```
 
+### Mapa técnico persistente
+
+Ao iniciar uma investigação técnica, o backend cataloga o schema configurado em
+`AI_DIAGNOSTIC_DB_URL`, suas chaves estrangeiras e os arquivos do backend que
+referenciam cada tabela. O mapa fica salvo no banco da aplicação e é reutilizado
+nas próximas análises; por padrão, ele é atualizado a cada 24 horas. Também é
+possível reconstruí-lo pelo botão **Atualizar mapa** na investigação técnica ou
+por `POST /triage/knowledge/refresh`.
+
+As conclusões de uma triagem continuam separadas desse catálogo e só viram
+memória validada quando o analista aceita a análise.
+
+### Operação Kubernetes
+
+A tela `/ops` consulta pods, workloads, eventos e logs do Kubernetes pelo
+backend. Ela não usa uma API do Lens; o Lens e este projeto leem a mesma fonte:
+a API do Kubernetes. Neste projeto, o backend acessa essa API via `kubectl`.
+
+Para funcionar em desenvolvimento local, primeiro valide no terminal:
+
+```bash
+kubectl config current-context
+kubectl get pods -n default
+kubectl logs -n default <nome-do-pod> --tail=100
+```
+
+Para enxergar todos os pods como no Lens, valide também:
+
+```bash
+kubectl get pods -A
+kubectl get deployments,statefulsets,daemonsets -A
+kubectl get events -A
+```
+
+Depois configure o `.env` do backend:
+
+```bash
+KUBECTL_BIN=kubectl
+KUBECONFIG=/home/seu-usuario/.kube/config
+K8S_CONTEXT=nome-do-contexto # opcional
+K8S_NAMESPACE=default
+K8S_ALL_NAMESPACES=true # modo parecido com Lens
+```
+
+Se você rodar pelo Docker Compose, monte o kubeconfig no container em modo
+somente leitura e aponte `KUBECONFIG` para o caminho interno:
+
+```yaml
+services:
+  app:
+    environment:
+      KUBECONFIG: /root/.kube/config
+      K8S_NAMESPACE: default
+      K8S_ALL_NAMESPACES: "true"
+    volumes:
+      - ${HOME}/.kube:/root/.kube:ro
+```
+
+Em produção dentro de um cluster, prefira uma `ServiceAccount` com RBAC mínimo
+para leitura. Para todos os namespaces, use `ClusterRole`/`ClusterRoleBinding`;
+para um namespace só, use `Role`/`RoleBinding`:
+
+```yaml
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "events", "services"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch"]
+```
+
 ---
 
 ## Fluxos com Makefile
@@ -148,6 +220,18 @@ Instala dependências do backend e frontend, e cria `.env` a partir de `.env.exa
 
 ### Desenvolvimento local
 
+Valide o ambiente antes de iniciar:
+
+```bash
+nvm use
+corepack enable
+corepack prepare pnpm@10.29.3 --activate
+make doctor
+```
+
+O comando `make doctor` informa claramente quando Node, pnpm ou `.env` estão
+ausentes ou incompatíveis.
+
 ```bash
 make dev
 ```
@@ -163,7 +247,13 @@ make dev-frontend  # apenas Vite
 
 Acesse: http://localhost:5173
 
-> O Vite faz proxy automático de `/auth`, `/tickets`, `/atribuir`, `/desatribuir` e `/app-version` para o backend na porta 3001.
+Para abrir automaticamente o modo que estiver ativo (Vite ou Docker):
+
+```bash
+make open
+```
+
+> O Vite faz proxy automático das rotas de API, incluindo `/auth`, `/tickets`, `/ops`, `/atribuir`, `/desatribuir` e `/app-version`, para o backend na porta 3001.
 
 ### Build de produção (sem Docker)
 

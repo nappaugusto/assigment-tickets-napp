@@ -22,8 +22,13 @@ export default defineConfig({
       '/people': { target: 'http://127.0.0.1:3001', changeOrigin: true },
       '/preferences': { target: 'http://127.0.0.1:3001', changeOrigin: true },
       '/mcp': { target: 'http://127.0.0.1:3001', changeOrigin: true },
+      '/triage': { target: 'http://127.0.0.1:3001', changeOrigin: true },
+      '/trello': { target: 'http://127.0.0.1:3001', changeOrigin: true },
       '/cases': { target: 'http://127.0.0.1:3001', changeOrigin: true },
       '/internal-teams': { target: 'http://127.0.0.1:3001', changeOrigin: true },
+      '/api-integrations': { target: 'http://127.0.0.1:3001', changeOrigin: true },
+      '/pubsub-tools': { target: 'http://127.0.0.1:3001', changeOrigin: true },
+      '/ops': { target: 'http://127.0.0.1:3001', changeOrigin: true },
     },
   },
 })

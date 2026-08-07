@@ -13,6 +13,7 @@ export const SUPPORTED_PUBSUB_TOPICS = [
   'platform-service-tpc-order-to-trier-sistemas-legacy-prd',
   'platform-service-tpc-order-to-trier-sistemas-prd',
   'platform-service-tpc-order-to-hos-sistemas-prd',
+  'platform-service-tpc-order-to-linx-farma-cloud-prd',
 ] as const;
 
 export class PublishTrierOrderDto {
@@ -24,9 +25,10 @@ export class PublishTrierOrderDto {
   @MaxLength(160)
   orderId!: string;
 
+  @IsOptional()
   @IsString()
   @MinLength(10)
-  token!: string;
+  token?: string;
 
   @IsOptional()
   @IsUrl({ require_tld: false, protocols: ['http', 'https'] })

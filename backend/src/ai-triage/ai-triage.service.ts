@@ -24,6 +24,10 @@ import {
   TicketAiTriageResult,
   TriageDecision,
 } from './ai-triage.dto';
+import {
+  TechnicalKnowledgeService,
+  TechnicalKnowledgeSnapshot,
+} from './technical-knowledge.service';
 
 const DEFAULT_API_MODEL = 'claude-sonnet-4-20250514';
 const DEFAULT_CLI_MODEL = 'sonnet';
@@ -32,7 +36,7 @@ const CLAUDE_CLI_TIMEOUT_MS = Number(
   process.env.CLAUDE_CLI_TIMEOUT_MS || 300_000,
 );
 const CODE_ANALYSIS_TIMEOUT_MS = Number(
-  process.env.AI_TRIAGE_CODE_TIMEOUT_MS || 45_000,
+  process.env.AI_TRIAGE_CODE_TIMEOUT_MS || 90_000,
 );
 const GIT_PULL_TIMEOUT_MS = Number(
   process.env.AI_TRIAGE_GIT_PULL_TIMEOUT_MS || 60_000,
@@ -161,6 +165,8 @@ interface DiagnosticDbContext {
   tables: Array<{
     name: string;
     type: string;
+    relevanceScore?: number;
+    relevanceReasons?: string[];
     columns: Array<{
       name: string;
       type: string;
@@ -246,6 +252,7 @@ export class AiTriageService implements OnModuleInit {
     @Inject(DB_TOKEN) private readonly db: Pool,
     private readonly ticketsService: TicketsService,
     private readonly trelloService: TrelloService,
+    private readonly technicalKnowledge: TechnicalKnowledgeService,
   ) {}
 
   onModuleInit() {
@@ -430,6 +437,16 @@ export class AiTriageService implements OnModuleInit {
       if (!ticket) throw new NotFoundException('Ticket não encontrado.');
       const ticketDetail = await this.getTicketDetail(ticketId);
 
+      const technicalKnowledge =
+        mode === 'code_analysis'
+          ? await this.technicalKnowledge.findRelevant({
+              terms: this.extractSearchTerms(ticket, ticketDetail),
+              sellerIds: technicalContext.sellerIds,
+              eans: technicalContext.eans,
+              limit: 12,
+            })
+          : null;
+
       let gitPull: Record<string, unknown> | null = null;
       if (mode === 'code_analysis' && this.shouldGitPull) {
         try {
@@ -450,11 +467,23 @@ export class AiTriageService implements OnModuleInit {
       }
       const snippets =
         mode === 'code_analysis'
-          ? await this.findRelevantCodeSnippets(ticket, ticketDetail)
+          ? await this.findRelevantCodeSnippets(
+              ticket,
+              ticketDetail,
+              technicalKnowledge?.entities.flatMap((entity) =>
+                entity.codeReferences.map((reference) => reference.path),
+              ) ?? [],
+            )
           : [];
       const databaseContext =
         mode === 'code_analysis'
-          ? await this.getDiagnosticDatabaseContext(ticket, ticketDetail)
+          ? technicalKnowledge?.entities.length
+            ? this.toDiagnosticDatabaseContext(technicalKnowledge)
+            : await this.getDiagnosticDatabaseContext(
+                ticket,
+                ticketDetail,
+                technicalContext,
+              )
           : null;
       const memories =
         mode === 'code_analysis'
@@ -478,10 +507,13 @@ export class AiTriageService implements OnModuleInit {
           databaseContext?.tables.map((table) => table.name) ?? [],
         memoryCount: memories.length,
         memoryIds: memories.map((memory) => memory.id),
+        technicalCatalogRunId: technicalKnowledge?.catalogRunId ?? null,
+        technicalCatalogEntities:
+          technicalKnowledge?.entities.map((entity) => entity.key) ?? [],
         technicalContext,
       };
 
-      const triage = await this.callClaude(
+      let triage = await this.callClaude(
         ticket,
         ticketDetail,
         snippets,
@@ -489,10 +521,19 @@ export class AiTriageService implements OnModuleInit {
         memories,
         databaseContext,
         technicalContext,
+        technicalKnowledge,
       );
       if (mode === 'code_analysis') {
         triage.executedQueries = await this.executeDiagnosticQueries(
           triage.diagnosticQueries,
+        );
+        triage = await this.refineCodeAnalysisWithQueryResults(
+          triage,
+          ticket,
+          ticketDetail,
+          snippets,
+          databaseContext,
+          technicalContext,
         );
       }
 
@@ -578,6 +619,7 @@ export class AiTriageService implements OnModuleInit {
     memories: AiTriageMemoryDto[],
     databaseContext: DiagnosticDbContext | null,
     technicalContext: CodeAnalysisContextDto,
+    technicalKnowledge: TechnicalKnowledgeSnapshot | null,
   ): Promise<TicketAiTriageResult> {
     if (!ticket) throw new NotFoundException('Ticket não encontrado.');
 
@@ -594,6 +636,7 @@ export class AiTriageService implements OnModuleInit {
       memories,
       databaseContext,
       technicalContext,
+      technicalKnowledge,
     );
     let triage: TicketAiTriageResult;
     try {
@@ -679,19 +722,23 @@ export class AiTriageService implements OnModuleInit {
       tags: ['analise-tecnica', 'fallback'],
       priority: 'media',
       shouldCreateCard: false,
-      summary:
-        'O pacote técnico foi coletado, mas a síntese da IA excedeu o limite. Abaixo estão arquivos e consultas gerados diretamente pelo backend.',
+      summary: databaseContext
+        ? 'O pacote técnico foi coletado, mas a síntese da IA excedeu o limite. Abaixo estão arquivos e consultas gerados diretamente pelo backend.'
+        : 'A síntese da IA excedeu o limite e o banco de diagnóstico estava indisponível. A análise parcial abaixo foi montada com as evidências do backend.',
       symptom: ticket.subject || 'Sintoma técnico não informado.',
       likelyArea: tables.length
         ? `Tabelas relacionadas: ${tables.slice(0, 6).join(', ')}`
         : 'Área técnica a confirmar pelos arquivos selecionados.',
-      reasoning:
-        'Resultado determinístico baseado no índice do repositório e no catálogo real do banco. Use as consultas executadas e os caminhos indicados para aprofundar a hipótese.',
+      reasoning: databaseContext
+        ? 'Resultado determinístico baseado no índice do repositório e no catálogo real do banco. Use as consultas executadas e os caminhos indicados para aprofundar a hipótese.'
+        : 'Resultado determinístico baseado no índice do repositório. O banco precisa estar acessível para gerar e executar consultas com nomes reais de tabelas e colunas.',
       technicalHypothesis:
         'A causa ainda precisa ser confirmada com os filtros fornecidos e os arquivos selecionados.',
       evidence: [
         `${snippets.length} arquivo(s) relacionado(s) foram selecionados no repositório.`,
-        `${tables.length} tabela(s) relacionada(s) foram encontradas no schema de diagnóstico.`,
+        databaseContext
+          ? `${tables.length} tabela(s) relacionada(s) foram encontradas no schema de diagnóstico.`
+          : 'O catálogo do banco de diagnóstico não pôde ser consultado nesta execução.',
       ],
       relevantFiles: snippets.slice(0, 6).map((snippet) => ({
         path: snippet.path,
@@ -706,7 +753,9 @@ export class AiTriageService implements OnModuleInit {
         check: `Revisar o fluxo nas linhas ${snippet.startLine}-${snippet.endLine}.`,
       })),
       nextSteps: [
-        'Revisar as consultas realmente executadas e seus totais de linhas.',
+        databaseContext
+          ? 'Revisar as consultas realmente executadas e seus totais de linhas.'
+          : 'Restabelecer o acesso read-only ao banco e atualizar o mapa técnico.',
         'Abrir os caminhos de código listados e comparar com os registros encontrados.',
         'Refinar os seller IDs/EANs e executar novamente se necessário.',
       ],
@@ -759,35 +808,67 @@ export class AiTriageService implements OnModuleInit {
           this.isQueryCompatibleWithContext(query.sql, databaseContext),
         )
       : triage.diagnosticQueries;
-    if (technicalContext.sellerIds?.length) {
+    const sellerIds = technicalContext.sellerIds ?? [];
+    const eans = technicalContext.eans ?? [];
+    const requestedIdentifiers = [...sellerIds, ...eans];
+    if (requestedIdentifiers.length) {
       diagnosticQueries = diagnosticQueries.filter((query) =>
-        technicalContext.sellerIds?.every((id) => query.sql.includes(id)),
+        this.queryUsesAnyValue(query.sql, requestedIdentifiers),
       );
     }
-    if (technicalContext.eans?.length) {
-      diagnosticQueries = diagnosticQueries.filter((query) =>
-        technicalContext.eans?.every((ean) => query.sql.includes(ean)),
+    const needsSellerQuery =
+      sellerIds.length > 0 &&
+      !diagnosticQueries.some((query) =>
+        this.queryUsesAnyValue(query.sql, sellerIds),
       );
-    }
-    if (!diagnosticQueries.length && databaseContext?.tables.length) {
-      const contextualTables = databaseContext.tables.filter((table) => {
+    const needsEanQuery =
+      eans.length > 0 &&
+      !diagnosticQueries.some((query) =>
+        this.queryUsesAnyValue(query.sql, eans),
+      );
+    if (
+      databaseContext?.tables.length &&
+      (!diagnosticQueries.length || needsSellerQuery || needsEanQuery)
+    ) {
+      const hasTechnicalFilters = Boolean(sellerIds.length || eans.length);
+      const rankedFallbackTables = this.rankFallbackDiagnosticTables(
+        databaseContext.tables,
+        technicalContext,
+      );
+      const eligibleFallbackTables = rankedFallbackTables.filter((table) => {
+        if (!hasTechnicalFilters) return true;
         const columns = new Set(table.columns.map((column) => column.name));
         return (
-          (!technicalContext.sellerIds?.length ||
-            columns.has('fk_seller_id')) &&
-          (!technicalContext.eans?.length || columns.has('ean'))
+          (needsSellerQuery && columns.has('fk_seller_id')) ||
+          (needsEanQuery && columns.has('ean'))
         );
       });
-      const hasTechnicalFilters = Boolean(
-        technicalContext.sellerIds?.length || technicalContext.eans?.length,
+      const requiredFallbackTables = [
+        needsSellerQuery
+          ? eligibleFallbackTables.find((table) =>
+              table.columns.some((column) => column.name === 'fk_seller_id'),
+            )
+          : undefined,
+        needsEanQuery
+          ? eligibleFallbackTables.find((table) =>
+              table.columns.some((column) => column.name === 'ean'),
+            )
+          : undefined,
+      ].filter((table): table is DiagnosticDbContext['tables'][number] =>
+        Boolean(table),
       );
-      const fallbackTables = hasTechnicalFilters
-        ? contextualTables
-        : databaseContext.tables;
-      diagnosticQueries = fallbackTables.slice(0, 3).map((table) => {
+      const fallbackTables = [
+        ...requiredFallbackTables,
+        ...eligibleFallbackTables,
+      ].filter(
+        (table, index, tables) =>
+          tables.findIndex((candidate) => candidate.name === table.name) ===
+          index,
+      );
+      const fallbackQueries = fallbackTables.slice(0, 3).map((table) => {
         const preferredColumns = table.columns
           .filter((column) =>
-            /^(id|fk_.*_id|ean|sku|.*price.*|.*pmc.*|.*status.*|.*updated_at.*|.*created_at.*)$/i.test(
+            /^(id|uuid|fk_.*_id|ean|sku|.*price.*|.*preco.*|.*pmc.*|.*status.*|.*state.*|.*error.*|.*message.*|.*updated_at.*|.*created_at.*)$/i.test(
               column.name,
             ),
           )
@@ -801,34 +882,42 @@ export class AiTriageService implements OnModuleInit {
         )?.name;
         const filters: string[] = [];
         if (
-          technicalContext.sellerIds?.length &&
+          sellerIds.length &&
           table.columns.some((column) => column.name === 'fk_seller_id')
         ) {
           filters.push(
-            `"fk_seller_id" = ANY(ARRAY[${technicalContext.sellerIds
+            `"fk_seller_id" = ANY(ARRAY[${sellerIds
               .map((id) => `'${id}'`)
               .join(', ')}]::uuid[])`,
           );
         }
         if (
-          technicalContext.eans?.length &&
+          eans.length &&
           table.columns.some((column) => column.name === 'ean')
         ) {
           filters.push(
-            `"ean" = ANY(ARRAY[${technicalContext.eans
+            `"ean" = ANY(ARRAY[${eans
               .map((ean) => `'${ean.replace(/'/g, "''")}'`)
               .join(', ')}]::text[])`,
           );
         }
         return {
           title: `Inspecionar ${databaseContext.schema}.${table.name}`,
-          purpose:
-            'Consulta segura gerada pelo backend a partir do catálogo real para coletar evidências iniciais.',
+          purpose: hasTechnicalFilters
+            ? 'Consulta segura gerada pelo backend com os identificadores informados no chamado para coletar evidências iniciais.'
+            : `Consulta segura gerada pelo backend para uma tabela ranqueada pelo chamado: ${(table.relevanceReasons ?? []).join(', ') || 'nome/colunas relacionadas'}.`,
           sql: `SELECT ${columns}\nFROM "${databaseContext.schema}"."${table.name}"${filters.length ? `\nWHERE ${filters.join('\n  AND ')}` : ''}${orderColumn ? `\nORDER BY "${orderColumn}" DESC` : ''}\nLIMIT 100;`,
           expectedEvidence:
             'Use as linhas retornadas para identificar padrões, estados e chaves que permitam refinar o diagnóstico.',
         };
       });
+      diagnosticQueries = [...fallbackQueries, ...diagnosticQueries]
+        .filter(
+          (query, index, queries) =>
+            queries.findIndex((candidate) => candidate.sql === query.sql) ===
+            index,
+        )
+        .slice(0, 3);
     }
 
     return {
@@ -873,6 +962,50 @@ export class AiTriageService implements OnModuleInit {
       if (table && !tableMap.get(table)?.has(column)) return false;
     }
     return /^(select|with)\b/i.test(sql) && /\blimit\s+\d+\b/i.test(sql);
+  }
+
+  private queryUsesAnyValue(sql: string, values: string[]) {
+    if (!values.length) return true;
+    return values.some((value) => sql.includes(value));
+  }
+
+  private rankFallbackDiagnosticTables(
+    tables: DiagnosticDbContext['tables'],
+    technicalContext: CodeAnalysisContextDto,
+  ) {
+    return [...tables]
+      .map((table) => {
+        const columns = new Set(table.columns.map((column) => column.name));
+        let score = table.relevanceScore ?? 0;
+        if (technicalContext.sellerIds?.length && columns.has('fk_seller_id')) {
+          score += 200;
+        }
+        if (technicalContext.eans?.length && columns.has('ean')) {
+          score += 200;
+        }
+        if (columns.has('status')) score += 20;
+        if (columns.has('updated_at') || columns.has('created_at')) score += 10;
+        if (
+          /(error|log|event|audit|history|order|product|catalog|price|stock|inventory)/i.test(
+            table.name,
+          )
+        ) {
+          score += 15;
+        }
+        return { table, score };
+      })
+      .filter(({ table }) => {
+        const columns = new Set(table.columns.map((column) => column.name));
+        const hasSellerFilter = Boolean(technicalContext.sellerIds?.length);
+        const hasEanFilter = Boolean(technicalContext.eans?.length);
+        if (!hasSellerFilter && !hasEanFilter) return true;
+        return (
+          (hasSellerFilter && columns.has('fk_seller_id')) ||
+          (hasEanFilter && columns.has('ean'))
+        );
+      })
+      .sort((left, right) => right.score - left.score)
+      .map(({ table }) => table);
   }
 
   private async executeDiagnosticQueries(
@@ -959,6 +1092,92 @@ export class AiTriageService implements OnModuleInit {
     }
 
     return results;
+  }
+
+  private async refineCodeAnalysisWithQueryResults(
+    triage: TicketAiTriageResult,
+    ticket: NonNullable<Awaited<ReturnType<TicketsService['findById']>>>,
+    ticketDetail: TicketDetailDto | null,
+    snippets: CodeSnippetDto[],
+    databaseContext: DiagnosticDbContext | null,
+    technicalContext: CodeAnalysisContextDto,
+  ) {
+    if (!triage.executedQueries.length) return triage;
+    const completedQueries = triage.executedQueries.filter(
+      (query) => query.status === 'completed',
+    );
+    const usefulQueries = completedQueries.filter(
+      (query) => (query.rowCount ?? 0) > 0,
+    );
+    if (
+      !usefulQueries.length &&
+      !triage.executedQueries.some((query) => query.status === 'failed')
+    ) {
+      return triage;
+    }
+
+    const prompt = JSON.stringify(
+      {
+        instruction:
+          'Revise a análise técnica usando os resultados reais dos SELECTs executados. Não invente novos dados. Se uma consulta retornou linhas, use sampleRows como evidência. Se retornou zero linhas, explique que a hipótese perdeu força ou que o filtro pode estar incompleto. Mantenha o JSON no mesmo schema e preserve diagnosticQueries/executedQueries recebidos.',
+        ticket,
+        ticketDetail: this.toPromptTicketDetail(ticketDetail),
+        currentTriage: triage,
+        executedQueries: triage.executedQueries.map((query) => ({
+          title: query.title,
+          status: query.status,
+          rowCount: query.rowCount,
+          error: query.error,
+          columns: query.columns,
+          sampleRows: query.sampleRows,
+        })),
+        technicalContext,
+        codeSnippets: snippets.slice(0, 5),
+        databaseContext,
+      },
+      null,
+      2,
+    );
+
+    try {
+      const text =
+        this.provider === 'anthropic_api'
+          ? await this.callAnthropicApi(prompt)
+          : await this.callClaudeCli(prompt, 'code_analysis', 90_000);
+      if (!text) return triage;
+      const refined = this.parseTriageResult(text, ticket);
+      return {
+        ...triage,
+        priority: refined.priority,
+        summary: refined.summary || triage.summary,
+        symptom: refined.symptom || triage.symptom,
+        likelyArea: refined.likelyArea || triage.likelyArea,
+        reasoning: refined.reasoning || triage.reasoning,
+        technicalHypothesis:
+          refined.technicalHypothesis || triage.technicalHypothesis,
+        evidence: refined.evidence.length ? refined.evidence : triage.evidence,
+        nextSteps: refined.nextSteps.length
+          ? refined.nextSteps
+          : triage.nextSteps,
+        confidence: refined.confidence,
+        suggestedCard: refined.suggestedCard,
+        suggestedCustomerReply:
+          refined.suggestedCustomerReply || triage.suggestedCustomerReply,
+        customerQuestions: refined.customerQuestions.length
+          ? refined.customerQuestions
+          : triage.customerQuestions,
+        diagnosticQueries: triage.diagnosticQueries,
+        executedQueries: triage.executedQueries,
+        relevantFiles: triage.relevantFiles,
+        codeInvestigationPaths: triage.codeInvestigationPaths,
+        similarTickets: triage.similarTickets,
+      };
+    } catch (error) {
+      this.logger.warn(
+        `Não foi possível refinar a análise com resultados do banco: ${getErrorMessage(error)}`,
+      );
+      return triage;
+    }
   }
 
   private toSafeQueryPreviewRow(
@@ -1138,7 +1357,9 @@ export class AiTriageService implements OnModuleInit {
       '--model',
       this.getModelForMode(mode),
       '--effort',
-      'low',
+      mode === 'code_analysis'
+        ? process.env.AI_TRIAGE_CODE_EFFORT || 'medium'
+        : process.env.AI_TRIAGE_EFFORT || 'low',
       '--system-prompt',
       systemPrompt,
       prompt,
@@ -1198,7 +1419,7 @@ export class AiTriageService implements OnModuleInit {
         'nenhum ponto concreto do código foi indicado para conferência',
       );
     }
-    if (!triage.diagnosticQueries.length) {
+    if (databaseContext && !triage.diagnosticQueries.length) {
       problems.push('nenhum SELECT read-only foi entregue');
     }
     if (
@@ -1462,6 +1683,7 @@ export class AiTriageService implements OnModuleInit {
     memories: AiTriageMemoryDto[],
     databaseContext: DiagnosticDbContext | null,
     technicalContext: CodeAnalysisContextDto,
+    technicalKnowledge: TechnicalKnowledgeSnapshot | null,
   ) {
     const technicalSchema = {
       priority: 'baixa | media | alta | critica',
@@ -1530,6 +1752,10 @@ export class AiTriageService implements OnModuleInit {
                 'Não repita o assunto como hipótese.',
                 'Cada hipótese deve dizer por que é plausível e como pode ser refutada.',
                 'Gere de 1 a 3 diagnosticQueries. Use apenas SELECT ou WITH; nunca UPDATE, DELETE, INSERT, DDL ou funções com efeito colateral.',
+                'Não reutilize consultas genéricas de memórias ou fallback quando houver tabelas/colunas mais relacionadas ao assunto, serviço, categoria, sellerIds, eans ou histórico do chamado.',
+                'Antes de escrever SELECTs, escolha tabelas pelo databaseContext.relevanceReasons e explique no purpose por que cada consulta é relevante para este chamado.',
+                'Use technicalKnowledge para entender a função estrutural das tabelas, suas FKs e os arquivos do backend que realmente as referenciam.',
+                'Trate descrições do catálogo como documentação estrutural; confirme qualquer regra de negócio nos codeSnippets ou nos resultados do banco.',
                 'Não invente nomes de tabelas ou colunas como se fossem confirmados. Quando o schema não estiver disponível, marque placeholders com <tabela>, <coluna_cliente>, <id_registro> e explique o que substituir.',
                 'Cada SELECT deve ter filtro restritivo, LIMIT e uma finalidade clara.',
                 'Gere de 1 a 5 codeInvestigationPaths usando somente caminhos presentes em codeSnippets. Informe símbolo/função visível e exatamente o que conferir.',
@@ -1591,6 +1817,7 @@ export class AiTriageService implements OnModuleInit {
               })),
         codeSnippets: snippets,
         databaseContext,
+        technicalKnowledge,
       },
       null,
       2,
@@ -1719,9 +1946,11 @@ export class AiTriageService implements OnModuleInit {
   private async findRelevantCodeSnippets(
     ticket: NonNullable<Awaited<ReturnType<TicketsService['findById']>>>,
     ticketDetail: TicketDetailDto | null,
+    preferredPaths: string[] = [],
   ): Promise<CodeSnippetDto[]> {
     const terms = this.extractSearchTerms(ticket, ticketDetail);
-    if (!terms.length) return [];
+    if (!terms.length && !preferredPaths.length) return [];
+    const preferred = new Set(preferredPaths);
 
     const files = await this.listCodeFiles(this.repoRoot);
     const scored: Array<{ path: string; score: number; content: string }> = [];
@@ -1733,12 +1962,15 @@ export class AiTriageService implements OnModuleInit {
       const content = await fs.readFile(filePath, 'utf8');
       const normalized = normalize(content);
       const normalizedPath = normalize(relative(this.repoRoot, filePath));
-      const score = terms.reduce((total, term, index) => {
-        const priority = Math.max(1, 8 - Math.floor(index / 4));
-        const pathScore = normalizedPath.includes(term) ? 100 * priority : 0;
-        const occurrences = normalized.split(term).length - 1;
-        return total + pathScore + Math.min(occurrences, 4) * priority;
-      }, 0);
+      const relativePath = relative(this.repoRoot, filePath);
+      const score =
+        (preferred.has(relativePath) ? 10_000 : 0) +
+        terms.reduce((total, term, index) => {
+          const priority = Math.max(1, 8 - Math.floor(index / 4));
+          const pathScore = normalizedPath.includes(term) ? 100 * priority : 0;
+          const occurrences = normalized.split(term).length - 1;
+          return total + pathScore + Math.min(occurrences, 4) * priority;
+        }, 0);
       if (score > 0) scored.push({ path: filePath, score, content });
     }
 
@@ -1795,9 +2027,38 @@ export class AiTriageService implements OnModuleInit {
     }
   }
 
+  private toDiagnosticDatabaseContext(
+    knowledge: TechnicalKnowledgeSnapshot,
+  ): DiagnosticDbContext {
+    return {
+      schema: knowledge.schema,
+      tables: knowledge.entities.map((entity) => ({
+        name: entity.name,
+        type: entity.type,
+        relevanceScore: entity.relevanceScore,
+        relevanceReasons: [
+          ...entity.relevanceReasons,
+          entity.description,
+          ...entity.codeReferences
+            .slice(0, 4)
+            .map(
+              (reference) =>
+                `referenciada em ${reference.path}:${reference.lines[0] ?? 1}`,
+            ),
+        ],
+        columns: entity.columns.map((column) => ({
+          name: column.name,
+          type: column.type,
+          nullable: column.nullable,
+        })),
+      })),
+    };
+  }
+
   private async getDiagnosticDatabaseContext(
     ticket: NonNullable<Awaited<ReturnType<TicketsService['findById']>>>,
     ticketDetail: TicketDetailDto | null,
+    technicalContext: CodeAnalysisContextDto,
   ): Promise<DiagnosticDbContext | null> {
     const connectionString = process.env.AI_DIAGNOSTIC_DB_URL?.trim();
     if (!connectionString) return null;
@@ -1849,27 +2110,37 @@ export class AiTriageService implements OnModuleInit {
         grouped.set(row.table_name, table);
       }
 
-      const rankedTables = Array.from(grouped.values())
+      const rankedTableItems = Array.from(grouped.values())
         .map((table) => {
           const tableName = normalize(table.name);
           const columnNames = table.columns.map((column) =>
             normalize(column.name),
           );
-          const score = terms.reduce((total, term, index) => {
-            const priority = Math.max(1, 8 - Math.floor(index / 4));
-            if (tableName === term) return total + 20 * priority;
-            if (tableName.includes(term)) return total + 8 * priority;
-            if (columnNames.some((column) => column.includes(term))) {
-              return total + 2 * priority;
-            }
-            return total;
-          }, 0);
-          return { table, score };
+          const reasons: string[] = [];
+          const score =
+            terms.reduce((total, term, index) => {
+              const priority = Math.max(1, 8 - Math.floor(index / 4));
+              if (tableName === term) {
+                reasons.push(`nome da tabela igual a "${term}"`);
+                return total + 20 * priority;
+              }
+              if (tableName.includes(term)) {
+                reasons.push(`nome da tabela contém "${term}"`);
+                return total + 8 * priority;
+              }
+              if (columnNames.some((column) => column.includes(term))) {
+                reasons.push(`coluna relacionada a "${term}"`);
+                return total + 2 * priority;
+              }
+              return total;
+            }, 0) +
+            this.getTechnicalColumnScore(table, technicalContext, reasons);
+          return { table, score, reasons: unique(reasons).slice(0, 6) };
         })
         .filter((item) => item.score > 0)
         .sort((left, right) => right.score - left.score)
-        .slice(0, 4)
-        .map((item) => item.table);
+        .slice(0, 4);
+      const rankedTables = rankedTableItems.map((item) => item.table);
       const selectedNames = new Set(rankedTables.map((table) => table.name));
 
       for (let level = 0; level < 2 && selectedNames.size < 12; level += 1) {
@@ -1895,8 +2166,18 @@ export class AiTriageService implements OnModuleInit {
         )
         .map((table) => ({
           ...table,
+          relevanceScore:
+            rankedTableItems.find((ranked) => ranked.table.name === table.name)
+              ?.score ?? this.getTechnicalColumnScore(table, technicalContext),
+          relevanceReasons:
+            rankedTableItems.find((ranked) => ranked.table.name === table.name)
+              ?.reasons ?? [],
           columns: table.columns.slice(0, 40),
-        }));
+        }))
+        .sort(
+          (left, right) =>
+            (right.relevanceScore ?? 0) - (left.relevanceScore ?? 0),
+        );
 
       return { schema, tables };
     } catch (error) {
@@ -1907,6 +2188,32 @@ export class AiTriageService implements OnModuleInit {
     } finally {
       await pool.end().catch(() => undefined);
     }
+  }
+
+  private getTechnicalColumnScore(
+    table: DiagnosticDbContext['tables'][number],
+    technicalContext: CodeAnalysisContextDto,
+    reasons: string[] = [],
+  ) {
+    const columns = new Set(table.columns.map((column) => column.name));
+    let score = 0;
+    if (technicalContext.sellerIds?.length && columns.has('fk_seller_id')) {
+      score += 60;
+      reasons.push('possui fk_seller_id para sellerIds informados');
+    }
+    if (technicalContext.eans?.length && columns.has('ean')) {
+      score += 60;
+      reasons.push('possui ean para EANs informados');
+    }
+    if (columns.has('status')) {
+      score += 8;
+      reasons.push('possui coluna status');
+    }
+    if (columns.has('updated_at') || columns.has('created_at')) {
+      score += 4;
+      reasons.push('possui coluna temporal');
+    }
+    return score;
   }
 
   private async findRelevantMemories(

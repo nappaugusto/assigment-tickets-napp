@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
@@ -206,15 +207,29 @@ export class ApiIntegrationsService {
   }
 
   async createChannel(userId: number, dto: CreateApiChannelDto) {
-    const result = await this.db.query<ChannelRow>(
-      `
-        INSERT INTO api_channels (user_id, name, description, updated_at)
-        VALUES ($1, $2, $3, now())
-        RETURNING *
-      `,
-      [userId, dto.name.trim(), dto.description?.trim() || null],
+    const baseName = dto.name.trim();
+    const description = dto.description?.trim() || null;
+
+    // The UI starts new channels with a placeholder name. Resolve collisions
+    // here so stale clients and concurrent requests cannot turn them into 500s.
+    for (let suffix = 1; suffix <= 1000; suffix += 1) {
+      const name = suffix === 1 ? baseName : `${baseName} ${suffix}`;
+      const result = await this.db.query<ChannelRow>(
+        `
+          INSERT INTO api_channels (user_id, name, description, updated_at)
+          VALUES ($1, $2, $3, now())
+          ON CONFLICT (user_id, name) DO NOTHING
+          RETURNING *
+        `,
+        [userId, name, description],
+      );
+
+      if (result.rows[0]) return toChannelDto(result.rows[0]);
+    }
+
+    throw new ConflictException(
+      'Não foi possível gerar um nome disponível para o canal.',
     );
-    return toChannelDto(result.rows[0]);
   }
 
   async updateChannel(

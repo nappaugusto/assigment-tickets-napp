@@ -4,10 +4,11 @@ import { TicketsModule } from '../tickets/tickets.module';
 import { TrelloModule } from '../trello/trello.module';
 import { AiTriageController } from './ai-triage.controller';
 import { AiTriageService } from './ai-triage.service';
+import { TechnicalKnowledgeService } from './technical-knowledge.service';
 
 @Module({
   imports: [DatabaseModule, TicketsModule, TrelloModule],
   controllers: [AiTriageController],
-  providers: [AiTriageService],
+  providers: [AiTriageService, TechnicalKnowledgeService],
 })
 export class AiTriageModule {}

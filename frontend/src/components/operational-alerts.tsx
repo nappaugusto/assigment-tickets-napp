@@ -3,11 +3,12 @@ import { AlertTriangle, Bell, Clock, UserX } from 'lucide-react'
 import { toast } from 'sonner'
 import { type Ticket } from '@/lib/api'
 import { getSlaStatus } from '@/lib/date-utils'
+import { type QuickFilter } from '@/hooks/use-ticket-filters'
 
 interface OperationalAlertsProps {
   tickets: Ticket[]
   newTickets: Ticket[]
-  onQuickFilter: (value: string) => void
+  onQuickFilter: (value: QuickFilter) => void
   onSearch: (value: string) => void
 }
 
@@ -43,7 +44,7 @@ export function OperationalAlerts({ tickets, newTickets, onQuickFilter, onSearch
     return { expired, warning, unassigned, criticalUnassigned, stale }
   }, [allTickets])
 
-  const alerts: AlertItem[] = [
+  const allAlerts: AlertItem[] = [
     {
       key: 'expired',
       title: 'SLA vencido',
@@ -87,7 +88,8 @@ export function OperationalAlerts({ tickets, newTickets, onQuickFilter, onSearch
       actionLabel: 'Buscar antigos',
       onClick: () => onSearch(metrics.stale[0] ? `#${metrics.stale[0].id}` : ''),
     },
-  ].filter((alert) => alert.count > 0)
+  ]
+  const alerts = allAlerts.filter((alert) => alert.count > 0)
 
   const signature = alerts.map((alert) => `${alert.key}:${alert.count}`).join('|')
 

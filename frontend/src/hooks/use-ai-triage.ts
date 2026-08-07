@@ -1,108 +1,158 @@
-import { useEffect, useRef } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { toast } from 'sonner'
-import { aiTriageApi, type TriageDecision } from '@/lib/api'
-import { TICKETS_QUERY_KEY } from '@/hooks/use-tickets'
+import { useEffect, useRef } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { aiTriageApi, type TriageDecision } from "@/lib/api";
+import { TICKETS_QUERY_KEY } from "@/hooks/use-tickets";
 
 export function aiTriageQueryKey(ticketId: number) {
-  return ['ai-triage', ticketId]
+  return ["ai-triage", ticketId];
 }
 
 export function useTicketAiTriage(ticketId: number, enabled = true) {
-  const queryClient = useQueryClient()
-  const lastSettledTriageId = useRef<number | null>(null)
+  const queryClient = useQueryClient();
+  const lastSettledTriageId = useRef<number | null>(null);
   const query = useQuery({
     queryKey: aiTriageQueryKey(ticketId),
     queryFn: () => aiTriageApi.latest(ticketId),
     enabled,
     refetchInterval: (query) => {
-      const status = query.state.data?.triage?.status
-      return status === 'pending' || status === 'running' ? 2_500 : false
+      const status = query.state.data?.triage?.status;
+      return status === "pending" || status === "running" ? 2_500 : false;
     },
-  })
+  });
 
   useEffect(() => {
-    const triage = query.data?.triage
-    if (!triage || (triage.status !== 'completed' && triage.status !== 'failed')) return
-    if (lastSettledTriageId.current === triage.id) return
+    const triage = query.data?.triage;
+    if (
+      !triage ||
+      (triage.status !== "completed" && triage.status !== "failed")
+    )
+      return;
+    if (lastSettledTriageId.current === triage.id) return;
 
-    lastSettledTriageId.current = triage.id
-    void queryClient.invalidateQueries({ queryKey: TICKETS_QUERY_KEY })
-  }, [query.data?.triage?.id, query.data?.triage?.status, queryClient])
+    lastSettledTriageId.current = triage.id;
+    void queryClient.invalidateQueries({ queryKey: TICKETS_QUERY_KEY });
+  }, [query.data?.triage?.id, query.data?.triage?.status, queryClient]);
 
-  return query
+  return query;
 }
 
 export function useStartAiTriage(ticketId: number) {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: () => aiTriageApi.start(ticketId),
     onSuccess: (data) => {
-      queryClient.setQueryData(aiTriageQueryKey(ticketId), data)
-      toast.success('Triagem IA iniciada')
+      queryClient.setQueryData(aiTriageQueryKey(ticketId), data);
+      toast.success("Triagem IA iniciada");
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Erro ao iniciar triagem IA')
+      toast.error(
+        error instanceof Error ? error.message : "Erro ao iniciar triagem IA",
+      );
     },
-  })
+  });
 }
 
 export function useReanalyzeAiTriage(ticketId: number) {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: () => aiTriageApi.reanalyze(ticketId),
     onSuccess: (data) => {
-      queryClient.setQueryData(aiTriageQueryKey(ticketId), data)
-      toast.success('Reanalise iniciada')
+      queryClient.setQueryData(aiTriageQueryKey(ticketId), data);
+      toast.success("Reanalise iniciada");
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Erro ao reanalisar ticket')
+      toast.error(
+        error instanceof Error ? error.message : "Erro ao reanalisar ticket",
+      );
     },
-  })
+  });
 }
 
 export function useAnalyzeCodeAiTriage(ticketId: number) {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (context: { sellerIds?: string[]; eans?: string[]; notes?: string }) =>
-      aiTriageApi.analyzeCode(ticketId, context),
+    mutationFn: (context: {
+      sellerIds?: string[];
+      eans?: string[];
+      notes?: string;
+    }) => aiTriageApi.analyzeCode(ticketId, context),
     onSuccess: (data) => {
-      queryClient.setQueryData(aiTriageQueryKey(ticketId), data)
-      toast.success('Análise de código iniciada')
+      queryClient.setQueryData(aiTriageQueryKey(ticketId), data);
+      toast.success("Análise de código iniciada");
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Erro ao analisar código')
+      toast.error(
+        error instanceof Error ? error.message : "Erro ao analisar código",
+      );
     },
-  })
+  });
 }
 
 export function useAiTriageDecision(ticketId: number) {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, decision }: { id: number; decision: TriageDecision }) => aiTriageApi.decision(id, decision),
+    mutationFn: ({ id, decision }: { id: number; decision: TriageDecision }) =>
+      aiTriageApi.decision(id, decision),
     onSuccess: (data) => {
-      queryClient.setQueryData(aiTriageQueryKey(ticketId), data)
+      queryClient.setQueryData(aiTriageQueryKey(ticketId), data);
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Erro ao registrar decisão')
+      toast.error(
+        error instanceof Error ? error.message : "Erro ao registrar decisão",
+      );
     },
-  })
+  });
 }
 
 export function useAiTriageFollowUp(ticketId: number) {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, message }: { id: number; message: string }) => aiTriageApi.followUp(id, message),
+    mutationFn: ({ id, message }: { id: number; message: string }) =>
+      aiTriageApi.followUp(id, message),
     onSuccess: (data) => {
-      queryClient.setQueryData(aiTriageQueryKey(ticketId), data)
+      queryClient.setQueryData(aiTriageQueryKey(ticketId), data);
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Erro ao enviar mensagem para a triagem')
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Erro ao enviar mensagem para a triagem",
+      );
     },
-  })
+  });
+}
+
+export function useTechnicalKnowledge(enabled = true) {
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: ["technical-knowledge"],
+    queryFn: aiTriageApi.knowledgeStatus,
+    enabled,
+    refetchInterval: (query) =>
+      query.state.data?.knowledge.state === "running" ? 2_500 : false,
+  });
+  const refresh = useMutation({
+    mutationFn: aiTriageApi.refreshKnowledge,
+    onSuccess: (data) => {
+      queryClient.setQueryData(["technical-knowledge"], data);
+      toast.success(
+        `Mapa técnico atualizado: ${data.knowledge.tableCount} tabelas`,
+      );
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Erro ao atualizar o mapa técnico",
+      );
+    },
+  });
+
+  return { query, refresh };
 }

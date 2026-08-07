@@ -20,6 +20,7 @@ import { TeamsModule } from './teams/teams.module';
 import { AiTriageModule } from './ai-triage/ai-triage.module';
 import { ApiIntegrationsModule } from './api-integrations/api-integrations.module';
 import { PubsubToolsModule } from './pubsub-tools/pubsub-tools.module';
+import { OpsModule } from './ops/ops.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { PubsubToolsModule } from './pubsub-tools/pubsub-tools.module';
     AiTriageModule,
     ApiIntegrationsModule,
     PubsubToolsModule,
+    OpsModule,
   ],
   providers: [DatabaseInitService],
 })

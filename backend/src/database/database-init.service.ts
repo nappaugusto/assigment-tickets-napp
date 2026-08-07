@@ -58,10 +58,7 @@ export class DatabaseInitService implements OnModuleInit {
         this.logger.log('Database schema initialized');
         return;
       } catch (error) {
-        if (
-          attempt >= this.maxAttempts ||
-          !isRetryableConnectionError(error)
-        ) {
+        if (attempt >= this.maxAttempts || !isRetryableConnectionError(error)) {
           throw error;
         }
 
@@ -193,6 +190,36 @@ export class DatabaseInitService implements OnModuleInit {
         updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
       );
 
+      CREATE TABLE IF NOT EXISTS ai_technical_catalog_runs (
+        id                   INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+        status               TEXT        NOT NULL DEFAULT 'running',
+        schema_name          TEXT        NOT NULL,
+        repository_root      TEXT        NOT NULL,
+        table_count          INTEGER     NOT NULL DEFAULT 0,
+        relationship_count   INTEGER     NOT NULL DEFAULT 0,
+        code_reference_count INTEGER     NOT NULL DEFAULT 0,
+        error                TEXT,
+        started_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+        finished_at          TIMESTAMPTZ
+      );
+
+      CREATE TABLE IF NOT EXISTS ai_technical_entities (
+        id                INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+        entity_key        TEXT        NOT NULL UNIQUE,
+        schema_name       TEXT        NOT NULL,
+        table_name        TEXT        NOT NULL,
+        table_type        TEXT        NOT NULL,
+        description       TEXT        NOT NULL DEFAULT '',
+        columns            JSONB       NOT NULL DEFAULT '[]'::jsonb,
+        relationships      JSONB       NOT NULL DEFAULT '[]'::jsonb,
+        code_references    JSONB       NOT NULL DEFAULT '[]'::jsonb,
+        search_terms       TEXT[]      NOT NULL DEFAULT '{}',
+        source_hash        TEXT        NOT NULL,
+        last_seen_run_id   INTEGER     NOT NULL REFERENCES ai_technical_catalog_runs(id) ON DELETE CASCADE,
+        created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+
       CREATE TABLE IF NOT EXISTS user_preferences (
         id         INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
         user_id    INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -287,6 +314,12 @@ export class DatabaseInitService implements OnModuleInit {
         ON ai_triage_memories USING GIN (keywords);
       CREATE INDEX IF NOT EXISTS ai_triage_memories_status_idx
         ON ai_triage_memories (status, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS ai_technical_entities_terms_idx
+        ON ai_technical_entities USING GIN (search_terms);
+      CREATE INDEX IF NOT EXISTS ai_technical_entities_table_idx
+        ON ai_technical_entities (schema_name, table_name);
+      CREATE INDEX IF NOT EXISTS ai_technical_catalog_runs_status_idx
+        ON ai_technical_catalog_runs (status, started_at DESC);
       CREATE INDEX IF NOT EXISTS tickets_responsavel_idx ON tickets (responsavel);
       CREATE INDEX IF NOT EXISTS tickets_updated_at_idx ON tickets (updated_at);
       CREATE INDEX IF NOT EXISTS password_resets_expires_at_idx ON password_resets (expires_at);

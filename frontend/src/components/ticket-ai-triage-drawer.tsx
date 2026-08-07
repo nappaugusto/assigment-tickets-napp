@@ -1,6 +1,6 @@
-import { useEffect, useState, type ReactNode } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import * as Dialog from '@radix-ui/react-dialog'
+import { useEffect, useState, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
+import * as Dialog from "@radix-ui/react-dialog";
 import {
   Bot,
   CheckSquare,
@@ -17,118 +17,151 @@ import {
   Sparkles,
   SquareKanban,
   X,
-} from 'lucide-react'
-import { toast } from 'sonner'
-import { ticketsApi, type SimilarTicket, type Ticket, type TicketAiTriage, type TicketAiTriageResult } from '@/lib/api'
-import { getTicketUrl } from '@/lib/utils'
+} from "lucide-react";
+import { toast } from "sonner";
+import {
+  ticketsApi,
+  type SimilarTicket,
+  type Ticket,
+  type TicketAiTriage,
+  type TicketAiTriageResult,
+} from "@/lib/api";
+import { getTicketUrl } from "@/lib/utils";
 import {
   useAnalyzeCodeAiTriage,
   useAiTriageDecision,
   useAiTriageFollowUp,
   useReanalyzeAiTriage,
   useStartAiTriage,
+  useTechnicalKnowledge,
   useTicketAiTriage,
-} from '@/hooks/use-ai-triage'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { TrelloCardDialog } from '@/components/trello-card-dialog'
+} from "@/hooks/use-ai-triage";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { TrelloCardDialog } from "@/components/trello-card-dialog";
 
 interface TicketAiTriageDrawerProps {
-  ticket: Ticket | null
-  open: boolean
-  onClose: () => void
+  ticket: Ticket | null;
+  open: boolean;
+  onClose: () => void;
 }
 
-const PRIORITY_VARIANT: Record<string, 'destructive' | 'warning' | 'secondary' | 'outline' | 'default'> = {
-  critica: 'destructive',
-  alta: 'destructive',
-  media: 'warning',
-  baixa: 'secondary',
+const PRIORITY_VARIANT: Record<
+  string,
+  "destructive" | "warning" | "secondary" | "outline" | "default"
+> = {
+  critica: "destructive",
+  alta: "destructive",
+  media: "warning",
+  baixa: "secondary",
+};
+
+export function TicketAiTriageDrawer({
+  ticket,
+  open,
+  onClose,
+}: TicketAiTriageDrawerProps) {
+  if (!ticket) return null;
+
+  return (
+    <TicketAiTriageDrawerContent
+      ticket={ticket}
+      open={open}
+      onClose={onClose}
+    />
+  );
 }
 
-export function TicketAiTriageDrawer({ ticket, open, onClose }: TicketAiTriageDrawerProps) {
-  if (!ticket) return null
-
-  return <TicketAiTriageDrawerContent ticket={ticket} open={open} onClose={onClose} />
-}
-
-function TicketAiTriageDrawerContent({ ticket, open, onClose }: TicketAiTriageDrawerProps & { ticket: Ticket }) {
-  const triageQuery = useTicketAiTriage(ticket.id, open)
+function TicketAiTriageDrawerContent({
+  ticket,
+  open,
+  onClose,
+}: TicketAiTriageDrawerProps & { ticket: Ticket }) {
+  const triageQuery = useTicketAiTriage(ticket.id, open);
   const similarQuery = useQuery({
-    queryKey: ['similar-tickets', ticket.id],
+    queryKey: ["similar-tickets", ticket.id],
     queryFn: () => ticketsApi.similar(ticket.id),
     enabled: open,
     staleTime: 60_000,
-  })
-  const startTriage = useStartAiTriage(ticket.id)
-  const reanalyze = useReanalyzeAiTriage(ticket.id)
-  const analyzeCode = useAnalyzeCodeAiTriage(ticket.id)
-  const decision = useAiTriageDecision(ticket.id)
-  const followUp = useAiTriageFollowUp(ticket.id)
-  const [trelloOpen, setTrelloOpen] = useState(false)
-  const [sellerIdsInput, setSellerIdsInput] = useState('')
-  const [eansInput, setEansInput] = useState('')
-  const [technicalNotes, setTechnicalNotes] = useState('')
-  const triageRecord = triageQuery.data?.triage ?? null
-  const triage = triageRecord?.triage ?? null
-  const isCodeAnalysis = analyzeCode.isPending || triageRecord?.input_summary?.mode === 'code_analysis'
-  const trelloLabels = triage ? buildTrelloLabels(triage) : []
+  });
+  const startTriage = useStartAiTriage(ticket.id);
+  const reanalyze = useReanalyzeAiTriage(ticket.id);
+  const analyzeCode = useAnalyzeCodeAiTriage(ticket.id);
+  const decision = useAiTriageDecision(ticket.id);
+  const followUp = useAiTriageFollowUp(ticket.id);
+  const technicalKnowledge = useTechnicalKnowledge(open);
+  const [trelloOpen, setTrelloOpen] = useState(false);
+  const [sellerIdsInput, setSellerIdsInput] = useState("");
+  const [eansInput, setEansInput] = useState("");
+  const [technicalNotes, setTechnicalNotes] = useState("");
+  const triageRecord = triageQuery.data?.triage ?? null;
+  const triage = triageRecord?.triage ?? null;
+  const isCodeAnalysis =
+    analyzeCode.isPending ||
+    triageRecord?.input_summary?.mode === "code_analysis";
+  const trelloLabels = triage ? buildTrelloLabels(triage) : [];
   const isWorking =
     startTriage.isPending ||
     reanalyze.isPending ||
     analyzeCode.isPending ||
-    triageRecord?.status === 'pending' ||
-    triageRecord?.status === 'running'
+    triageRecord?.status === "pending" ||
+    triageRecord?.status === "running";
 
   useEffect(() => {
-    if (!open || triageQuery.isLoading || triageRecord) return
-    startTriage.mutate()
+    if (!open || triageQuery.isLoading || triageRecord) return;
+    startTriage.mutate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, triageQuery.isLoading, triageRecord?.id])
+  }, [open, triageQuery.isLoading, triageRecord?.id]);
 
   const copyTriage = async () => {
-    if (!triage || !triageRecord) return
+    if (!triage || !triageRecord) return;
     try {
-      await copyText(formatTriageForCopy(ticket, triage))
-      toast.success('Triagem copiada')
+      await copyText(formatTriageForCopy(ticket, triage));
+      toast.success("Triagem copiada");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Não foi possível copiar a triagem')
-      return
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível copiar a triagem",
+      );
+      return;
     }
 
-    void decision.mutateAsync({ id: triageRecord.id, decision: 'copied' }).catch(() => {
-      // The mutation hook already shows the user-facing error toast.
-    })
-  }
+    void decision
+      .mutateAsync({ id: triageRecord.id, decision: "copied" })
+      .catch(() => {
+        // The mutation hook already shows the user-facing error toast.
+      });
+  };
 
   const ignore = async () => {
-    if (!triageRecord) return
-    await decision.mutateAsync({ id: triageRecord.id, decision: 'ignored' })
-    toast.success('Sugestão ignorada')
-  }
+    if (!triageRecord) return;
+    await decision.mutateAsync({ id: triageRecord.id, decision: "ignored" });
+    toast.success("Sugestão ignorada");
+  };
 
   const accept = async () => {
-    if (!triageRecord) return
-    await decision.mutateAsync({ id: triageRecord.id, decision: 'accepted' })
-    toast.success('Análise validada e adicionada à memória técnica')
-  }
+    if (!triageRecord) return;
+    await decision.mutateAsync({ id: triageRecord.id, decision: "accepted" });
+    toast.success("Análise validada e adicionada à memória técnica");
+  };
 
   const markCardCreated = async () => {
     if (triageRecord) {
       await decision.mutateAsync({
         id: triageRecord.id,
-        decision: 'card_created',
-      })
+        decision: "card_created",
+      });
     }
-  }
+  };
 
   const analyzeWithContext = () => {
     analyzeCode.mutate({
       sellerIds: splitTechnicalValues(sellerIdsInput),
       eans: splitTechnicalValues(eansInput),
       notes: technicalNotes.trim() || undefined,
-    })
-  }
+    });
+  };
 
   return (
     <Dialog.Root open={open} onOpenChange={(next) => !next && onClose()}>
@@ -147,12 +180,16 @@ function TicketAiTriageDrawerContent({ ticket, open, onClose }: TicketAiTriageDr
                 <ExternalLink size={12} />
               </a>
               <Dialog.Title className="mt-2 line-clamp-2 text-lg font-semibold leading-snug">
-                {ticket.subject || 'Sem assunto'}
+                {ticket.subject || "Sem assunto"}
               </Dialog.Title>
               <Dialog.Description className="mt-1 text-xs text-muted-foreground">
-                {[ticket.status, ticket.ownerTeam, ticket.responsavel ? `resp: ${ticket.responsavel}` : null]
+                {[
+                  ticket.status,
+                  ticket.ownerTeam,
+                  ticket.responsavel ? `resp: ${ticket.responsavel}` : null,
+                ]
                   .filter(Boolean)
-                  .join(' · ')}
+                  .join(" · ")}
               </Dialog.Description>
             </div>
             <div className="flex shrink-0 items-center gap-2">
@@ -164,7 +201,11 @@ function TicketAiTriageDrawerContent({ ticket, open, onClose }: TicketAiTriageDr
                 disabled={isWorking}
                 onClick={() => reanalyze.mutate()}
               >
-                {isWorking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                {isWorking ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
                 Refazer triagem
               </Button>
               <Button
@@ -192,13 +233,18 @@ function TicketAiTriageDrawerContent({ ticket, open, onClose }: TicketAiTriageDr
 
           <div className="grid gap-3 border-b border-border/45 bg-muted/10 px-5 py-3 md:grid-cols-2">
             <div className="md:col-span-2">
-              <p className="text-xs font-medium text-foreground">Filtros da investigação técnica</p>
+              <p className="text-xs font-medium text-foreground">
+                Filtros da investigação técnica
+              </p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Usados somente ao investigar código e banco; não afetam a triagem rápida.
+                Usados somente ao investigar código e banco; não afetam a
+                triagem rápida.
               </p>
             </div>
             <label className="space-y-1.5">
-              <span className="text-xs font-medium text-muted-foreground">FK seller IDs</span>
+              <span className="text-xs font-medium text-muted-foreground">
+                FK seller IDs
+              </span>
               <textarea
                 rows={2}
                 value={sellerIdsInput}
@@ -209,7 +255,9 @@ function TicketAiTriageDrawerContent({ ticket, open, onClose }: TicketAiTriageDr
               />
             </label>
             <label className="space-y-1.5">
-              <span className="text-xs font-medium text-muted-foreground">EANs</span>
+              <span className="text-xs font-medium text-muted-foreground">
+                EANs
+              </span>
               <textarea
                 rows={2}
                 value={eansInput}
@@ -231,6 +279,47 @@ function TicketAiTriageDrawerContent({ ticket, open, onClose }: TicketAiTriageDr
                 className="h-9 w-full rounded-md border border-input bg-background/70 px-3 text-sm outline-none focus:border-ring focus:ring-1 focus:ring-ring"
               />
             </label>
+            <div className="flex items-center justify-between gap-3 rounded-md border border-border/50 bg-background/50 px-3 py-2 md:col-span-2">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <Database className="h-4 w-4 shrink-0 text-primary" />
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-foreground">
+                    Mapa técnico persistente
+                  </p>
+                  <p className="truncate text-[11px] text-muted-foreground">
+                    {technicalKnowledge.query.data?.knowledge.state === "ready"
+                      ? `${technicalKnowledge.query.data.knowledge.tableCount} tabelas · ${technicalKnowledge.query.data.knowledge.relationshipCount} relações · ${technicalKnowledge.query.data.knowledge.codeReferenceCount} usos no backend`
+                      : technicalKnowledge.query.data?.knowledge.state ===
+                          "failed"
+                        ? technicalKnowledge.query.data.knowledge.error ||
+                          "Falha ao montar o catálogo"
+                        : technicalKnowledge.query.data?.knowledge.state ===
+                            "running"
+                          ? "Mapeando banco e backend..."
+                          : "Ainda não foi gerado; será criado na primeira investigação."}
+                  </p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 shrink-0 gap-1.5 px-2 text-[11px]"
+                disabled={
+                  technicalKnowledge.refresh.isPending ||
+                  technicalKnowledge.query.data?.knowledge.state === "running"
+                }
+                onClick={() => technicalKnowledge.refresh.mutate()}
+              >
+                {technicalKnowledge.refresh.isPending ||
+                technicalKnowledge.query.data?.knowledge.state === "running" ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3 w-3" />
+                )}
+                Atualizar mapa
+              </Button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto p-5">
@@ -238,19 +327,25 @@ function TicketAiTriageDrawerContent({ ticket, open, onClose }: TicketAiTriageDr
               <div className="flex min-h-72 flex-col items-center justify-center gap-3 rounded-lg border border-border/45 bg-muted/15 text-sm text-muted-foreground">
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
                 {isCodeAnalysis
-                  ? 'Investigando código, banco e evidências...'
-                  : 'Fazendo triagem operacional do ticket...'}
+                  ? "Investigando código, banco e evidências..."
+                  : "Fazendo triagem operacional do ticket..."}
               </div>
-            ) : triageRecord?.status === 'failed' ? (
+            ) : triageRecord?.status === "failed" ? (
               <div className="rounded-lg border border-destructive/35 bg-destructive/10 p-4 text-sm">
-                <p className="font-medium text-foreground">Não foi possível gerar a triagem.</p>
-                <p className="mt-1 text-muted-foreground">{triageRecord.error}</p>
+                <p className="font-medium text-foreground">
+                  Não foi possível gerar a triagem.
+                </p>
+                <p className="mt-1 text-muted-foreground">
+                  {triageRecord.error}
+                </p>
               </div>
             ) : triage && triageRecord ? (
               <div className="space-y-4">
                 <TriagePanel triage={triage} triageRecord={triageRecord} />
                 <QuickCopyPanel ticket={ticket} triage={triage} />
-                <CustomerReplyPanel text={getSuggestedCustomerReply(ticket, triage)} />
+                <CustomerReplyPanel
+                  text={getSuggestedCustomerReply(ticket, triage)}
+                />
                 <SimilarTicketsPanel
                   tickets={similarQuery.data?.tickets ?? []}
                   triageSimilarTickets={triage.similarTickets ?? []}
@@ -259,7 +354,9 @@ function TicketAiTriageDrawerContent({ ticket, open, onClose }: TicketAiTriageDr
                 <TriageChatPanel
                   triageRecord={triageRecord}
                   isPending={followUp.isPending}
-                  onSend={(message) => followUp.mutateAsync({ id: triageRecord.id, message })}
+                  onSend={(message) =>
+                    followUp.mutateAsync({ id: triageRecord.id, message })
+                  }
                 />
                 <SuggestedCardPanel
                   triage={triage}
@@ -282,52 +379,62 @@ function TicketAiTriageDrawerContent({ ticket, open, onClose }: TicketAiTriageDr
             onClose={() => setTrelloOpen(false)}
             startCreateNew={Boolean(ticket.trello_card_url)}
             suggestedName={triage?.suggestedCard.title}
-            suggestedDescription={triage ? formatTriageForTrello(ticket, triage) : undefined}
+            suggestedDescription={
+              triage ? formatTriageForTrello(ticket, triage) : undefined
+            }
             suggestedLabels={trelloLabels}
             onCreated={markCardCreated}
           />
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
-  )
+  );
 }
 
-function QuickCopyPanel({ ticket, triage }: { ticket: Ticket; triage: TicketAiTriageResult }) {
+function QuickCopyPanel({
+  ticket,
+  triage,
+}: {
+  ticket: Ticket;
+  triage: TicketAiTriageResult;
+}) {
   const actions = [
     {
-      label: 'Resumo executivo',
+      label: "Resumo executivo",
       icon: <Clipboard className="h-3.5 w-3.5" />,
       text: formatExecutiveSummary(ticket, triage),
-      success: 'Resumo executivo copiado',
+      success: "Resumo executivo copiado",
     },
     {
-      label: 'Descrição técnica',
+      label: "Descrição técnica",
       icon: <Code2 className="h-3.5 w-3.5" />,
       text: formatTechnicalDescription(ticket, triage),
-      success: 'Descrição técnica copiada',
+      success: "Descrição técnica copiada",
     },
     {
-      label: 'Checklist',
+      label: "Checklist",
       icon: <CheckSquare className="h-3.5 w-3.5" />,
       text: formatChecklist(triage),
-      success: 'Checklist copiado',
+      success: "Checklist copiado",
     },
     {
-      label: 'Mensagem cliente',
+      label: "Mensagem cliente",
       icon: <MessageSquareText className="h-3.5 w-3.5" />,
       text: getSuggestedCustomerReply(ticket, triage),
-      success: 'Mensagem ao cliente copiada',
+      success: "Mensagem ao cliente copiada",
     },
-  ]
+  ];
 
   const copyAction = async (text: string, success: string) => {
     try {
-      await copyText(text)
-      toast.success(success)
+      await copyText(text);
+      toast.success(success);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Não foi possível copiar')
+      toast.error(
+        error instanceof Error ? error.message : "Não foi possível copiar",
+      );
     }
-  }
+  };
 
   return (
     <section className="rounded-lg border border-border/60 bg-card/60 p-4">
@@ -348,33 +455,58 @@ function QuickCopyPanel({ ticket, triage }: { ticket: Ticket; triage: TicketAiTr
         ))}
       </div>
     </section>
-  )
+  );
 }
 
-function TriagePanel({ triage, triageRecord }: { triage: TicketAiTriageResult; triageRecord: TicketAiTriage }) {
-  const memoryCount = Number(triageRecord.input_summary?.memoryCount || 0)
-  const isTechnical = triageRecord.input_summary?.mode === 'code_analysis'
+function TriagePanel({
+  triage,
+  triageRecord,
+}: {
+  triage: TicketAiTriageResult;
+  triageRecord: TicketAiTriage;
+}) {
+  const memoryCount = Number(triageRecord.input_summary?.memoryCount || 0);
+  const catalogCount = Array.isArray(
+    triageRecord.input_summary?.technicalCatalogEntities,
+  )
+    ? triageRecord.input_summary.technicalCatalogEntities.length
+    : 0;
+  const isTechnical = triageRecord.input_summary?.mode === "code_analysis";
 
   return (
     <section className="rounded-lg border border-border/60 bg-card/60 p-4">
       <PanelHeader
         icon={isTechnical ? <Code2 size={15} /> : <Bot size={15} />}
-        title={isTechnical ? 'Investigação técnica' : 'Triagem operacional'}
+        title={isTechnical ? "Investigação técnica" : "Triagem operacional"}
       />
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Badge variant="secondary">
-          {isTechnical ? 'código + banco' : 'ticket + histórico'}
+          {isTechnical ? "código + banco" : "ticket + histórico"}
         </Badge>
         {triage.tags.map((tag) => (
-          <Badge key={tag} variant="outline" className="border-primary/40 bg-primary/10 text-primary">
+          <Badge
+            key={tag}
+            variant="outline"
+            className="border-primary/40 bg-primary/10 text-primary"
+          >
             {tag}
           </Badge>
         ))}
-        <Badge variant={PRIORITY_VARIANT[triage.priority] ?? 'outline'}>{triage.priority}</Badge>
-        <span className="text-xs text-muted-foreground">confiança: {triage.confidence}</span>
+        <Badge variant={PRIORITY_VARIANT[triage.priority] ?? "outline"}>
+          {triage.priority}
+        </Badge>
+        <span className="text-xs text-muted-foreground">
+          confiança: {triage.confidence}
+        </span>
         {memoryCount > 0 && (
           <Badge variant="secondary">
-            {memoryCount} memória{memoryCount === 1 ? '' : 's'} consultada{memoryCount === 1 ? '' : 's'}
+            {memoryCount} memória{memoryCount === 1 ? "" : "s"} consultada
+            {memoryCount === 1 ? "" : "s"}
+          </Badge>
+        )}
+        {catalogCount > 0 && (
+          <Badge variant="secondary">
+            {catalogCount} tabela{catalogCount === 1 ? "" : "s"} do mapa técnico
           </Badge>
         )}
       </div>
@@ -382,9 +514,18 @@ function TriagePanel({ triage, triageRecord }: { triage: TicketAiTriageResult; t
       <div className="mt-4 space-y-3 text-sm leading-relaxed">
         <LabeledText label="Resumo" text={triage.summary} strong />
         <LabeledText label="Sintoma" text={triage.symptom} strong />
-        <LabeledText label={isTechnical ? 'Área técnica' : 'Área provável'} text={triage.likelyArea} />
-        {triage.technicalHypothesis && <LabeledText label="Hipótese" text={triage.technicalHypothesis} />}
-        {triage.reasoning && <p className="text-xs leading-relaxed text-muted-foreground">{triage.reasoning}</p>}
+        <LabeledText
+          label={isTechnical ? "Área técnica" : "Área provável"}
+          text={triage.likelyArea}
+        />
+        {triage.technicalHypothesis && (
+          <LabeledText label="Hipótese" text={triage.technicalHypothesis} />
+        )}
+        {triage.reasoning && (
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {triage.reasoning}
+          </p>
+        )}
       </div>
 
       <ListBlock title="Evidências" items={triage.evidence} />
@@ -410,34 +551,50 @@ function TriagePanel({ triage, triageRecord }: { triage: TicketAiTriageResult; t
                 className="rounded-md border border-border/45 bg-background/35 p-2"
               >
                 <p className="font-mono text-xs text-foreground">{file.path}</p>
-                {file.reason && <p className="mt-1 text-xs text-muted-foreground">{file.reason}</p>}
+                {file.reason && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {file.reason}
+                  </p>
+                )}
               </div>
             ))}
           </div>
         </div>
       )}
     </section>
-  )
+  );
 }
 
 function CustomerReplyPanel({ text }: { text?: string }) {
-  const reply = text?.trim()
-  if (!reply) return null
+  const reply = text?.trim();
+  if (!reply) return null;
 
   const copyReply = async () => {
     try {
-      await copyText(reply)
-      toast.success('Resposta ao cliente copiada')
+      await copyText(reply);
+      toast.success("Resposta ao cliente copiada");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Não foi possível copiar a resposta')
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível copiar a resposta",
+      );
     }
-  }
+  };
 
   return (
     <section className="rounded-lg border border-border/60 bg-card/60 p-4">
       <div className="flex items-center justify-between gap-2">
-        <PanelHeader icon={<MessageSquareText size={15} />} title="Resposta sugerida ao cliente" />
-        <Button size="sm" variant="outline" className="h-8 gap-2 text-xs" onClick={copyReply}>
+        <PanelHeader
+          icon={<MessageSquareText size={15} />}
+          title="Resposta sugerida ao cliente"
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 gap-2 text-xs"
+          onClick={copyReply}
+        >
           <Clipboard className="h-3.5 w-3.5" />
           Copiar
         </Button>
@@ -446,7 +603,7 @@ function CustomerReplyPanel({ text }: { text?: string }) {
         {reply}
       </div>
     </section>
-  )
+  );
 }
 
 function SimilarTicketsPanel({
@@ -454,22 +611,29 @@ function SimilarTicketsPanel({
   triageSimilarTickets,
   isLoading,
 }: {
-  tickets: SimilarTicket[]
-  triageSimilarTickets: TicketAiTriageResult['similarTickets']
-  isLoading?: boolean
+  tickets: SimilarTicket[];
+  triageSimilarTickets: TicketAiTriageResult["similarTickets"];
+  isLoading?: boolean;
 }) {
-  const aiItems = triageSimilarTickets.filter((item) => !tickets.some((ticket) => ticket.id === item.id))
+  const aiItems = triageSimilarTickets.filter(
+    (item) => !tickets.some((ticket) => ticket.id === item.id),
+  );
 
   if (isLoading) {
     return (
       <section className="rounded-lg border border-border/60 bg-card/60 p-4">
-        <PanelHeader icon={<Sparkles size={15} />} title="Tickets semelhantes" />
-        <p className="mt-3 text-sm text-muted-foreground">Buscando comparações...</p>
+        <PanelHeader
+          icon={<Sparkles size={15} />}
+          title="Tickets semelhantes"
+        />
+        <p className="mt-3 text-sm text-muted-foreground">
+          Buscando comparações...
+        </p>
       </section>
-    )
+    );
   }
 
-  if (!tickets.length && !aiItems.length) return null
+  if (!tickets.length && !aiItems.length) return null;
 
   return (
     <section className="rounded-lg border border-border/60 bg-card/60 p-4">
@@ -486,29 +650,46 @@ function SimilarTicketsPanel({
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <span className="font-mono text-primary">#{item.id}</span>
               {item.status && <Badge variant="outline">{item.status}</Badge>}
-              {item.ai_triage && <Badge variant="secondary">IA {item.ai_triage.priority}</Badge>}
+              {item.ai_triage && (
+                <Badge variant="secondary">IA {item.ai_triage.priority}</Badge>
+              )}
               {item.trello_card_url && <Badge variant="outline">Trello</Badge>}
             </div>
-            <p className="mt-2 line-clamp-2 text-sm font-medium text-foreground">{item.subject || 'Sem assunto'}</p>
+            <p className="mt-2 line-clamp-2 text-sm font-medium text-foreground">
+              {item.subject || "Sem assunto"}
+            </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              {item.reasons.length ? item.reasons.join(' · ') : `Similaridade ${item.score}`}
+              {item.reasons.length
+                ? item.reasons.join(" · ")
+                : `Similaridade ${item.score}`}
             </p>
             {item.ai_triage?.summary && (
-              <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-foreground/75">{item.ai_triage.summary}</p>
+              <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-foreground/75">
+                {item.ai_triage.summary}
+              </p>
             )}
           </a>
         ))}
 
         {aiItems.map((item) => (
-          <div key={`ai-${item.id}`} className="rounded-md border border-border/45 bg-background/35 p-3">
+          <div
+            key={`ai-${item.id}`}
+            className="rounded-md border border-border/45 bg-background/35 p-3"
+          >
             <div className="font-mono text-xs text-primary">#{item.id}</div>
-            <p className="mt-1 text-sm font-medium text-foreground">{item.subject}</p>
-            {item.reason && <p className="mt-1 text-xs text-muted-foreground">{item.reason}</p>}
+            <p className="mt-1 text-sm font-medium text-foreground">
+              {item.subject}
+            </p>
+            {item.reason && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {item.reason}
+              </p>
+            )}
           </div>
         ))}
       </div>
     </section>
-  )
+  );
 }
 
 function SuggestedCardPanel({
@@ -519,12 +700,12 @@ function SuggestedCardPanel({
   onCreateCard,
   isBusy,
 }: {
-  triage: TicketAiTriageResult
-  onAccept: () => void
-  onCopy: () => void
-  onIgnore: () => void
-  onCreateCard: () => void
-  isBusy?: boolean
+  triage: TicketAiTriageResult;
+  onAccept: () => void;
+  onCopy: () => void;
+  onIgnore: () => void;
+  onCreateCard: () => void;
+  isBusy?: boolean;
 }) {
   return (
     <section className="rounded-lg border border-border/60 bg-card/60 p-4">
@@ -543,7 +724,12 @@ function SuggestedCardPanel({
         </div>
       )}
       <div className="mt-4 flex flex-wrap gap-2">
-        <Button size="sm" variant="outline" onClick={onAccept} disabled={isBusy}>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onAccept}
+          disabled={isBusy}
+        >
           <CheckSquare className="h-3.5 w-3.5" />
           Validar análise
         </Button>
@@ -560,7 +746,7 @@ function SuggestedCardPanel({
         </Button>
       </div>
     </section>
-  )
+  );
 }
 
 function TriageChatPanel({
@@ -568,28 +754,31 @@ function TriageChatPanel({
   isPending,
   onSend,
 }: {
-  triageRecord: TicketAiTriage
-  isPending?: boolean
-  onSend: (message: string) => Promise<unknown>
+  triageRecord: TicketAiTriage;
+  isPending?: boolean;
+  onSend: (message: string) => Promise<unknown>;
 }) {
-  const [message, setMessage] = useState('')
-  const messages = triageRecord.follow_up_messages ?? []
+  const [message, setMessage] = useState("");
+  const messages = triageRecord.follow_up_messages ?? [];
 
   const submit = async () => {
-    const trimmed = message.trim()
-    if (!trimmed || isPending) return
-    setMessage('')
-    await onSend(trimmed)
-  }
+    const trimmed = message.trim();
+    if (!trimmed || isPending) return;
+    setMessage("");
+    await onSend(trimmed);
+  };
 
   return (
     <section className="rounded-lg border border-border/60 bg-card/60 p-4">
-      <PanelHeader icon={<MessageSquareText size={15} />} title="Mini chat da triagem" />
+      <PanelHeader
+        icon={<MessageSquareText size={15} />}
+        title="Mini chat da triagem"
+      />
       <div className="mt-3 space-y-3">
         {messages.length === 0 ? (
           <div className="rounded-md border border-border/45 bg-background/35 p-3 text-xs leading-relaxed text-muted-foreground">
-            Cole aqui o erro retornado por uma consulta, um log, ou uma hipótese sua. A resposta usa o contexto do
-            ticket e da triagem salva.
+            Cole aqui o erro retornado por uma consulta, um log, ou uma hipótese
+            sua. A resposta usa o contexto do ticket e da triagem salva.
           </div>
         ) : (
           <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
@@ -597,13 +786,13 @@ function TriageChatPanel({
               <div
                 key={`${item.created_at}-${index}`}
                 className={`rounded-md border p-3 text-sm leading-relaxed ${
-                  item.role === 'user'
-                    ? 'border-primary/30 bg-primary/10 text-foreground'
-                    : 'border-border/45 bg-background/35 text-muted-foreground'
+                  item.role === "user"
+                    ? "border-primary/30 bg-primary/10 text-foreground"
+                    : "border-border/45 bg-background/35 text-muted-foreground"
                 }`}
               >
                 <div className="mb-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                  {item.role === 'user' ? 'Você' : 'IA'}
+                  {item.role === "user" ? "Você" : "IA"}
                 </div>
                 <div className="whitespace-pre-wrap">{item.content}</div>
               </div>
@@ -616,9 +805,9 @@ function TriageChatPanel({
             value={message}
             onChange={(event) => setMessage(event.target.value)}
             onKeyDown={(event) => {
-              if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-                event.preventDefault()
-                void submit()
+              if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                event.preventDefault();
+                void submit();
               }
             }}
             disabled={isPending}
@@ -633,13 +822,17 @@ function TriageChatPanel({
             onClick={() => void submit()}
             disabled={isPending || !message.trim()}
           >
-            {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CornerDownLeft className="h-3.5 w-3.5" />}
+            {isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <CornerDownLeft className="h-3.5 w-3.5" />
+            )}
             Enviar
           </Button>
         </div>
       </div>
     </section>
-  )
+  );
 }
 
 function PanelHeader({ icon, title }: { icon: ReactNode; title: string }) {
@@ -648,20 +841,32 @@ function PanelHeader({ icon, title }: { icon: ReactNode; title: string }) {
       {icon}
       {title}
     </div>
-  )
+  );
 }
 
-function LabeledText({ label, text, strong }: { label: string; text: string; strong?: boolean }) {
+function LabeledText({
+  label,
+  text,
+  strong,
+}: {
+  label: string;
+  text: string;
+  strong?: boolean;
+}) {
   return (
     <p>
       <span className="text-muted-foreground">{label}: </span>
-      {strong ? <strong className="text-foreground">{text}</strong> : <span>{text}</span>}
+      {strong ? (
+        <strong className="text-foreground">{text}</strong>
+      ) : (
+        <span>{text}</span>
+      )}
     </p>
-  )
+  );
 }
 
 function stripLeadingNumber(value: string) {
-  return value.replace(/^\s*\d+[).]\s*/, '').trim()
+  return value.replace(/^\s*\d+[).]\s*/, "").trim();
 }
 
 function splitTechnicalValues(value: string) {
@@ -672,95 +877,107 @@ function splitTechnicalValues(value: string) {
         .map((item) => item.trim())
         .filter(Boolean),
     ),
-  )
+  );
 }
 
-function getSuggestedCustomerReply(ticket: Ticket, triage: TicketAiTriageResult | null) {
-  const reply = triage?.suggestedCustomerReply?.trim()
-  if (reply) return reply
+function getSuggestedCustomerReply(
+  ticket: Ticket,
+  triage: TicketAiTriageResult | null,
+) {
+  const reply = triage?.suggestedCustomerReply?.trim();
+  if (reply) return reply;
 
   const questionText = triage?.customerQuestions?.length
-    ? ` Para avançarmos com mais precisão, poderia nos enviar: ${triage.customerQuestions.map(stripLeadingNumber).join('; ')}.`
-    : ''
+    ? ` Para avançarmos com mais precisão, poderia nos enviar: ${triage.customerQuestions.map(stripLeadingNumber).join("; ")}.`
+    : "";
 
   return [
-    'Olá! Obrigado pelo contato.',
-    `Recebemos a solicitação${ticket.subject ? ` sobre "${ticket.subject}"` : ''} e já estamos analisando o cenário informado.`,
+    "Olá! Obrigado pelo contato.",
+    `Recebemos a solicitação${ticket.subject ? ` sobre "${ticket.subject}"` : ""} e já estamos analisando o cenário informado.`,
     triage?.summary ? `Identificamos inicialmente: ${triage.summary}` : null,
     questionText,
-    'Assim que tivermos uma atualização mais concreta, retornaremos por aqui.',
+    "Assim que tivermos uma atualização mais concreta, retornaremos por aqui.",
   ]
     .filter(Boolean)
-    .join(' ')
+    .join(" ");
 }
 
 async function copyText(text: string) {
   if (!text.trim()) {
-    throw new Error('Não há análise para copiar.')
+    throw new Error("Não há análise para copiar.");
   }
 
   if (navigator.clipboard?.writeText && window.isSecureContext) {
-    await navigator.clipboard.writeText(text)
-    return
+    await navigator.clipboard.writeText(text);
+    return;
   }
 
-  const textarea = document.createElement('textarea')
-  textarea.value = text
-  textarea.setAttribute('readonly', '')
-  textarea.style.position = 'fixed'
-  textarea.style.left = '-9999px'
-  textarea.style.top = '0'
-  document.body.appendChild(textarea)
-  textarea.focus()
-  textarea.select()
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "0";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
 
   try {
-    const copied = document.execCommand('copy')
+    const copied = document.execCommand("copy");
     if (!copied) {
-      throw new Error('O navegador bloqueou a cópia automática.')
+      throw new Error("O navegador bloqueou a cópia automática.");
     }
   } finally {
-    document.body.removeChild(textarea)
+    document.body.removeChild(textarea);
   }
 }
 
 function splitStepAndSql(value: string) {
-  const text = stripLeadingNumber(value)
-  const match = text.match(/\b(SELECT|WITH)\b/i)
+  const text = stripLeadingNumber(value);
+  const match = text.match(/\b(SELECT|WITH)\b/i);
   if (!match || match.index === undefined) {
-    return { text, sql: '' }
+    return { text, sql: "" };
   }
 
   return {
     text: text
       .slice(0, match.index)
-      .replace(/[:;\s]+$/, '')
+      .replace(/[:;\s]+$/, "")
       .trim(),
     sql: text
       .slice(match.index)
-      .replace(/;?\s*$/, ';')
+      .replace(/;?\s*$/, ";")
       .trim(),
-  }
+  };
 }
 
 function NextStepsBlock({ items }: { items: string[] }) {
-  if (!items.length) return null
+  if (!items.length) return null;
 
   return (
     <div className="mt-4">
-      <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Próximos passos</p>
+      <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+        Próximos passos
+      </p>
       <div className="space-y-2">
         {items.map((item, index) => {
-          const step = splitStepAndSql(item)
+          const step = splitStepAndSql(item);
 
           return (
-            <div key={`${index}-${item}`} className="rounded-lg border border-border/50 bg-background/35 p-3">
+            <div
+              key={`${index}-${item}`}
+              className="rounded-lg border border-border/50 bg-background/35 p-3"
+            >
               <div className="flex gap-3">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-primary/35 bg-primary/10 text-xs font-semibold tabular-nums text-primary">
                   {index + 1}
                 </span>
                 <div className="min-w-0 flex-1 space-y-2">
-                  {step.text && <p className="text-sm leading-relaxed text-foreground">{step.text}</p>}
+                  {step.text && (
+                    <p className="text-sm leading-relaxed text-foreground">
+                      {step.text}
+                    </p>
+                  )}
                   {step.sql ? (
                     <pre className="overflow-x-auto rounded-md border border-cyan-400/25 bg-cyan-950/20 p-3 font-mono text-xs leading-relaxed text-cyan-50">
                       <code>{step.sql}</code>
@@ -769,24 +986,32 @@ function NextStepsBlock({ items }: { items: string[] }) {
                 </div>
               </div>
             </div>
-          )
+          );
         })}
       </div>
     </div>
-  )
+  );
 }
 
-function DiagnosticQueriesBlock({ items }: { items: TicketAiTriageResult['diagnosticQueries'] }) {
-  if (!items.length) return null
+function DiagnosticQueriesBlock({
+  items,
+}: {
+  items: TicketAiTriageResult["diagnosticQueries"];
+}) {
+  if (!items.length) return null;
 
   const copySql = async (sql: string) => {
     try {
-      await copyText(sql)
-      toast.success('SELECT copiado')
+      await copyText(sql);
+      toast.success("SELECT copiado");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Não foi possível copiar o SELECT')
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível copiar o SELECT",
+      );
     }
-  }
+  };
 
   return (
     <div className="mt-4">
@@ -796,13 +1021,20 @@ function DiagnosticQueriesBlock({ items }: { items: TicketAiTriageResult['diagno
       </div>
       <div className="space-y-2">
         {items.map((item, index) => (
-          <div key={`${item.title}-${index}`} className="rounded-lg border border-cyan-400/20 bg-cyan-950/10 p-3">
+          <div
+            key={`${item.title}-${index}`}
+            className="rounded-lg border border-cyan-400/20 bg-cyan-950/10 p-3"
+          >
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-medium text-foreground">
                   Query {index + 1}: {item.title}
                 </p>
-                {item.purpose && <p className="mt-1 text-xs text-muted-foreground">{item.purpose}</p>}
+                {item.purpose && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {item.purpose}
+                  </p>
+                )}
               </div>
               <Button
                 size="sm"
@@ -819,7 +1051,9 @@ function DiagnosticQueriesBlock({ items }: { items: TicketAiTriageResult['diagno
             </pre>
             {item.expectedEvidence && (
               <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                <span className="font-medium text-foreground">Como interpretar: </span>
+                <span className="font-medium text-foreground">
+                  Como interpretar:{" "}
+                </span>
                 {item.expectedEvidence}
               </p>
             )}
@@ -827,11 +1061,15 @@ function DiagnosticQueriesBlock({ items }: { items: TicketAiTriageResult['diagno
         ))}
       </div>
     </div>
-  )
+  );
 }
 
-function ExecutedQueriesBlock({ items }: { items: TicketAiTriageResult['executedQueries'] }) {
-  if (!items.length) return null
+function ExecutedQueriesBlock({
+  items,
+}: {
+  items: TicketAiTriageResult["executedQueries"];
+}) {
+  if (!items.length) return null;
 
   return (
     <div className="mt-4">
@@ -841,7 +1079,10 @@ function ExecutedQueriesBlock({ items }: { items: TicketAiTriageResult['executed
       </div>
       <div className="space-y-2">
         {items.map((item, index) => (
-          <div key={`${item.title}-${index}`} className="rounded-lg border border-border/50 bg-background/35 p-3">
+          <div
+            key={`${item.title}-${index}`}
+            className="rounded-lg border border-border/50 bg-background/35 p-3"
+          >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-sm font-medium text-foreground">
                 Query {index + 1}: {item.title}
@@ -849,19 +1090,33 @@ function ExecutedQueriesBlock({ items }: { items: TicketAiTriageResult['executed
               <div className="flex items-center gap-2 text-xs">
                 <Badge
                   variant={
-                    item.status === 'completed' ? 'default' : item.status === 'failed' ? 'destructive' : 'secondary'
+                    item.status === "completed"
+                      ? "default"
+                      : item.status === "failed"
+                        ? "destructive"
+                        : "secondary"
                   }
                 >
-                  {item.status === 'completed' ? 'executada' : item.status === 'failed' ? 'falhou' : 'ignorada'}
+                  {item.status === "completed"
+                    ? "executada"
+                    : item.status === "failed"
+                      ? "falhou"
+                      : "ignorada"}
                 </Badge>
-                <span className="text-muted-foreground">{item.durationMs} ms</span>
-                {item.rowCount !== null && <span className="text-muted-foreground">{item.rowCount} linhas</span>}
+                <span className="text-muted-foreground">
+                  {item.durationMs} ms
+                </span>
+                {item.rowCount !== null && (
+                  <span className="text-muted-foreground">
+                    {item.rowCount} linhas
+                  </span>
+                )}
               </div>
             </div>
             <pre className="mt-3 overflow-x-auto rounded-md border border-border/45 bg-muted/20 p-3 font-mono text-xs leading-relaxed text-foreground">
               <code>{item.sql}</code>
             </pre>
-            {item.status === 'completed' && (
+            {item.status === "completed" && (
               <QueryResultPreview
                 columns={item.columns ?? []}
                 rows={item.sampleRows ?? []}
@@ -869,12 +1124,14 @@ function ExecutedQueriesBlock({ items }: { items: TicketAiTriageResult['executed
                 rowCount={item.rowCount}
               />
             )}
-            {item.error && <p className="mt-2 text-xs text-destructive">{item.error}</p>}
+            {item.error && (
+              <p className="mt-2 text-xs text-destructive">{item.error}</p>
+            )}
           </div>
         ))}
       </div>
     </div>
-  )
+  );
 }
 
 function QueryResultPreview({
@@ -883,33 +1140,37 @@ function QueryResultPreview({
   truncated,
   rowCount,
 }: {
-  columns: string[]
-  rows: Array<Record<string, unknown>>
-  truncated: boolean
-  rowCount: number | null
+  columns: string[];
+  rows: Array<Record<string, unknown>>;
+  truncated: boolean;
+  rowCount: number | null;
 }) {
   if (!rows.length) {
     return (
       <p className="mt-2 text-xs text-muted-foreground">
         Resultado: a consulta foi executada e não retornou registros.
       </p>
-    )
+    );
   }
 
-  const visibleColumns = columns.length ? columns : Object.keys(rows[0])
+  const visibleColumns = columns.length ? columns : Object.keys(rows[0]);
 
   return (
     <div className="mt-3">
       <p className="mb-2 text-xs font-medium text-muted-foreground">
         Prévia do retorno ({rows.length}
-        {rowCount !== null ? ` de ${rowCount}` : ''} linha{rows.length === 1 ? '' : 's'})
+        {rowCount !== null ? ` de ${rowCount}` : ""} linha
+        {rows.length === 1 ? "" : "s"})
       </p>
       <div className="overflow-x-auto rounded-md border border-border/45">
         <table className="min-w-full divide-y divide-border/45 text-left font-mono text-xs">
           <thead className="bg-muted/30">
             <tr>
               {visibleColumns.map((column) => (
-                <th key={column} className="whitespace-nowrap px-3 py-2 font-medium text-muted-foreground">
+                <th
+                  key={column}
+                  className="whitespace-nowrap px-3 py-2 font-medium text-muted-foreground"
+                >
                   {column}
                 </th>
               ))}
@@ -919,7 +1180,10 @@ function QueryResultPreview({
             {rows.map((row, rowIndex) => (
               <tr key={rowIndex}>
                 {visibleColumns.map((column) => (
-                  <td key={column} className="max-w-80 whitespace-pre-wrap break-words px-3 py-2 text-foreground">
+                  <td
+                    key={column}
+                    className="max-w-80 whitespace-pre-wrap break-words px-3 py-2 text-foreground"
+                  >
                     {formatQueryCell(row[column])}
                   </td>
                 ))}
@@ -930,22 +1194,27 @@ function QueryResultPreview({
       </div>
       {truncated && (
         <p className="mt-2 text-xs text-muted-foreground">
-          Exibindo apenas as 10 primeiras linhas; o total permanece indicado acima.
+          Exibindo apenas as 10 primeiras linhas; o total permanece indicado
+          acima.
         </p>
       )}
     </div>
-  )
+  );
 }
 
 function formatQueryCell(value: unknown) {
-  if (value === null || value === undefined) return 'NULL'
-  if (typeof value === 'string') return value
-  if (typeof value === 'object') return JSON.stringify(value)
-  return String(value)
+  if (value === null || value === undefined) return "NULL";
+  if (typeof value === "string") return value;
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
 }
 
-function CodeInvestigationBlock({ items }: { items: TicketAiTriageResult['codeInvestigationPaths'] }) {
-  if (!items.length) return null
+function CodeInvestigationBlock({
+  items,
+}: {
+  items: TicketAiTriageResult["codeInvestigationPaths"];
+}) {
+  if (!items.length) return null;
 
   return (
     <div className="mt-4">
@@ -961,9 +1230,13 @@ function CodeInvestigationBlock({ items }: { items: TicketAiTriageResult['codeIn
           >
             <p className="break-all font-mono text-xs text-primary">
               {item.path}
-              {item.symbol ? ` → ${item.symbol}` : ''}
+              {item.symbol ? ` → ${item.symbol}` : ""}
             </p>
-            {item.reason && <p className="mt-2 text-xs text-muted-foreground">{item.reason}</p>}
+            {item.reason && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                {item.reason}
+              </p>
+            )}
             {item.check && (
               <p className="mt-2 text-sm leading-relaxed text-foreground">
                 <span className="text-muted-foreground">Conferir: </span>
@@ -974,119 +1247,143 @@ function CodeInvestigationBlock({ items }: { items: TicketAiTriageResult['codeIn
         ))}
       </div>
     </div>
-  )
+  );
 }
 
 function ListBlock({ title, items }: { title: string; items: string[] }) {
-  if (!items.length) return null
+  if (!items.length) return null;
 
   return (
     <div className="mt-4">
-      <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">{title}</p>
+      <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+        {title}
+      </p>
       <ul className="list-disc space-y-1 pl-5 text-sm text-foreground">
         {items.map((item) => (
           <li key={item}>{stripLeadingNumber(item)}</li>
         ))}
       </ul>
     </div>
-  )
+  );
 }
 
-function formatTriageForCopy(ticket: Ticket, triage: TicketAiTriageResult | null) {
-  if (!triage) return ''
+function formatTriageForCopy(
+  ticket: Ticket,
+  triage: TicketAiTriageResult | null,
+) {
+  if (!triage) return "";
 
   return [
     `Ticket #${ticket.id}`,
     ticket.subject ? `Assunto: ${ticket.subject}` : null,
-    '',
+    "",
     `Resumo: ${triage.summary}`,
     `Sintoma: ${triage.symptom}`,
     `Área provável: ${triage.likelyArea}`,
     `Hipótese técnica: ${triage.technicalHypothesis}`,
-    '',
-    'Evidências:',
+    "",
+    "Evidências:",
     ...triage.evidence.map((item) => `- ${item}`),
-    '',
-    'Próximos passos:',
-    ...triage.nextSteps.map((item, index) => `${index + 1}. ${stripLeadingNumber(item)}`),
-    '',
-    'SELECTs sugeridos:',
-    ...(triage.diagnosticQueries ?? []).map((item) => `-- ${item.title}\n${item.sql}`),
-    '',
-    'Caminhos no código:',
-    ...(triage.codeInvestigationPaths ?? []).map(
-      (item) => `- ${item.path}${item.symbol ? ` → ${item.symbol}` : ''}: ${item.check || item.reason}`,
+    "",
+    "Próximos passos:",
+    ...triage.nextSteps.map(
+      (item, index) => `${index + 1}. ${stripLeadingNumber(item)}`,
     ),
-    '',
-    'Resposta sugerida ao cliente:',
+    "",
+    "SELECTs sugeridos:",
+    ...(triage.diagnosticQueries ?? []).map(
+      (item) => `-- ${item.title}\n${item.sql}`,
+    ),
+    "",
+    "Caminhos no código:",
+    ...(triage.codeInvestigationPaths ?? []).map(
+      (item) =>
+        `- ${item.path}${item.symbol ? ` → ${item.symbol}` : ""}: ${item.check || item.reason}`,
+    ),
+    "",
+    "Resposta sugerida ao cliente:",
     getSuggestedCustomerReply(ticket, triage),
   ]
     .filter(Boolean)
-    .join('\n')
+    .join("\n");
 }
 
 function formatExecutiveSummary(ticket: Ticket, triage: TicketAiTriageResult) {
   return [
-    `Ticket #${ticket.id}${ticket.subject ? ` - ${ticket.subject}` : ''}`,
+    `Ticket #${ticket.id}${ticket.subject ? ` - ${ticket.subject}` : ""}`,
     `Prioridade: ${triage.priority} | Confiança: ${triage.confidence}`,
     `Resumo: ${triage.summary}`,
     `Área provável: ${triage.likelyArea}`,
     triage.shouldCreateCard
-      ? 'Recomendação: criar card para acompanhamento técnico.'
-      : 'Recomendação: tratar na fila de atendimento.',
-  ].join('\n')
+      ? "Recomendação: criar card para acompanhamento técnico."
+      : "Recomendação: tratar na fila de atendimento.",
+  ].join("\n");
 }
 
-function formatTechnicalDescription(ticket: Ticket, triage: TicketAiTriageResult) {
+function formatTechnicalDescription(
+  ticket: Ticket,
+  triage: TicketAiTriageResult,
+) {
   return [
     `Ticket: #${ticket.id}`,
     ticket.subject ? `Assunto: ${ticket.subject}` : null,
     `Sintoma: ${triage.symptom}`,
     `Hipótese técnica: ${triage.technicalHypothesis}`,
     `Área provável: ${triage.likelyArea}`,
-    '',
-    'Evidências:',
+    "",
+    "Evidências:",
     ...triage.evidence.map((item) => `- ${stripLeadingNumber(item)}`),
-    '',
-    'Arquivos relacionados:',
-    ...triage.relevantFiles.map((file) => `- ${file.path}${file.reason ? `: ${file.reason}` : ''}`),
+    "",
+    "Arquivos relacionados:",
+    ...triage.relevantFiles.map(
+      (file) => `- ${file.path}${file.reason ? `: ${file.reason}` : ""}`,
+    ),
   ]
     .filter(Boolean)
-    .join('\n')
+    .join("\n");
 }
 
 function formatChecklist(triage: TicketAiTriageResult) {
-  return triage.nextSteps.map((item) => `- [ ] ${stripLeadingNumber(item)}`).join('\n')
+  return triage.nextSteps
+    .map((item) => `- [ ] ${stripLeadingNumber(item)}`)
+    .join("\n");
 }
 
 function buildTrelloLabels(triage: TicketAiTriageResult) {
   return Array.from(
     new Set(
-      [...triage.suggestedCard.labels, ...triage.tags, triage.priority !== 'baixa' ? triage.priority : null].filter(
-        (label): label is string => Boolean(label?.trim()),
-      ),
+      [
+        ...triage.suggestedCard.labels,
+        ...triage.tags,
+        triage.priority !== "baixa" ? triage.priority : null,
+      ].filter((label): label is string => Boolean(label?.trim())),
     ),
-  ).slice(0, 8)
+  ).slice(0, 8);
 }
 
-function formatTriageForTrello(ticket: Ticket, triage: TicketAiTriageResult | null) {
-  if (!triage) return ''
+function formatTriageForTrello(
+  ticket: Ticket,
+  triage: TicketAiTriageResult | null,
+) {
+  if (!triage) return "";
 
   return [
     `Resumo: ${triage.summary}`,
     `Sintoma: ${triage.symptom}`,
     `Área provável: ${triage.likelyArea}`,
     `Hipótese técnica: ${triage.technicalHypothesis}`,
-    '',
-    'Evidências:',
+    "",
+    "Evidências:",
     ...triage.evidence.map((item) => `- ${stripLeadingNumber(item)}`),
-    '',
-    'Próximos passos:',
-    ...triage.nextSteps.map((item, index) => `${index + 1}. ${stripLeadingNumber(item)}`),
-    '',
-    'Resposta sugerida ao cliente:',
+    "",
+    "Próximos passos:",
+    ...triage.nextSteps.map(
+      (item, index) => `${index + 1}. ${stripLeadingNumber(item)}`,
+    ),
+    "",
+    "Resposta sugerida ao cliente:",
     getSuggestedCustomerReply(ticket, triage),
   ]
     .filter(Boolean)
-    .join('\n')
+    .join("\n");
 }

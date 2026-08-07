@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '@/contexts/auth-context'
 import { Button } from '@/components/ui/button'
-import { Globe2, Inbox, LogOut, Ticket } from 'lucide-react'
+import { Activity, Globe2, Inbox, LogOut, Ticket } from 'lucide-react'
 
 interface HeaderProps {
   onLogout: () => void
@@ -27,6 +27,9 @@ export function Header({ onLogout }: HeaderProps) {
             </HeaderLink>
             <HeaderLink to="/apis" icon={<Globe2 className="h-3.5 w-3.5" />}>
               Consultar APIs
+            </HeaderLink>
+            <HeaderLink to="/ops" icon={<Activity className="h-3.5 w-3.5" />}>
+              Operação
             </HeaderLink>
           </nav>
         </div>

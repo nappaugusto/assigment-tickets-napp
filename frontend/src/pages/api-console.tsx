@@ -6,6 +6,8 @@ import {
   Check,
   ChevronDown,
   Copy,
+  Eye,
+  EyeOff,
   FolderKanban,
   Globe2,
   Import,
@@ -70,8 +72,22 @@ const emptyDraft = (): DraftRequest => ({
 })
 
 const emptyPubsubResult = {
-  result: null as PublishTrierOrderResponse | null,
+  result: null as PublishTrierOrderBatchResult | null,
   error: null as string | null,
+}
+
+interface PublishTrierOrderBatchItem {
+  orderId: string
+  success: boolean
+  response?: PublishTrierOrderResponse
+  error?: string
+}
+
+interface PublishTrierOrderBatchResult {
+  total: number
+  published: number
+  failed: number
+  results: PublishTrierOrderBatchItem[]
 }
 
 const TRIER_DEFAULT_API_URL = 'https://api-sgf-gateway.triersistemas.com.br/sgfpod1'
@@ -83,8 +99,20 @@ const TRIER_CONFIG_CORE_FIELDS = [
   'tenant',
   'user',
   'company_document',
+  'client_id',
+  'client_secret',
+  'cnpj',
 ]
 const HOS_TOPIC = 'platform-service-tpc-order-to-hos-sistemas-prd'
+const TRIER_LEGACY_TOPIC = 'platform-service-tpc-order-to-trier-sistemas-legacy-prd'
+const TRIER_CLOUD_TOPIC = 'platform-service-tpc-order-to-trier-sistemas-prd'
+const LINX_FARMA_CLOUD_TOPIC = 'platform-service-tpc-order-to-linx-farma-cloud-prd'
+type PubsubTrierTopic = '' | (typeof PUBSUB_TRIER_TOPICS)[number]
+
+function parseOrderIds(value: string) {
+  const uuidPattern = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi
+  return [...new Set((value.match(uuidPattern) ?? []).map((orderId) => orderId.toLowerCase()))]
+}
 
 const requestToDraft = (request: ApiRequestConfig): DraftRequest => ({
   id: request.id,
@@ -131,6 +159,75 @@ function parseVariables(value: string) {
       variables[key.trim()] = valueParts.join('=').trim()
     })
   return variables
+}
+
+function applyVariables(value: string, variables: Record<string, string>) {
+  return value.replace(/\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g, (_match, key) => variables[key] ?? '')
+}
+
+function applyVariablesToRecord(value: Record<string, string>, variables: Record<string, string>) {
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entryValue]) => [
+      applyVariables(key, variables),
+      applyVariables(String(entryValue ?? ''), variables),
+    ]),
+  )
+}
+
+function buildResolvedUrl(rawUrl: string, rawParams: string) {
+  const url = new URL(rawUrl)
+  rawParams
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .forEach((line) => {
+      const [key, ...valueParts] = line.split('=')
+      if (!key.trim()) return
+      url.searchParams.set(key.trim(), valueParts.join('=').trim())
+    })
+  return url.toString()
+}
+
+function buildAuthHeaders(authType: ApiAuthType, authConfig: Record<string, string>): Record<string, string> {
+  if (authType === 'bearer' && authConfig.token?.trim()) {
+    return { Authorization: `Bearer ${authConfig.token.trim()}` }
+  }
+
+  if (authType === 'basic' && authConfig.username?.trim()) {
+    const encoded = btoa(`${authConfig.username}:${authConfig.password ?? ''}`)
+    return { Authorization: `Basic ${encoded}` }
+  }
+
+  if (authType === 'apiKey' && authConfig.headerName?.trim() && authConfig.value?.trim()) {
+    return { [authConfig.headerName.trim()]: authConfig.value.trim() }
+  }
+
+  return {}
+}
+
+function shellEscape(value: string) {
+  return "'" + value.replace(/'/g, "'\\''") + "'"
+}
+
+function buildCurlFromDraft(draft: DraftRequest) {
+  const variables = parseVariables(draft.variablesText)
+  const headers = {
+    ...applyVariablesToRecord(parseHeaders(draft.headersText), variables),
+    ...buildAuthHeaders(draft.authType, applyVariablesToRecord(draft.authConfig, variables)),
+  }
+  const url = applyVariables(draft.url, variables)
+  const queryParams = applyVariables(draft.queryParams, variables)
+  const body = applyVariables(draft.body, variables)
+  const resolvedUrl = buildResolvedUrl(url, queryParams)
+  const hasBody = !['GET', 'DELETE'].includes(draft.method) && !!body.trim()
+
+  const parts = [`curl -X ${draft.method} ${shellEscape(resolvedUrl)}`]
+  Object.entries(headers).forEach(([key, value]) => {
+    parts.push(`-H ${shellEscape(`${key}: ${value}`)}`)
+  })
+  if (hasBody) parts.push(`-d ${shellEscape(body)}`)
+
+  return parts.join(' \\\n  ')
 }
 
 function tokenizeCurl(input: string) {
@@ -350,8 +447,9 @@ export function ApiConsolePage() {
   const [curlImportOpen, setCurlImportOpen] = useState(false)
   const [curlImportValue, setCurlImportValue] = useState('')
   const [copied, setCopied] = useState(false)
+  const [curlCopied, setCurlCopied] = useState(false)
   const [response, setResponse] = useState<ResponseState>({ result: null, error: null })
-  const [pubsubTopic, setPubsubTopic] = useState<(typeof PUBSUB_TRIER_TOPICS)[number]>(PUBSUB_TRIER_TOPICS[1])
+  const [pubsubTopic, setPubsubTopic] = useState<PubsubTrierTopic>('')
   const [pubsubOrderId, setPubsubOrderId] = useState('')
   const [pubsubToken, setPubsubToken] = useState('')
   const [pubsubApiUrl, setPubsubApiUrl] = useState(TRIER_DEFAULT_API_URL)
@@ -433,7 +531,16 @@ export function ApiConsolePage() {
 
   const handleCreateChannel = async () => {
     try {
-      const channel = await apiIntegrationsApi.createChannel('Novo canal', 'Exemplo: iFood, Mercado Livre, Shopify')
+      const usedNames = new Set(channels.map((channel) => channel.name.toLocaleLowerCase()))
+      let channelName = 'Novo canal'
+      let suffix = 2
+
+      while (usedNames.has(channelName.toLocaleLowerCase())) {
+        channelName = `Novo canal ${suffix}`
+        suffix += 1
+      }
+
+      const channel = await apiIntegrationsApi.createChannel(channelName, 'Exemplo: iFood, Mercado Livre, Shopify')
       await loadChannels(channel.id, null)
       toast.success('Canal criado')
     } catch (error) {
@@ -508,6 +615,12 @@ export function ApiConsolePage() {
 
   const handleDeleteRequest = async () => {
     if (!draft.id || !selectedChannel) return
+
+    const confirmed = window.confirm(
+      `Tem certeza de que deseja excluir a API "${draft.name}"? Esta ação não pode ser desfeita.`,
+    )
+    if (!confirmed) return
+
     try {
       await apiIntegrationsApi.deleteRequest(draft.id)
       await loadChannels(selectedChannel.id, null)
@@ -548,6 +661,18 @@ export function ApiConsolePage() {
     }))
   }
 
+  const handleCopyCurl = async () => {
+    try {
+      const curl = buildCurlFromDraft(draft)
+      await navigator.clipboard.writeText(curl)
+      setCurlCopied(true)
+      window.setTimeout(() => setCurlCopied(false), 1400)
+      toast.success('cURL copiado')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Erro ao gerar cURL')
+    }
+  }
+
   const handleImportCurl = () => {
     try {
       setDraft((current) => parseCurlToDraft(curlImportValue, current))
@@ -562,22 +687,59 @@ export function ApiConsolePage() {
   }
 
   const handlePublishPubsub = async () => {
-    setIsPublishingPubsub(true)
     setPubsubResult(emptyPubsubResult)
 
     try {
+      if (!pubsubTopic) {
+        toast.error('Escolha o tópico antes de publicar')
+        return
+      }
+      const orderIds = parseOrderIds(pubsubOrderId)
+      if (orderIds.length === 0) {
+        toast.error('Nenhum Order ID válido foi encontrado')
+        return
+      }
+
       const extraConfig = parseHeaders(pubsubExtraConfig)
-      const result = await pubsubToolsApi.publishTrierOrder({
-        topic: pubsubTopic,
-        orderId: pubsubOrderId,
-        token: pubsubToken,
-        apiUrl: pubsubApiUrl || undefined,
-        defaultDeliveryFee: pubsubDeliveryFee || undefined,
-        sendOrderToChannelIn: pubsubSendOrderToChannelIn,
-        extraConfig,
-      })
-      setPubsubResult({ result, error: null })
-      toast.success('Mensagem publicada no Pub/Sub')
+      const isLegacyTopic = pubsubTopic === TRIER_LEGACY_TOPIC
+      setIsPublishingPubsub(true)
+      const results: PublishTrierOrderBatchItem[] = []
+
+      for (const orderId of orderIds) {
+        try {
+          const response = await pubsubToolsApi.publishTrierOrder({
+            topic: pubsubTopic,
+            orderId,
+            token: pubsubToken || undefined,
+            apiUrl: isLegacyTopic ? pubsubApiUrl || undefined : undefined,
+            defaultDeliveryFee: isLegacyTopic ? pubsubDeliveryFee || undefined : undefined,
+            sendOrderToChannelIn: pubsubSendOrderToChannelIn,
+            extraConfig,
+          })
+          results.push({ orderId, success: true, response })
+        } catch (error) {
+          results.push({
+            orderId,
+            success: false,
+            error: error instanceof Error ? error.message : 'Erro ao publicar no Pub/Sub',
+          })
+        }
+      }
+
+      const published = results.filter((item) => item.success).length
+      const batchResult = {
+        total: results.length,
+        published,
+        failed: results.length - published,
+        results,
+      }
+      setPubsubResult({ result: batchResult, error: null })
+
+      if (batchResult.failed === 0) {
+        toast.success(`${published} ${published === 1 ? 'mensagem publicada' : 'mensagens publicadas'} no Pub/Sub`)
+      } else {
+        toast.warning(`${published} publicadas e ${batchResult.failed} com erro`)
+      }
     } catch (error) {
       setPubsubResult({
         result: null,
@@ -611,25 +773,44 @@ export function ApiConsolePage() {
       const hosConfig = Object.fromEntries(
         Object.entries(parsed).filter(([key]) => ['seller_channel_in_id'].includes(key)),
       )
+      const linxConfig = Object.fromEntries(
+        Object.entries(parsed).filter(([key]) => ['client_id', 'client_secret', 'cnpj'].includes(key)),
+      )
+      const hasCloudConfig = Object.keys(cloudConfig).length > 0
+      const hasHosConfig = Object.keys(hosConfig).length > 0
+      const hasLinxConfig = Object.keys(linxConfig).length > 0
 
-      if (!apiUrl && !token && !deliveryFee && Object.keys(cloudConfig).length === 0 && Object.keys(hosConfig).length === 0) {
+      if (!apiUrl && !token && !deliveryFee && !hasCloudConfig && !hasHosConfig && !hasLinxConfig) {
         throw new Error('Não encontrei token ou campos reconhecidos nesse JSON')
       }
 
-      if (Object.keys(hosConfig).length > 0) {
+      if (hasLinxConfig) {
+        setPubsubTopic(LINX_FARMA_CLOUD_TOPIC)
+        setPubsubSendOrderToChannelIn(false)
+        setPubsubApiUrl('')
+        setPubsubDeliveryFee('')
+      } else if (hasHosConfig) {
         setPubsubTopic(HOS_TOPIC)
         setPubsubSendOrderToChannelIn(true)
         setPubsubApiUrl('')
         setPubsubDeliveryFee('')
+      } else if (hasCloudConfig) {
+        setPubsubTopic(TRIER_CLOUD_TOPIC)
+        setPubsubSendOrderToChannelIn(false)
+        setPubsubApiUrl('')
+        setPubsubDeliveryFee('')
+      } else if (apiUrl || deliveryFee) {
+        setPubsubTopic(TRIER_LEGACY_TOPIC)
+        setPubsubSendOrderToChannelIn(false)
       }
-      if (apiUrl) setPubsubApiUrl(apiUrl)
+      if (apiUrl && !hasCloudConfig && !hasHosConfig && !hasLinxConfig) setPubsubApiUrl(apiUrl)
       if (token) setPubsubToken(token)
-      if (deliveryFee) setPubsubDeliveryFee(deliveryFee)
+      if (deliveryFee && !hasCloudConfig && !hasHosConfig && !hasLinxConfig) setPubsubDeliveryFee(deliveryFee)
 
       const extraConfig = Object.fromEntries(
         Object.entries(parsed).filter(([key]) => !TRIER_CONFIG_CORE_FIELDS.includes(key)),
       )
-      setPubsubExtraConfig(JSON.stringify({ ...cloudConfig, ...hosConfig, ...extraConfig }, null, 2))
+      setPubsubExtraConfig(JSON.stringify({ ...cloudConfig, ...hosConfig, ...linxConfig, ...extraConfig }, null, 2))
       toast.success('Config Trier extraída')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'JSON inválido para extrair token')
@@ -668,7 +849,7 @@ export function ApiConsolePage() {
                     label="Config Trier"
                     value={pubsubConfigSource}
                     onChange={setPubsubConfigSource}
-                    placeholder={'{"api_url":"https://api-sgf-gateway.triersistemas.com.br/sgfpod1","token":"...","default_delivery_fee":"85853"}\n\n{"token":"...","tenant":"f17872","user":"suporte@f17872","company_document":"28.466.181/0001-65"}\n\n{"seller_channel_in_id":"95","token":"92B17464B2BE9E8481284B52D4FB64DD5BA79F09"}'}
+                    placeholder={'{"api_url":"https://api-sgf-gateway.triersistemas.com.br/sgfpod1","token":"...","default_delivery_fee":"85853"}\n\n{"token":"...","tenant":"f17872","user":"suporte@f17872","company_document":"28.466.181/0001-65"}\n\n{"seller_channel_in_id":"95","token":"..."}\n\n{"client_id":"...","client_secret":"...","cnpj":"..."}'}
                     rows={4}
                   />
                   <div className="mt-3 flex justify-end">
@@ -683,9 +864,10 @@ export function ApiConsolePage() {
                   <Field label="Tópico">
                     <select
                       value={pubsubTopic}
-                      onChange={(event) => setPubsubTopic(event.target.value as (typeof PUBSUB_TRIER_TOPICS)[number])}
+                      onChange={(event) => setPubsubTopic(event.target.value as PubsubTrierTopic)}
                       className="h-9 w-full rounded-md border border-input bg-background/30 px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                     >
+                      <option value="">Selecione manualmente</option>
                       {PUBSUB_TRIER_TOPICS.map((topic) => (
                         <option key={topic} value={topic}>
                           {topic}
@@ -693,12 +875,20 @@ export function ApiConsolePage() {
                       ))}
                     </select>
                   </Field>
-                  <Field label="Order ID">
-                    <Input
+                  <Field label="Order IDs">
+                    <textarea
                       value={pubsubOrderId}
                       onChange={(event) => setPubsubOrderId(event.target.value)}
-                      placeholder="4795efe4-69b0-11f1-ac58-93a44a325670"
+                      placeholder={'Cole os IDs aqui — eles serão identificados automaticamente'}
+                      rows={3}
+                      spellCheck={false}
+                      className="w-full resize-y rounded-md border border-input bg-background/30 px-3 py-2 font-mono text-xs leading-relaxed text-foreground shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                     />
+                    {parseOrderIds(pubsubOrderId).length > 0 && (
+                      <span className="text-xs text-muted-foreground">
+                        {parseOrderIds(pubsubOrderId).length} Order ID(s) válido(s) identificado(s)
+                      </span>
+                    )}
                   </Field>
                   <Field label="Channel In">
                     <label className="flex h-9 items-center gap-2 rounded-md border border-input bg-background/30 px-3 text-sm text-muted-foreground">
@@ -899,6 +1089,10 @@ export function ApiConsolePage() {
                     <Import className="h-4 w-4" />
                     Importar cURL
                   </Button>
+                  <Button type="button" variant="outline" onClick={handleCopyCurl} disabled={!selectedChannel || !draft.url}>
+                    {curlCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                    Copiar cURL
+                  </Button>
                   <Button type="button" variant="outline" onClick={handleDeleteRequest} disabled={!draft.id}>
                     <Trash2 className="h-4 w-4" />
                     Excluir API
@@ -941,6 +1135,8 @@ export function ApiConsolePage() {
                     value={draft.name}
                     onChange={(event) => setDraft({ ...draft, name: event.target.value })}
                     placeholder="Listar pedidos"
+                    required
+                    minLength={2}
                   />
                 </Field>
                 <Field label="Método">
@@ -974,6 +1170,8 @@ export function ApiConsolePage() {
                     onChange={(event) => setDraft({ ...draft, url: event.target.value })}
                     placeholder="https://api.exemplo.com/v1/orders"
                     className="pl-9"
+                    type="url"
+                    required
                   />
                 </div>
               </Field>
@@ -1099,15 +1297,26 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 function SecretInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const [isVisible, setIsVisible] = useState(false)
+
   return (
     <div className="relative">
       <KeyRound className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
       <Input
-        type="password"
+        type={isVisible ? 'text' : 'password'}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="pl-9"
+        className="px-9"
       />
+      <button
+        type="button"
+        onClick={() => setIsVisible((current) => !current)}
+        className="absolute right-0 top-0 flex h-9 w-9 items-center justify-center rounded-r-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        aria-label={isVisible ? 'Ocultar valor' : 'Mostrar valor'}
+        title={isVisible ? 'Ocultar valor' : 'Mostrar valor'}
+      >
+        {isVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </button>
     </div>
   )
 }

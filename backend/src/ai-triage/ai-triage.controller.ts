@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { SessionGuard } from '../auth/auth.guard';
 import { AiTriageService } from './ai-triage.service';
+import { TechnicalKnowledgeService } from './technical-knowledge.service';
 import {
   CodeAnalysisContextDto,
   TriageDecisionDto,
@@ -20,7 +21,10 @@ import {
 @UseGuards(SessionGuard)
 @Controller()
 export class AiTriageController {
-  constructor(private readonly aiTriageService: AiTriageService) {}
+  constructor(
+    private readonly aiTriageService: AiTriageService,
+    private readonly technicalKnowledge: TechnicalKnowledgeService,
+  ) {}
 
   @Get('tickets/:ticketId/triage')
   async latest(@Param('ticketId', ParseIntPipe) ticketId: number) {
@@ -41,6 +45,16 @@ export class AiTriageController {
     return {
       claude: await this.aiTriageService.refreshClaudeCliStatus(),
     };
+  }
+
+  @Get('triage/knowledge/status')
+  async knowledgeStatus() {
+    return { knowledge: await this.technicalKnowledge.getStatus() };
+  }
+
+  @Post('triage/knowledge/refresh')
+  async refreshKnowledge() {
+    return { knowledge: await this.technicalKnowledge.refresh() };
   }
 
   @Post('tickets/:ticketId/triage')
