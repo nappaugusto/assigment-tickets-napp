@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { type Ticket } from '@/lib/api'
 import { normalizeText, getSlaStatus, formatDate, getBrazilDateKey } from '@/lib/date-utils'
+import { isTicketInTrello } from '@/lib/utils'
 
 export type QuickFilter =
   | 'all'
@@ -104,7 +105,7 @@ function matchesQuickFilter(ticket: Ticket, filter: QuickFilter): boolean {
   if (filter === 'unassigned') return !ticket.responsavel
   if (filter === 'without_ai') return !ticket.ai_triage
   if (filter === 'with_ai') return Boolean(ticket.ai_triage)
-  if (filter === 'trello') return Boolean(ticket.trello_card_url)
+  if (filter === 'trello') return isTicketInTrello(ticket)
   if (filter === 'sla_risk') {
     const sla = getSlaStatus(ticket.slaSolutionDate, ticket.slaSolutionDateIsPaused)
     return sla === 'warning' || sla === 'expired'

@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { AlertTriangle, Bot, ChevronDown, ChevronUp, Clock3, KanbanSquare, UserRound, Workflow } from 'lucide-react'
 import { type Ticket } from '@/lib/api'
+import { isTicketInTrello } from '@/lib/utils'
 import { formatDate } from '@/lib/date-utils'
 import { type QuickFilter } from '@/hooks/use-ticket-filters'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -245,7 +246,7 @@ export function ManagementInsights({ tickets, newTickets, onQuickFilter, onSearc
   const withTriage = all.filter((ticket) => ticket.ai_triage).length
   const overdue = all.filter(isOverdue)
   const next48h = all.filter(dueSoon)
-  const inTrello = all.filter((ticket) => ticket.trello_card_url).length
+  const inTrello = all.filter(isTicketInTrello).length
   const ages = all
     .map((ticket) => daysSince(ticket.opened_at))
     .filter((value): value is number => value !== null)

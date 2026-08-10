@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { type Ticket } from '@/lib/api'
+import { isTicketInTrello } from '@/lib/utils'
 import { getSlaStatus, getTimeUntilSla, formatDate } from '@/lib/date-utils'
 import { useAuth } from '@/contexts/auth-context'
 import { Badge } from '@/components/ui/badge'
@@ -311,10 +312,10 @@ export function TicketTable(props: TicketTableProps) {
     }
   })
   const trelloTickets = [...props.tickets, ...props.newTickets].filter(
-    (ticket) => Boolean(ticket.trello_card_url),
+    isTicketInTrello,
   )
-  const inProgressTickets = props.tickets.filter((ticket) => !ticket.trello_card_url)
-  const newTickets = props.newTickets.filter((ticket) => !ticket.trello_card_url)
+  const inProgressTickets = props.tickets.filter((ticket) => !isTicketInTrello(ticket))
+  const newTickets = props.newTickets.filter((ticket) => !isTicketInTrello(ticket))
   const sectionIds = ['inProgress', 'trello', 'newTickets']
   const allCollapsed = sectionIds.every((id) => collapsedSections[id])
 
