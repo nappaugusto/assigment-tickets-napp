@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   peopleApi,
+  trelloApi,
   ticketsApi,
   type TicketsPayload,
 } from '@/lib/api'
@@ -12,7 +13,10 @@ export const ASSIGNMENT_PEOPLE_DETAILS_QUERY_KEY = ['assignment-people-details']
 export function useTickets() {
   return useQuery({
     queryKey: TICKETS_QUERY_KEY,
-    queryFn: () => ticketsApi.refresh(false),
+    queryFn: async () => {
+      await trelloApi.syncTicketLinks().catch(() => undefined)
+      return ticketsApi.refresh(false)
+    },
     refetchInterval: 30_000,
     staleTime: 20_000,
   })

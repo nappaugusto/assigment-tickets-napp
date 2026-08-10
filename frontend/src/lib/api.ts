@@ -681,6 +681,8 @@ export const trelloApi = {
     get<TrelloList[]>(
       `/trello/lists${boardId ? `?boardId=${encodeURIComponent(boardId)}` : ""}`,
     ),
+  syncTicketLinks: () =>
+    post<{ scanned: number; linked: number }>("/trello/sync-ticket-links"),
   createCardFromTicket: (ticketId: number, payload: CreateTrelloCardPayload) =>
     post<{ card: TrelloCard; ticket: Ticket }>(
       `/trello/tickets/${ticketId}/cards`,

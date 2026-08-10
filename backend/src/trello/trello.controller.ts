@@ -23,6 +23,11 @@ export class TrelloController {
     return this.trelloService.listBoardLists(boardId);
   }
 
+  @Post('sync-ticket-links')
+  syncTicketLinks() {
+    return this.trelloService.syncTicketCardLinks();
+  }
+
   @Post('tickets/:ticketId/cards')
   createCard(
     @Param('ticketId', ParseIntPipe) ticketId: number,

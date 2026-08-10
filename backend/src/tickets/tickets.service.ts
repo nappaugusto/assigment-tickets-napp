@@ -578,7 +578,7 @@ export class TicketsService {
          SET trello_card_id = $1,
              trello_card_url = $2,
              trello_card_name = $3,
-             trello_card_created_at = now(),
+             trello_card_created_at = COALESCE(trello_card_created_at, now()),
              updated_at = now()
          WHERE id = $4
          RETURNING *`,

@@ -3,6 +3,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  OnApplicationBootstrap,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -95,8 +96,13 @@ export interface TrelloCardResponse {
   shortUrl?: string;
 }
 
+export interface TrelloCardSyncResult {
+  scanned: number;
+  linked: number;
+}
+
 @Injectable()
-export class TrelloService {
+export class TrelloService implements OnApplicationBootstrap {
   private readonly logger = new Logger(TrelloService.name);
   private readonly trelloTextLimit = 16000;
   private readonly signatureImageHashes = new Set([
@@ -120,6 +126,21 @@ export class TrelloService {
       timeout: Number(config.get('MOVIDESK_API_TIMEOUT') ?? 10000),
       headers: { accept: 'application/json' },
     });
+  }
+
+  async onApplicationBootstrap(): Promise<void> {
+    if (!this.isConfigured()) return;
+
+    try {
+      const result = await this.syncTicketCardLinks();
+      this.logger.log(
+        `Sincronização Trello concluída: ${result.linked}/${result.scanned} card(s) vinculado(s).`,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Não foi possível sincronizar os vínculos do Trello na inicialização: ${(error as Error).message}`,
+      );
+    }
   }
 
   getStatus(): TrelloStatusDto {
@@ -173,6 +194,57 @@ export class TrelloService {
       name: list.name,
       closed: !!list.closed,
     }));
+  }
+
+  async syncTicketCardLinks(): Promise<TrelloCardSyncResult> {
+    this.ensureConfigured();
+
+    const configuredNames = this.getEnv('TRELLO_SYNC_LIST_NAMES') || 'tickets';
+    const targetNames = new Set(
+      configuredNames
+        .split(',')
+        .map((name) => name.trim().toLocaleLowerCase('pt-BR'))
+        .filter(Boolean),
+    );
+    const boards = await this.listBoards();
+    let scanned = 0;
+    let linked = 0;
+
+    for (const board of boards) {
+      const lists = await this.listBoardLists(board.id);
+      const targetLists = lists.filter((list) =>
+        targetNames.has(list.name.trim().toLocaleLowerCase('pt-BR')),
+      );
+
+      for (const list of targetLists) {
+        const response = await this.client.get<TrelloCardResponse[]>(
+          `/lists/${encodeURIComponent(list.id)}/cards`,
+          {
+            params: {
+              ...this.authParams(),
+              fields: 'name,url,shortUrl',
+              filter: 'open',
+            },
+          },
+        );
+
+        scanned += response.data.length;
+        for (const card of response.data) {
+          const ticketId = this.extractTicketIdFromCardName(card.name);
+          const url = card.url || card.shortUrl || '';
+          if (!ticketId || !card.id || !url) continue;
+
+          const ticket = await this.ticketsService.attachTrelloCard(ticketId, {
+            id: card.id,
+            name: card.name,
+            url,
+          });
+          if (ticket) linked += 1;
+        }
+      }
+    }
+
+    return { scanned, linked };
   }
 
   async createCardFromTicket(
@@ -342,6 +414,13 @@ export class TrelloService {
     throw new BadRequestException(
       'Não encontrei uma lista aberta no Trello para criar o card.',
     );
+  }
+
+  private extractTicketIdFromCardName(name: string): number | null {
+    const match = name.trim().match(/^#(\d+)\b/);
+    if (!match) return null;
+    const ticketId = Number(match[1]);
+    return Number.isSafeInteger(ticketId) && ticketId > 0 ? ticketId : null;
   }
 
   private async getListBoardId(listId: string): Promise<string | null> {
