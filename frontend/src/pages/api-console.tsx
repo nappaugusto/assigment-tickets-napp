@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
@@ -444,6 +444,8 @@ export function ApiConsolePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isRunning, setIsRunning] = useState(false)
+  const [isImportingInsomnia, setIsImportingInsomnia] = useState(false)
+  const insomniaFileRef = useRef<HTMLInputElement>(null)
   const [curlImportOpen, setCurlImportOpen] = useState(false)
   const [curlImportValue, setCurlImportValue] = useState('')
   const [copied, setCopied] = useState(false)
@@ -683,6 +685,25 @@ export function ApiConsolePage() {
       toast.success('cURL importado')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Erro ao importar cURL')
+    }
+  }
+
+  const handleImportInsomnia = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+
+    setIsImportingInsomnia(true)
+    try {
+      const result = await apiIntegrationsApi.importInsomnia(await file.text())
+      await loadChannels()
+      toast.success(
+        `Insomnia importado: ${result.requestsCreated} APIs criadas e ${result.requestsUpdated} atualizadas`,
+      )
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Erro ao importar coleção do Insomnia')
+    } finally {
+      setIsImportingInsomnia(false)
     }
   }
 
@@ -1054,11 +1075,11 @@ export function ApiConsolePage() {
                     </Field>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button type="button" variant="secondary" onClick={handleSaveChannel} disabled={!selectedChannel}>
+                    <Button type="button" variant="secondary" size="sm" onClick={handleSaveChannel} disabled={!selectedChannel}>
                       <Save className="h-4 w-4" />
                       Salvar canal
                     </Button>
-                    <Button type="button" variant="outline" onClick={handleDeleteChannel} disabled={!selectedChannel}>
+                    <Button type="button" variant="outline" size="sm" onClick={handleDeleteChannel} disabled={!selectedChannel}>
                       <Trash2 className="h-4 w-4" />
                       Excluir canal
                     </Button>
@@ -1066,44 +1087,67 @@ export function ApiConsolePage() {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-3 border-b border-border/40 pb-4 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <p className="text-[11px] font-medium uppercase tracking-[0.26em] text-primary/85">
-                    API do canal
-                  </p>
-                  <h2 className="mt-1 text-2xl font-semibold text-foreground">
-                    {selectedRequest ? selectedRequest.name : 'Nova consulta'}
-                  </h2>
+              <div className="flex flex-col gap-3 border-b border-border/40 pb-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-[0.26em] text-primary/85">
+                      API do canal
+                    </p>
+                    <h2 className="mt-1 text-2xl font-semibold text-foreground">
+                      {selectedRequest ? selectedRequest.name : 'Nova consulta'}
+                    </h2>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={handleDeleteRequest} disabled={!draft.id}>
+                      <Trash2 className="h-4 w-4" />
+                      Excluir
+                    </Button>
+                    <Button type="submit" variant="secondary" size="sm" disabled={isSaving || !selectedChannel}>
+                      <Save className="h-4 w-4" />
+                      {isSaving ? 'Salvando' : 'Salvar API'}
+                    </Button>
+                    <Button type="button" size="sm" onClick={handleRun} disabled={isRunning || !selectedChannel}>
+                      <Play className="h-4 w-4" />
+                      {isRunning ? 'Consultando' : 'Consultar'}
+                    </Button>
+                  </div>
                 </div>
+
                 <div className="flex flex-wrap items-center gap-2">
-                  <Button type="button" variant="outline" onClick={handleNewRequest} disabled={!selectedChannel}>
+                  <input
+                    ref={insomniaFileRef}
+                    type="file"
+                    accept=".yaml,.yml,application/yaml,text/yaml"
+                    className="hidden"
+                    onChange={handleImportInsomnia}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => insomniaFileRef.current?.click()}
+                    disabled={isImportingInsomnia}
+                  >
+                    <Import className="h-4 w-4" />
+                    {isImportingInsomnia ? 'Importando' : 'Importar Insomnia'}
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={handleNewRequest} disabled={!selectedChannel}>
                     <Plus className="h-4 w-4" />
                     Nova API
                   </Button>
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setCurlImportOpen((open) => !open)}
                     disabled={!selectedChannel}
                   >
                     <Import className="h-4 w-4" />
                     Importar cURL
                   </Button>
-                  <Button type="button" variant="outline" onClick={handleCopyCurl} disabled={!selectedChannel || !draft.url}>
+                  <Button type="button" variant="ghost" size="sm" onClick={handleCopyCurl} disabled={!selectedChannel || !draft.url}>
                     {curlCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                     Copiar cURL
-                  </Button>
-                  <Button type="button" variant="outline" onClick={handleDeleteRequest} disabled={!draft.id}>
-                    <Trash2 className="h-4 w-4" />
-                    Excluir API
-                  </Button>
-                  <Button type="submit" variant="secondary" disabled={isSaving || !selectedChannel}>
-                    <Save className="h-4 w-4" />
-                    {isSaving ? 'Salvando' : 'Salvar API'}
-                  </Button>
-                  <Button type="button" onClick={handleRun} disabled={isRunning || !selectedChannel}>
-                    <Play className="h-4 w-4" />
-                    {isRunning ? 'Consultando' : 'Consultar'}
                   </Button>
                 </div>
               </div>
@@ -1129,137 +1173,147 @@ export function ApiConsolePage() {
                 </div>
               )}
 
-              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_140px]">
-                <Field label="Nome">
+              <SectionBox title="Requisição">
+                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_140px]">
+                  <Field label="Nome">
+                    <Input
+                      value={draft.name}
+                      onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+                      placeholder="Listar pedidos"
+                      required
+                      minLength={2}
+                    />
+                  </Field>
+                  <Field label="Método">
+                    <select
+                      value={draft.method}
+                      onChange={(event) => setDraft({ ...draft, method: event.target.value as ApiHttpMethod })}
+                      className="h-9 w-full rounded-md border border-input bg-background/30 px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    >
+                      {(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as ApiHttpMethod[]).map((method) => (
+                        <option key={method} value={method}>
+                          {method}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                </div>
+
+                <Field label="Descrição">
                   <Input
-                    value={draft.name}
-                    onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-                    placeholder="Listar pedidos"
-                    required
-                    minLength={2}
+                    value={draft.description}
+                    onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+                    placeholder="Consulta pedidos pendentes do canal"
                   />
                 </Field>
-                <Field label="Método">
-                  <select
-                    value={draft.method}
-                    onChange={(event) => setDraft({ ...draft, method: event.target.value as ApiHttpMethod })}
-                    className="h-9 w-full rounded-md border border-input bg-background/30 px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  >
-                    {(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as ApiHttpMethod[]).map((method) => (
-                      <option key={method} value={method}>
-                        {method}
-                      </option>
-                    ))}
-                  </select>
+
+                <Field label="URL">
+                  <div className="relative">
+                    <Globe2 className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      value={draft.url}
+                      onChange={(event) => setDraft({ ...draft, url: event.target.value })}
+                      placeholder="https://api.exemplo.com/v1/orders"
+                      className="pl-9"
+                      type="url"
+                      required
+                    />
+                  </div>
                 </Field>
-              </div>
+              </SectionBox>
 
-              <Field label="Descrição">
-                <Input
-                  value={draft.description}
-                  onChange={(event) => setDraft({ ...draft, description: event.target.value })}
-                  placeholder="Consulta pedidos pendentes do canal"
+              <SectionBox title="Variáveis">
+                <TextAreaField
+                  label="Disponíveis como {{chave}} nos demais campos"
+                  value={draft.variablesText}
+                  onChange={(value) => setDraft({ ...draft, variablesText: value })}
+                  placeholder={'externalId=123456\norderId=987654\nstoreId=loja-01'}
+                  rows={4}
                 />
-              </Field>
+              </SectionBox>
 
-              <Field label="URL">
-                <div className="relative">
-                  <Globe2 className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    value={draft.url}
-                    onChange={(event) => setDraft({ ...draft, url: event.target.value })}
-                    placeholder="https://api.exemplo.com/v1/orders"
-                    className="pl-9"
-                    type="url"
-                    required
+              <SectionBox title="Autenticação">
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <Field label="Tipo">
+                    <select
+                      value={draft.authType}
+                      onChange={(event) => setDraft({ ...draft, authType: event.target.value as ApiAuthType })}
+                      className="h-9 w-full rounded-md border border-input bg-background/30 px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    >
+                      <option value="none">Nenhuma</option>
+                      <option value="bearer">Bearer token</option>
+                      <option value="basic">Basic auth</option>
+                      <option value="apiKey">API key no header</option>
+                    </select>
+                  </Field>
+
+                  {draft.authType === 'bearer' && (
+                    <Field label="Bearer token">
+                      <SecretInput value={draft.authConfig.token ?? ''} onChange={(value) => updateAuthConfig('token', value)} />
+                    </Field>
+                  )}
+
+                  {draft.authType === 'apiKey' && (
+                    <div className="grid gap-3 md:grid-cols-[160px_minmax(0,1fr)] lg:col-span-2">
+                      <Field label="Header">
+                        <Input
+                          value={draft.authConfig.headerName ?? 'x-api-key'}
+                          onChange={(event) => updateAuthConfig('headerName', event.target.value)}
+                        />
+                      </Field>
+                      <Field label="API key">
+                        <SecretInput value={draft.authConfig.value ?? ''} onChange={(value) => updateAuthConfig('value', value)} />
+                      </Field>
+                    </div>
+                  )}
+
+                  {draft.authType === 'basic' && (
+                    <div className="grid gap-3 md:grid-cols-2 lg:col-span-2">
+                      <Field label="Usuário">
+                        <Input
+                          value={draft.authConfig.username ?? ''}
+                          onChange={(event) => updateAuthConfig('username', event.target.value)}
+                        />
+                      </Field>
+                      <Field label="Senha">
+                        <SecretInput
+                          value={draft.authConfig.password ?? ''}
+                          onChange={(value) => updateAuthConfig('password', value)}
+                        />
+                      </Field>
+                    </div>
+                  )}
+                </div>
+              </SectionBox>
+
+              <SectionBox title="Parâmetros e headers">
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <TextAreaField
+                    label="Query params"
+                    value={draft.queryParams}
+                    onChange={(value) => setDraft({ ...draft, queryParams: value })}
+                    placeholder={'page=1\nlimit=20'}
+                    rows={6}
+                  />
+                  <TextAreaField
+                    label="Headers"
+                    value={draft.headersText}
+                    onChange={(value) => setDraft({ ...draft, headersText: value })}
+                    placeholder={'{\n  "Accept": "application/json"\n}'}
+                    rows={6}
                   />
                 </div>
-              </Field>
+              </SectionBox>
 
-              <TextAreaField
-                label="Variáveis"
-                value={draft.variablesText}
-                onChange={(value) => setDraft({ ...draft, variablesText: value })}
-                placeholder={'externalId=123456\norderId=987654\nstoreId=loja-01'}
-                rows={5}
-              />
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <Field label="Autenticação">
-                  <select
-                    value={draft.authType}
-                    onChange={(event) => setDraft({ ...draft, authType: event.target.value as ApiAuthType })}
-                    className="h-9 w-full rounded-md border border-input bg-background/30 px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  >
-                    <option value="none">Nenhuma</option>
-                    <option value="bearer">Bearer token</option>
-                    <option value="basic">Basic auth</option>
-                    <option value="apiKey">API key no header</option>
-                  </select>
-                </Field>
-
-                {draft.authType === 'bearer' && (
-                  <Field label="Bearer token">
-                    <SecretInput value={draft.authConfig.token ?? ''} onChange={(value) => updateAuthConfig('token', value)} />
-                  </Field>
-                )}
-
-                {draft.authType === 'apiKey' && (
-                  <div className="grid gap-3 md:grid-cols-[160px_minmax(0,1fr)] lg:col-span-2">
-                    <Field label="Header">
-                      <Input
-                        value={draft.authConfig.headerName ?? 'x-api-key'}
-                        onChange={(event) => updateAuthConfig('headerName', event.target.value)}
-                      />
-                    </Field>
-                    <Field label="API key">
-                      <SecretInput value={draft.authConfig.value ?? ''} onChange={(value) => updateAuthConfig('value', value)} />
-                    </Field>
-                  </div>
-                )}
-
-                {draft.authType === 'basic' && (
-                  <div className="grid gap-3 md:grid-cols-2 lg:col-span-2">
-                    <Field label="Usuário">
-                      <Input
-                        value={draft.authConfig.username ?? ''}
-                        onChange={(event) => updateAuthConfig('username', event.target.value)}
-                      />
-                    </Field>
-                    <Field label="Senha">
-                      <SecretInput
-                        value={draft.authConfig.password ?? ''}
-                        onChange={(value) => updateAuthConfig('password', value)}
-                      />
-                    </Field>
-                  </div>
-                )}
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-2">
+              <SectionBox title="Body">
                 <TextAreaField
-                  label="Query params"
-                  value={draft.queryParams}
-                  onChange={(value) => setDraft({ ...draft, queryParams: value })}
-                  placeholder={'page=1\nlimit=20'}
-                  rows={7}
+                  label="Corpo da requisição (ignorado em GET/DELETE)"
+                  value={draft.body}
+                  onChange={(value) => setDraft({ ...draft, body: value })}
+                  placeholder={'{\n  "campo": "valor"\n}'}
+                  rows={9}
                 />
-                <TextAreaField
-                  label="Headers"
-                  value={draft.headersText}
-                  onChange={(value) => setDraft({ ...draft, headersText: value })}
-                  placeholder={'{\n  "Accept": "application/json"\n}'}
-                  rows={7}
-                />
-              </div>
-
-              <TextAreaField
-                label="Body"
-                value={draft.body}
-                onChange={(value) => setDraft({ ...draft, body: value })}
-                placeholder={'{\n  "campo": "valor"\n}'}
-                rows={10}
-              />
+              </SectionBox>
             </form>
 
             <ResponsePanel
@@ -1283,6 +1337,15 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
         <Plus className="h-4 w-4" />
         Criar canal
       </Button>
+    </div>
+  )
+}
+
+function SectionBox({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-3 rounded-md border border-border/45 bg-background/30 p-3">
+      <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground/70">{title}</p>
+      {children}
     </div>
   )
 }

@@ -346,8 +346,18 @@ export interface ApiRunResponse {
   };
 }
 
+export interface InsomniaImportResult {
+  success: boolean;
+  channelsCreated: number;
+  channelsUpdated: number;
+  requestsCreated: number;
+  requestsUpdated: number;
+}
+
 export const apiIntegrationsApi = {
   list: () => get<{ channels: ApiChannel[] }>("/api-integrations"),
+  importInsomnia: (content: string) =>
+    post<InsomniaImportResult>("/api-integrations/import/insomnia", { content }),
   createChannel: (name: string, description = "") =>
     post<ApiChannel>("/api-integrations/channels", { name, description }),
   updateChannel: (channelId: number, name: string, description = "") =>

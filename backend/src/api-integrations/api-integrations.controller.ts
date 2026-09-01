@@ -15,6 +15,7 @@ import { SessionGuard } from '../auth/auth.guard';
 import { User } from '../users/user.entity';
 import {
   CreateApiChannelDto,
+  ImportInsomniaDto,
   SaveApiRequestDto,
   UpdateApiChannelDto,
 } from './api-integrations.dto';
@@ -23,12 +24,20 @@ import { ApiIntegrationsService } from './api-integrations.service';
 @UseGuards(SessionGuard)
 @Controller('api-integrations')
 export class ApiIntegrationsController {
-  constructor(private readonly apiIntegrationsService: ApiIntegrationsService) {}
+  constructor(
+    private readonly apiIntegrationsService: ApiIntegrationsService,
+  ) {}
 
   @Get()
   async list(@Req() req: Request) {
     const user = (req as any).user as User;
     return { channels: await this.apiIntegrationsService.list(user.id) };
+  }
+
+  @Post('import/insomnia')
+  async importInsomnia(@Req() req: Request, @Body() dto: ImportInsomniaDto) {
+    const user = (req as any).user as User;
+    return this.apiIntegrationsService.importInsomnia(user.id, dto.content);
   }
 
   @Post('channels')

@@ -1,0 +1,1138 @@
+openapi: 3.0.3
+info:
+  title: Assignment Tickets NAPP API
+  version: 1.0.0
+  description: |
+    Coleção completa das rotas HTTP do backend. Importe este arquivo no Insomnia.
+    Execute `Auth / Login` primeiro; o Insomnia armazenará automaticamente o cookie
+    de sessão `connect.sid` usado nas rotas protegidas.
+servers:
+  - url: http://localhost:3001
+    description: Backend local
+
+tags:
+  - { name: App }
+  - { name: Auth }
+  - { name: Tickets }
+  - { name: People }
+  - { name: Preferences }
+  - { name: Notes }
+  - { name: Kanban }
+  - { name: Trello }
+  - { name: Internal Teams }
+  - { name: Cases }
+  - { name: AI Triage }
+  - { name: MCP Movidesk }
+  - { name: Operations }
+  - { name: PubSub Tools }
+  - { name: API Integrations }
+
+paths:
+  /:
+    get:
+      tags: [App]
+      summary: Verificar se o backend está ativo
+      operationId: getRoot
+      responses:
+        '200': { description: Backend ativo }
+
+  /app-version:
+    get:
+      tags: [App]
+      summary: Consultar versão da aplicação
+      operationId: getAppVersion
+      responses:
+        '200': { description: Versão atual }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Consultar sessão atual
+      operationId: getCurrentUser
+      responses:
+        '200': { description: Estado da autenticação }
+
+  /auth/google:
+    get:
+      tags: [Auth]
+      summary: Iniciar autenticação Google
+      operationId: googleLogin
+      responses:
+        '302': { description: Redirecionamento para o Google }
+
+  /auth/google/callback:
+    get:
+      tags: [Auth]
+      summary: Callback da autenticação Google
+      operationId: googleCallback
+      parameters:
+        - { in: query, name: code, schema: { type: string } }
+        - { in: query, name: state, schema: { type: string } }
+      responses:
+        '302': { description: Redirecionamento após autenticação }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Entrar e criar sessão
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Login' }
+            example: { username: usuario, password: senha123, remember_me: true }
+      responses:
+        '200': { description: Login realizado e cookie de sessão criado }
+        '401': { description: Credenciais inválidas }
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Registrar usuário e criar sessão
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Register' }
+            example: { name: Usuário Teste, username: usuario, password: senha123, confirm_password: senha123 }
+      responses:
+        '201': { description: Usuário registrado }
+        '400': { description: Dados inválidos }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Encerrar sessão
+      operationId: logout
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: Sessão encerrada }
+    get:
+      tags: [Auth]
+      summary: Encerrar sessão via GET
+      operationId: logoutGet
+      responses:
+        '200': { description: Sessão encerrada }
+
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Solicitar redefinição de senha
+      operationId: forgotPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ForgotPassword' }
+            example: { username: usuario }
+      responses:
+        '201': { description: Solicitação recebida }
+
+  /auth/reset-password/{token}:
+    parameters:
+      - $ref: '#/components/parameters/ResetToken'
+    get:
+      tags: [Auth]
+      summary: Validar token de redefinição
+      operationId: validateResetToken
+      responses:
+        '200': { description: Validade do token }
+    post:
+      tags: [Auth]
+      summary: Redefinir senha
+      operationId: resetPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResetPassword' }
+            example: { password: novaSenha123, confirm_password: novaSenha123 }
+      responses:
+        '201': { description: Senha redefinida }
+        '400': { description: Token ou dados inválidos }
+
+  /tickets/refresh:
+    get:
+      tags: [Tickets]
+      summary: Sincronizar e listar tickets
+      operationId: refreshTickets
+      security: [{ cookieSession: [] }]
+      parameters:
+        - name: manual
+          in: query
+          description: Use 1 ou true para forçar a sincronização
+          schema: { type: string, example: 'true' }
+      responses:
+        '200': { description: Snapshot do dashboard }
+
+  /tickets/analytics/monthly:
+    get:
+      tags: [Tickets]
+      summary: Consultar analytics mensais
+      operationId: getMonthlyAnalytics
+      security: [{ cookieSession: [] }]
+      parameters:
+        - { in: query, name: months, schema: { type: integer, example: 6 } }
+        - { in: query, name: team, schema: { type: string } }
+        - { in: query, name: responsavel, schema: { type: string } }
+      responses:
+        '200': { description: Analytics mensais }
+
+  /tickets/{ticketId}/detail:
+    get:
+      tags: [Tickets]
+      summary: Obter detalhes de um ticket
+      operationId: getTicketDetail
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/TicketId' }]
+      responses:
+        '200': { description: Detalhes do ticket }
+        '404': { description: Ticket não encontrado }
+
+  /tickets/{ticketId}/similar:
+    get:
+      tags: [Tickets]
+      summary: Listar tickets similares
+      operationId: getSimilarTickets
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/TicketId' }]
+      responses:
+        '200': { description: Tickets similares }
+        '404': { description: Ticket não encontrado }
+
+  /atribuir/{ticketId}:
+    post:
+      tags: [Tickets]
+      summary: Atribuir ticket a um responsável
+      operationId: assignTicket
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/TicketId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [responsavel]
+              properties: { responsavel: { type: string } }
+            example: { responsavel: Nome do Responsável }
+      responses:
+        '201': { description: Ticket atribuído }
+
+  /desatribuir/{ticketId}:
+    post:
+      tags: [Tickets]
+      summary: Remover atribuição do ticket
+      operationId: unassignTicket
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/TicketId' }]
+      responses:
+        '201': { description: Atribuição removida }
+
+  /people/assignment:
+    get:
+      tags: [People]
+      summary: Listar pessoas disponíveis para atribuição
+      operationId: listAssignmentPeople
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: Lista de pessoas }
+
+  /people/assignment/details:
+    get:
+      tags: [People]
+      summary: Listar detalhes das pessoas para atribuição
+      operationId: listAssignmentPeopleDetails
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: Lista detalhada de pessoas }
+
+  /preferences/monthly-analytics:
+    get:
+      tags: [Preferences]
+      summary: Obter preferências de analytics
+      operationId: getAnalyticsPreferences
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: Preferências do usuário }
+    put:
+      tags: [Preferences]
+      summary: Salvar preferências de analytics
+      operationId: saveAnalyticsPreferences
+      security: [{ cookieSession: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AnalyticsPreference' }
+            example: { collapsed: false, summaryCollapsed: false }
+      responses:
+        '200': { description: Preferências salvas }
+
+  /notes/tickets-with-notes:
+    get:
+      tags: [Notes]
+      summary: Listar IDs de tickets que possuem notas
+      operationId: listTicketsWithNotes
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: IDs dos tickets }
+
+  /notes/{ticketId}:
+    parameters: [{ $ref: '#/components/parameters/TicketId' }]
+    get:
+      tags: [Notes]
+      summary: Obter nota de um ticket
+      operationId: getTicketNote
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: Conteúdo da nota }
+    put:
+      tags: [Notes]
+      summary: Criar ou atualizar nota de um ticket
+      operationId: saveTicketNote
+      security: [{ cookieSession: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Note' }
+            example: { content: Anotações sobre o atendimento. }
+      responses:
+        '200': { description: Nota salva }
+
+  /kanban/board:
+    get:
+      tags: [Kanban]
+      summary: Obter quadro Kanban do usuário
+      operationId: getKanbanBoard
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: Quadro Kanban }
+    put:
+      tags: [Kanban]
+      summary: Salvar quadro Kanban do usuário
+      operationId: saveKanbanBoard
+      security: [{ cookieSession: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/KanbanBoard' }
+            example:
+              columns:
+                - { id: entrada, title: Entrada, isDefault: true }
+                - { id: andamento, title: Em andamento, isDefault: false }
+              columnItems: { entrada: ['123'], andamento: [] }
+      responses:
+        '200': { description: Quadro salvo }
+
+  /trello/status:
+    get:
+      tags: [Trello]
+      summary: Consultar configuração do Trello
+      operationId: getTrelloStatus
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: Status do Trello }
+
+  /trello/boards:
+    get:
+      tags: [Trello]
+      summary: Listar quadros do Trello
+      operationId: listTrelloBoards
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: Quadros do Trello }
+
+  /trello/lists:
+    get:
+      tags: [Trello]
+      summary: Listar listas de um quadro do Trello
+      operationId: listTrelloLists
+      security: [{ cookieSession: [] }]
+      parameters:
+        - { in: query, name: boardId, schema: { type: string } }
+      responses:
+        '200': { description: Listas do quadro }
+
+  /trello/sync-ticket-links:
+    post:
+      tags: [Trello]
+      summary: Sincronizar vínculos de tickets com cartões
+      operationId: syncTrelloTicketLinks
+      security: [{ cookieSession: [] }]
+      responses:
+        '201': { description: Vínculos sincronizados }
+
+  /trello/tickets/{ticketId}/cards:
+    post:
+      tags: [Trello]
+      summary: Criar cartão do Trello a partir de um ticket
+      operationId: createTrelloCard
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/TicketId' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateTrelloCard' }
+            example: { boardId: '', listId: '', name: '', description: '', extraDescription: '', labels: [ticket], forceNew: false }
+      responses:
+        '201': { description: Cartão criado }
+
+  /trello/tickets/{ticketId}/card:
+    delete:
+      tags: [Trello]
+      summary: Desvincular cartão de um ticket
+      operationId: detachTrelloCard
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/TicketId' }]
+      responses:
+        '200': { description: Cartão desvinculado }
+
+  /internal-teams:
+    get:
+      tags: [Internal Teams]
+      summary: Listar equipes internas
+      operationId: listInternalTeams
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: Equipes internas }
+    post:
+      tags: [Internal Teams]
+      summary: Criar equipe interna (admin)
+      operationId: createInternalTeam
+      security: [{ cookieSession: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateTeam' }
+            example: { name: Suporte N1, description: Atendimento inicial }
+      responses:
+        '201': { description: Equipe criada }
+        '403': { description: Requer administrador }
+
+  /internal-teams/users:
+    get:
+      tags: [Internal Teams]
+      summary: Listar usuários internos
+      operationId: listInternalUsers
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: Usuários internos }
+
+  /internal-teams/sync-movidesk:
+    post:
+      tags: [Internal Teams]
+      summary: Sincronizar equipes do Movidesk (admin)
+      operationId: syncTeamsFromMovidesk
+      security: [{ cookieSession: [] }]
+      responses:
+        '201': { description: Equipes sincronizadas }
+        '403': { description: Requer administrador }
+
+  /internal-teams/{teamId}:
+    parameters: [{ $ref: '#/components/parameters/TeamId' }]
+    patch:
+      tags: [Internal Teams]
+      summary: Atualizar equipe interna (admin)
+      operationId: updateInternalTeam
+      security: [{ cookieSession: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateTeam' }
+            example: { name: Suporte N2, description: Atendimento especializado }
+      responses:
+        '200': { description: Equipe atualizada }
+    delete:
+      tags: [Internal Teams]
+      summary: Excluir equipe interna (admin)
+      operationId: deleteInternalTeam
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: Equipe excluída }
+
+  /internal-teams/{teamId}/members:
+    post:
+      tags: [Internal Teams]
+      summary: Adicionar membro a uma equipe (admin)
+      operationId: addInternalTeamMember
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/TeamId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddTeamMember' }
+            example: { userId: 1, isAdmin: false }
+      responses:
+        '201': { description: Membro adicionado }
+
+  /internal-teams/{teamId}/members/{userId}:
+    delete:
+      tags: [Internal Teams]
+      summary: Remover membro de uma equipe (admin)
+      operationId: removeInternalTeamMember
+      security: [{ cookieSession: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/TeamId' }
+        - { $ref: '#/components/parameters/UserId' }
+      responses:
+        '200': { description: Membro removido }
+
+  /cases:
+    get:
+      tags: [Cases]
+      summary: Listar casos internos
+      operationId: listCases
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: Casos internos }
+    post:
+      tags: [Cases]
+      summary: Criar caso interno
+      operationId: createCase
+      security: [{ cookieSession: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCase' }
+            example:
+              title: Erro no processamento do pedido
+              description: O pedido não avançou para a próxima etapa.
+              category: Integração
+              priority: Alta
+              teamId: 1
+              assigneeId: 1
+              attachments: []
+      responses:
+        '201': { description: Caso criado }
+
+  /cases/dashboard:
+    get:
+      tags: [Cases]
+      summary: Obter dashboard de casos
+      operationId: getCasesDashboard
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: Dashboard de casos }
+
+  /cases/sla-policies:
+    get:
+      tags: [Cases]
+      summary: Listar políticas de SLA
+      operationId: listSlaPolicies
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: Políticas de SLA }
+    patch:
+      tags: [Cases]
+      summary: Atualizar política de SLA (admin)
+      operationId: updateSlaPolicy
+      security: [{ cookieSession: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateSlaPolicy' }
+            example: { priority: Alta, durationHours: 8 }
+      responses:
+        '200': { description: Política atualizada }
+
+  /cases/{caseId}:
+    get:
+      tags: [Cases]
+      summary: Obter detalhes de um caso
+      operationId: getCase
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/CaseId' }]
+      responses:
+        '200': { description: Detalhes do caso }
+
+  /cases/{caseId}/status:
+    patch:
+      tags: [Cases]
+      summary: Atualizar status de um caso
+      operationId: updateCaseStatus
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/CaseId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateCaseStatus' }
+            example: { status: Em atendimento }
+      responses:
+        '200': { description: Status atualizado }
+
+  /cases/{caseId}/comments:
+    post:
+      tags: [Cases]
+      summary: Adicionar comentário a um caso
+      operationId: addCaseComment
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/CaseId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CaseComment' }
+            example: { content: Investigação iniciada. }
+      responses:
+        '201': { description: Comentário adicionado }
+
+  /cases/{caseId}/attachments/{attachmentId}:
+    get:
+      tags: [Cases]
+      summary: Baixar ou visualizar anexo de um caso
+      operationId: getCaseAttachment
+      security: [{ cookieSession: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CaseId' }
+        - { $ref: '#/components/parameters/AttachmentId' }
+      responses:
+        '200':
+          description: Conteúdo binário do anexo
+          content:
+            application/octet-stream: { schema: { type: string, format: binary } }
+
+  /tickets/{ticketId}/triage:
+    parameters: [{ $ref: '#/components/parameters/TicketId' }]
+    get:
+      tags: [AI Triage]
+      summary: Obter última triagem de um ticket
+      operationId: getLatestTicketTriage
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: Última triagem }
+    post:
+      tags: [AI Triage]
+      summary: Iniciar triagem de um ticket
+      operationId: startTicketTriage
+      security: [{ cookieSession: [] }]
+      responses:
+        '201': { description: Triagem iniciada }
+
+  /tickets/{ticketId}/triage/reanalyze:
+    post:
+      tags: [AI Triage]
+      summary: Reanalisar ticket
+      operationId: reanalyzeTicket
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/TicketId' }]
+      responses:
+        '201': { description: Reanálise iniciada }
+
+  /tickets/{ticketId}/triage/code-analysis:
+    post:
+      tags: [AI Triage]
+      summary: Iniciar análise de código para um ticket
+      operationId: analyzeTicketCode
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/TicketId' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CodeAnalysisContext' }
+            example: { sellerIds: [], eans: [], notes: Contexto adicional para a análise. }
+      responses:
+        '201': { description: Análise iniciada }
+
+  /triage/claude/status:
+    get:
+      tags: [AI Triage]
+      summary: Consultar status do Claude CLI
+      operationId: getClaudeStatus
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: Status do Claude }
+
+  /triage/claude/status/refresh:
+    post:
+      tags: [AI Triage]
+      summary: Atualizar status do Claude CLI
+      operationId: refreshClaudeStatus
+      security: [{ cookieSession: [] }]
+      responses:
+        '201': { description: Status atualizado }
+
+  /triage/knowledge/status:
+    get:
+      tags: [AI Triage]
+      summary: Consultar status da base de conhecimento
+      operationId: getKnowledgeStatus
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: Status da base de conhecimento }
+
+  /triage/knowledge/refresh:
+    post:
+      tags: [AI Triage]
+      summary: Atualizar base de conhecimento
+      operationId: refreshKnowledge
+      security: [{ cookieSession: [] }]
+      responses:
+        '201': { description: Base atualizada }
+
+  /triage/{triageId}/decision:
+    patch:
+      tags: [AI Triage]
+      summary: Registrar decisão sobre uma triagem
+      operationId: setTriageDecision
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/TriageId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TriageDecision' }
+            example: { decision: accepted }
+      responses:
+        '200': { description: Decisão registrada }
+
+  /triage/{triageId}/messages:
+    post:
+      tags: [AI Triage]
+      summary: Enviar mensagem de acompanhamento da triagem
+      operationId: sendTriageFollowUp
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/TriageId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TriageFollowUp' }
+            example: { message: Verifique também os logs do serviço de pedidos. }
+      responses:
+        '201': { description: Mensagem processada }
+
+  /mcp/movidesk/status:
+    get:
+      tags: [MCP Movidesk]
+      summary: Consultar status do MCP Movidesk
+      operationId: getMcpMovideskStatus
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: Status do MCP }
+
+  /mcp/movidesk/tools:
+    get:
+      tags: [MCP Movidesk]
+      summary: Listar ferramentas do MCP Movidesk
+      operationId: listMcpMovideskTools
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: Ferramentas disponíveis }
+
+  /mcp/movidesk/prompts:
+    get:
+      tags: [MCP Movidesk]
+      summary: Listar prompts do MCP Movidesk
+      operationId: listMcpMovideskPrompts
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: Prompts disponíveis }
+
+  /mcp/movidesk/prompts/{name}/get:
+    post:
+      tags: [MCP Movidesk]
+      summary: Obter prompt do MCP Movidesk
+      operationId: getMcpMovideskPrompt
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/McpName' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/McpArguments' }
+            example: { arguments: {} }
+      responses:
+        '201': { description: Prompt retornado }
+
+  /mcp/movidesk/tools/{name}/call:
+    post:
+      tags: [MCP Movidesk]
+      summary: Executar ferramenta do MCP Movidesk
+      operationId: callMcpMovideskTool
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/McpName' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/McpArguments' }
+            example: { arguments: {} }
+      responses:
+        '201': { description: Resultado da ferramenta }
+
+  /ops/k8s/overview:
+    get:
+      tags: [Operations]
+      summary: Obter visão geral do Kubernetes
+      operationId: getKubernetesOverview
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: Visão geral do cluster }
+
+  /ops/k8s/logs:
+    get:
+      tags: [Operations]
+      summary: Consultar logs do Kubernetes
+      operationId: getKubernetesLogs
+      security: [{ cookieSession: [] }]
+      parameters:
+        - { in: query, name: pod, schema: { type: string } }
+        - { in: query, name: namespace, schema: { type: string } }
+        - { in: query, name: container, schema: { type: string } }
+        - { in: query, name: tail, schema: { type: string, example: '200' } }
+        - { in: query, name: previous, schema: { type: string, example: 'false' } }
+      responses:
+        '200': { description: Logs solicitados }
+
+  /pubsub-tools/trier-order:
+    post:
+      tags: [PubSub Tools]
+      summary: Publicar pedido no tópico Pub/Sub
+      operationId: publishTrierOrder
+      security: [{ cookieSession: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PublishTrierOrder' }
+            example:
+              topic: platform-service-tpc-order-to-trier-sistemas-prd
+              orderId: pedido-123
+              token: token-de-acesso
+              apiUrl: http://localhost:8080
+              defaultDeliveryFee: '0.00'
+              sendOrderToChannelIn: false
+              extraConfig: {}
+      responses:
+        '201': { description: Mensagem publicada }
+
+  /api-integrations:
+    get:
+      tags: [API Integrations]
+      summary: Listar canais e requisições salvas
+      operationId: listApiIntegrations
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: Canais e requisições }
+
+  /api-integrations/import/insomnia:
+    post:
+      tags: [API Integrations]
+      summary: Importar coleção YAML do Insomnia v5
+      operationId: importInsomniaCollection
+      security: [{ cookieSession: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string, description: Conteúdo integral do arquivo YAML }
+      responses:
+        '201': { description: Coleção importada }
+        '400': { description: Arquivo inválido ou não suportado }
+
+  /api-integrations/channels:
+    post:
+      tags: [API Integrations]
+      summary: Criar canal de API
+      operationId: createApiChannel
+      security: [{ cookieSession: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateApiChannel' }
+            example: { name: Pedidos, description: APIs do serviço de pedidos }
+      responses:
+        '201': { description: Canal criado }
+
+  /api-integrations/channels/{channelId}:
+    parameters: [{ $ref: '#/components/parameters/ChannelId' }]
+    patch:
+      tags: [API Integrations]
+      summary: Atualizar canal de API
+      operationId: updateApiChannel
+      security: [{ cookieSession: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateApiChannel' }
+            example: { name: Pedidos v2, description: APIs atualizadas }
+      responses:
+        '200': { description: Canal atualizado }
+    delete:
+      tags: [API Integrations]
+      summary: Excluir canal de API
+      operationId: deleteApiChannel
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: Canal excluído }
+
+  /api-integrations/channels/{channelId}/requests:
+    post:
+      tags: [API Integrations]
+      summary: Salvar requisição em um canal
+      operationId: createApiRequest
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/ChannelId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SaveApiRequest' }
+            example:
+              name: Consultar pedido
+              description: Busca um pedido pelo ID
+              method: GET
+              url: http://localhost:8080/orders/{{orderId}}
+              authType: bearer
+              authConfig: { token: '{{token}}' }
+              queryParams: ''
+              headers: { Accept: application/json }
+              variables: { orderId: '123', token: token-de-acesso }
+              body: ''
+      responses:
+        '201': { description: Requisição salva }
+
+  /api-integrations/requests/{requestId}:
+    parameters: [{ $ref: '#/components/parameters/RequestId' }]
+    patch:
+      tags: [API Integrations]
+      summary: Atualizar requisição salva
+      operationId: updateApiRequest
+      security: [{ cookieSession: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SaveApiRequest' }
+      responses:
+        '200': { description: Requisição atualizada }
+    delete:
+      tags: [API Integrations]
+      summary: Excluir requisição salva
+      operationId: deleteApiRequest
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: Requisição excluída }
+
+  /api-integrations/requests/{requestId}/run:
+    post:
+      tags: [API Integrations]
+      summary: Executar requisição salva
+      operationId: runApiRequest
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/RequestId' }]
+      responses:
+        '201': { description: Resultado da execução }
+
+components:
+  securitySchemes:
+    cookieSession:
+      type: apiKey
+      in: cookie
+      name: connect.sid
+
+  parameters:
+    TicketId: { in: path, name: ticketId, required: true, schema: { type: integer, example: 123 } }
+    TeamId: { in: path, name: teamId, required: true, schema: { type: integer, example: 1 } }
+    UserId: { in: path, name: userId, required: true, schema: { type: integer, example: 1 } }
+    CaseId: { in: path, name: caseId, required: true, schema: { type: integer, example: 1 } }
+    AttachmentId: { in: path, name: attachmentId, required: true, schema: { type: integer, example: 1 } }
+    TriageId: { in: path, name: triageId, required: true, schema: { type: integer, example: 1 } }
+    ChannelId: { in: path, name: channelId, required: true, schema: { type: integer, example: 1 } }
+    RequestId: { in: path, name: requestId, required: true, schema: { type: integer, example: 1 } }
+    ResetToken: { in: path, name: token, required: true, schema: { type: string, example: token-recebido-por-email } }
+    McpName: { in: path, name: name, required: true, schema: { type: string, example: nome-da-ferramenta } }
+
+  schemas:
+    Login:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string }
+        password: { type: string, format: password }
+        remember_me: { type: boolean }
+    Register:
+      type: object
+      required: [name, username, password, confirm_password]
+      properties:
+        name: { type: string, minLength: 1 }
+        username: { type: string, minLength: 3 }
+        password: { type: string, minLength: 6, format: password }
+        confirm_password: { type: string, format: password }
+    ForgotPassword:
+      type: object
+      required: [username]
+      properties: { username: { type: string } }
+    ResetPassword:
+      type: object
+      required: [password, confirm_password]
+      properties:
+        password: { type: string, format: password }
+        confirm_password: { type: string, format: password }
+    AnalyticsPreference:
+      type: object
+      required: [collapsed, summaryCollapsed]
+      properties:
+        collapsed: { type: boolean }
+        summaryCollapsed: { type: boolean }
+    Note:
+      type: object
+      required: [content]
+      properties: { content: { type: string } }
+    KanbanBoard:
+      type: object
+      required: [columns, columnItems]
+      properties:
+        columns:
+          type: array
+          items:
+            type: object
+            required: [id, title, isDefault]
+            properties:
+              id: { type: string }
+              title: { type: string }
+              isDefault: { type: boolean }
+        columnItems:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+    CreateTrelloCard:
+      type: object
+      properties:
+        boardId: { type: string }
+        listId: { type: string }
+        name: { type: string }
+        description: { type: string }
+        extraDescription: { type: string }
+        labels: { type: array, items: { type: string } }
+        forceNew: { type: boolean }
+    CreateTeam:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 80 }
+        description: { type: string, maxLength: 240 }
+    UpdateTeam:
+      type: object
+      properties:
+        name: { type: string, minLength: 2, maxLength: 80 }
+        description: { type: string, maxLength: 240 }
+    AddTeamMember:
+      type: object
+      required: [userId]
+      properties:
+        userId: { type: integer, minimum: 1 }
+        isAdmin: { type: boolean }
+    CaseAttachment:
+      type: object
+      required: [fileName, contentType, sizeBytes, dataBase64]
+      properties:
+        fileName: { type: string, minLength: 1, maxLength: 180 }
+        contentType: { type: string, minLength: 1, maxLength: 80 }
+        sizeBytes: { type: integer, minimum: 1 }
+        dataBase64: { type: string, format: byte }
+    CreateCase:
+      type: object
+      required: [title, description]
+      properties:
+        title: { type: string, minLength: 3, maxLength: 160 }
+        description: { type: string, minLength: 5, maxLength: 8000 }
+        category: { type: string, maxLength: 80 }
+        priority: { type: string, enum: [Baixa, Normal, Alta, Urgente] }
+        teamId: { type: integer, minimum: 1 }
+        assigneeId: { type: integer, minimum: 1 }
+        attachments: { type: array, maxItems: 6, items: { $ref: '#/components/schemas/CaseAttachment' } }
+    UpdateCaseStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [Novo, Em atendimento, Aguardando solicitante, Aguardando terceiro, Resolvido, Cancelado, Reaberto]
+    CaseComment:
+      type: object
+      required: [content]
+      properties: { content: { type: string, minLength: 2, maxLength: 4000 } }
+    UpdateSlaPolicy:
+      type: object
+      required: [priority, durationHours]
+      properties:
+        priority: { type: string, enum: [Baixa, Normal, Alta, Urgente] }
+        durationHours: { type: integer, minimum: 1 }
+    CodeAnalysisContext:
+      type: object
+      properties:
+        sellerIds: { type: array, maxItems: 100, items: { type: string, format: uuid } }
+        eans: { type: array, maxItems: 200, items: { type: string } }
+        notes: { type: string, maxLength: 1500 }
+    TriageDecision:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [accepted, ignored, copied, card_created] }
+    TriageFollowUp:
+      type: object
+      required: [message]
+      properties: { message: { type: string, minLength: 2, maxLength: 4000 } }
+    McpArguments:
+      type: object
+      properties:
+        arguments: { type: object, additionalProperties: true }
+    PublishTrierOrder:
+      type: object
+      required: [topic, orderId]
+      properties:
+        topic:
+          type: string
+          enum:
+            - platform-service-tpc-order-to-trier-sistemas-legacy-prd
+            - platform-service-tpc-order-to-trier-sistemas-prd
+            - platform-service-tpc-order-to-hos-sistemas-prd
+            - platform-service-tpc-order-to-linx-farma-cloud-prd
+        orderId: { type: string, minLength: 3, maxLength: 160 }
+        token: { type: string, minLength: 10 }
+        apiUrl: { type: string, format: uri, maxLength: 2000 }
+        defaultDeliveryFee: { type: string, maxLength: 80 }
+        sendOrderToChannelIn: { type: boolean }
+        extraConfig: { type: object, additionalProperties: true }
+    CreateApiChannel:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 80 }
+        description: { type: string, maxLength: 240 }
+    UpdateApiChannel:
+      type: object
+      properties:
+        name: { type: string, minLength: 2, maxLength: 80 }
+        description: { type: string, maxLength: 240 }
+    SaveApiRequest:
+      type: object
+      required: [name, method, url, authType]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 100 }
+        description: { type: string, maxLength: 240 }
+        method: { type: string, enum: [GET, POST, PUT, PATCH, DELETE] }
+        url: { type: string, format: uri, maxLength: 2000 }
+        authType: { type: string, enum: [none, bearer, basic, apiKey] }
+        authConfig: { type: object, additionalProperties: { type: string } }
+        queryParams: { type: string, maxLength: 4000 }
+        headers: { type: object, additionalProperties: { type: string } }
+        variables: { type: object, additionalProperties: { type: string } }
+        body: { type: string, maxLength: 20000 }

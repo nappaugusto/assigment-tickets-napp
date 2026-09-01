@@ -79,3 +79,10 @@ export class SaveApiRequestDto {
   @MaxLength(20000)
   body?: string;
 }
+
+export class ImportInsomniaDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(5_000_000)
+  content!: string;
+}
